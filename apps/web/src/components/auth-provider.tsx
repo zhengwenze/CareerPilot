@@ -9,16 +9,18 @@ import {
 } from "react";
 
 import {
-  clearStoredSession,
   fetchCurrentUser,
   loginRequest,
   logoutRequest,
-  readStoredSession,
   registerRequest,
-  writeStoredSession,
   type AuthSession,
   type AuthUser,
-} from "@/lib/auth";
+} from "@/lib/api/modules/auth";
+import {
+  clearStoredSession,
+  readStoredSession,
+  writeStoredSession,
+} from "@/lib/auth-storage";
 
 type Credentials = {
   email: string;
@@ -37,6 +39,7 @@ type AuthContextValue = {
   login: (payload: Credentials) => Promise<AuthSession>;
   register: (payload: Registration) => Promise<AuthSession>;
   logout: () => Promise<void>;
+  refreshCurrentUser: () => Promise<AuthUser | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -102,6 +105,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function refreshCurrentUser() {
+    if (!session?.accessToken) {
+      setSession(null);
+      return null;
+    }
+
+    try {
+      const user = await fetchCurrentUser(session.accessToken);
+      const nextSession = persistSession({
+        ...session,
+        user,
+      });
+      setSession(nextSession);
+      return user;
+    } catch {
+      clearStoredSession();
+      setSession(null);
+      return null;
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -112,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
+        refreshCurrentUser,
       }}
     >
       {children}

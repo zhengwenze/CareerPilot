@@ -1,0 +1,76 @@
+import type { ApiErrorResponse, ApiSuccessResponse } from "./contracts";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  details?: unknown;
+  requestId?: string;
+
+  constructor(
+    message: string,
+    options: {
+      status: number;
+      code?: string;
+      details?: unknown;
+      requestId?: string;
+    }
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = options.status;
+    this.code = options.code ?? "UNKNOWN_ERROR";
+    this.details = options.details;
+    this.requestId = options.requestId;
+  }
+}
+
+async function parseError(response: Response): Promise<never> {
+  try {
+    const payload = (await response.json()) as ApiErrorResponse;
+    throw new ApiError(payload.error.message, {
+      status: response.status,
+      code: payload.error.code,
+      details: payload.error.details,
+      requestId: payload.meta?.request_id,
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    throw new ApiError("服务暂时不可用，请检查后端是否已启动。", {
+      status: response.status,
+    });
+  }
+}
+
+export async function apiRequest<T>(
+  path: string,
+  init: RequestInit & { token?: string } = {}
+): Promise<T> {
+  const { token, headers, ...rest } = init;
+  const hasJsonBody = rest.body != null && !(rest.body instanceof FormData);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...rest,
+    cache: "no-store",
+    headers: {
+      ...(hasJsonBody ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    await parseError(response);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const payload = (await response.json()) as ApiSuccessResponse<T>;
+  return payload.data;
+}

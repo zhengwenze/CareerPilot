@@ -2,10 +2,10 @@
 
 import { AlertCircle, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
-import { ApiError } from "@/lib/auth";
+import { ApiError } from "@/lib/api/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ function getErrorMessage(error: unknown) {
 
 export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, register, isAuthenticated, isBootstrapping } = useAuth();
   const [isRouting, startTransition] = useTransition();
   const [email, setEmail] = useState("");
@@ -49,12 +50,17 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [nickname, setNickname] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const redirectTarget = searchParams.get("next");
+  const nextPath =
+    redirectTarget && redirectTarget.startsWith("/")
+      ? redirectTarget
+      : DASHBOARD_ENTRY_PATH;
 
   useEffect(() => {
     if (!isBootstrapping && isAuthenticated) {
-      router.replace(DASHBOARD_ENTRY_PATH);
+      router.replace(nextPath);
     }
-  }, [isAuthenticated, isBootstrapping, router]);
+  }, [isAuthenticated, isBootstrapping, nextPath, router]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +79,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       }
 
       startTransition(() => {
-        router.replace(DASHBOARD_ENTRY_PATH);
+        router.replace(nextPath);
         router.refresh();
       });
     } catch (submissionError) {

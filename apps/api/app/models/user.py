@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Index, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -42,4 +42,11 @@ class User(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+    profile = relationship(
+        "UserProfile",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="UserProfile.user_id",
+        uselist=False,
     )
