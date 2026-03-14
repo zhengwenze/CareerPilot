@@ -41,9 +41,10 @@ export function AuthPage({ mode }: AuthPageProps) {
                 : "继续你的求职节奏，把登录态接回到工作台。"}
             </CardTitle>
             <CardDescription className="max-w-xl text-base leading-8 text-muted-foreground">
-              当前前端已经正式接入后端认证接口：注册会调用 <code>/auth/register</code>，
-              登录会调用 <code>/auth/login</code>，登录态恢复依赖 <code>/auth/me</code>，
-              退出会调用 <code>/auth/logout</code>。
+              当前前端已经正式接入后端认证接口：注册会调用{" "}
+              <code>/auth/register</code>， 登录会调用 <code>/auth/login</code>
+              ，登录态恢复依赖 <code>/auth/me</code>， 退出会调用{" "}
+              <code>/auth/logout</code>。
             </CardDescription>
           </div>
         </CardHeader>
@@ -51,17 +52,23 @@ export function AuthPage({ mode }: AuthPageProps) {
         <CardContent className="relative grid gap-4 px-6 pb-6 sm:grid-cols-2 sm:px-8 sm:pb-8">
           <Card className="rounded-[28px] border border-border/70 bg-white/68 py-0 shadow-none">
             <CardHeader className="px-5 py-5">
-              <CardTitle className="text-lg font-semibold text-foreground">登录态恢复</CardTitle>
+              <CardTitle className="text-lg font-semibold text-foreground">
+                登录态恢复
+              </CardTitle>
               <CardDescription className="text-sm leading-7 text-muted-foreground">
-                浏览器会保存访问令牌，刷新页面后自动调用 <code>/auth/me</code> 校验并恢复用户信息。
+                浏览器会保存访问令牌，刷新页面后自动调用 <code>/auth/me</code>{" "}
+                校验并恢复用户信息。
               </CardDescription>
             </CardHeader>
           </Card>
           <Card className="rounded-[28px] border border-border/70 bg-white/68 py-0 shadow-none">
             <CardHeader className="px-5 py-5">
-              <CardTitle className="text-lg font-semibold text-foreground">后续扩展准备</CardTitle>
+              <CardTitle className="text-lg font-semibold text-foreground">
+                后续扩展准备
+              </CardTitle>
               <CardDescription className="text-sm leading-7 text-muted-foreground">
-                这套状态管理可以直接给“简历上传、JD 匹配、模拟面试记录”复用，不用重写用户上下文。
+                这套状态管理可以直接给“简历上传、JD
+                匹配、模拟面试记录”复用，不用重写用户上下文。
               </CardDescription>
             </CardHeader>
           </Card>

@@ -78,7 +78,7 @@ async function parseError(response: Response): Promise<never> {
 
 async function apiRequest<T>(
   path: string,
-  init: RequestInit & { token?: string } = {},
+  init: RequestInit & { token?: string } = {}
 ): Promise<T> {
   const { token, headers, ...rest } = init;
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -137,7 +137,7 @@ export function clearStoredSession(): void {
 }
 
 export async function registerRequest(
-  payload: RegisterPayload,
+  payload: RegisterPayload
 ): Promise<AuthSession> {
   const response = await apiRequest<AuthResponse>("/auth/register", {
     method: "POST",
@@ -147,7 +147,9 @@ export async function registerRequest(
   return normalizeSession(response);
 }
 
-export async function loginRequest(payload: LoginPayload): Promise<AuthSession> {
+export async function loginRequest(
+  payload: LoginPayload
+): Promise<AuthSession> {
   const response = await apiRequest<AuthResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify(payload),

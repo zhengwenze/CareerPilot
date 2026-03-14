@@ -26,6 +26,8 @@ type AuthFormProps = {
   mode: "login" | "register";
 };
 
+const DASHBOARD_ENTRY_PATH = "/dashboard/overview";
+
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     return error.message;
@@ -50,7 +52,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
   useEffect(() => {
     if (!isBootstrapping && isAuthenticated) {
-      router.replace("/");
+      router.replace(DASHBOARD_ENTRY_PATH);
     }
   }, [isAuthenticated, isBootstrapping, router]);
 
@@ -71,7 +73,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       }
 
       startTransition(() => {
-        router.push("/");
+        router.replace(DASHBOARD_ENTRY_PATH);
         router.refresh();
       });
     } catch (submissionError) {
@@ -82,7 +84,8 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   const isPending = isSubmitting || isRouting || isBootstrapping;
-  const title = mode === "register" ? "创建你的求职工作台" : "登录继续你的求职计划";
+  const title =
+    mode === "register" ? "创建你的求职工作台" : "登录继续你的求职计划";
   const subtitle =
     mode === "register"
       ? "注册后会直接调用后端注册接口，完成账号创建并自动进入已登录状态。"
@@ -165,8 +168,8 @@ export function AuthForm({ mode }: AuthFormProps) {
             {isPending
               ? "处理中..."
               : mode === "register"
-                ? "注册并进入工作台"
-                : "登录并恢复工作台"}
+              ? "注册并进入工作台"
+              : "登录并恢复工作台"}
             <ArrowRight className="size-4" />
           </Button>
         </form>
