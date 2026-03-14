@@ -55,6 +55,10 @@ export type ResumeDownloadUrlResponse = {
   expires_in: number;
 };
 
+export type ResumeDeleteResponse = {
+  message: string;
+};
+
 export function createEmptyStructuredResume(): ResumeStructuredData {
   return {
     basic_info: {
@@ -152,4 +156,14 @@ export async function fetchResumeDownloadUrl(
       token,
     }
   );
+}
+
+export async function deleteResume(
+  token: string,
+  resumeId: string
+): Promise<ResumeDeleteResponse> {
+  return apiRequest<ResumeDeleteResponse>(`/resumes/${resumeId}`, {
+    method: "DELETE",
+    token,
+  });
 }

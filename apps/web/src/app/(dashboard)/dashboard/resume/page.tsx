@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ApiError } from "@/lib/api/client";
 import {
   createEmptyStructuredResume,
+  deleteResume,
   fetchResumeDetail,
   fetchResumeDownloadUrl,
   fetchResumeList,
@@ -69,6 +70,7 @@ export default function DashboardResumePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [pageError, setPageError] = useState("");
   const [bannerMessage, setBannerMessage] = useState("");
 
@@ -328,6 +330,58 @@ export default function DashboardResumePage() {
     }
   }
 
+  async function handleDelete() {
+    if (!token || !selectedResumeId || !selectedResume) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `确认删除简历《${selectedResume.file_name}》吗？这会同时删除 MinIO 中的原始文件。`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setPageError("");
+    setBannerMessage("");
+
+    try {
+      const deletedResumeId = selectedResumeId;
+      const payload = await deleteResume(token, deletedResumeId);
+      const result = await loadResumeListData(token);
+
+      setResumes(result.items);
+      setSelectedResumeId(result.nextSelectedId);
+
+      if (result.nextSelectedId) {
+        const detail = await loadResumeDetailData(token, result.nextSelectedId);
+        setSelectedResume(detail.resume);
+        setParseJobs(detail.jobs);
+        setStructuredValue(
+          detail.resume.structured_json ?? createEmptyStructuredResume()
+        );
+      } else {
+        setSelectedResume(null);
+        setParseJobs([]);
+        setStructuredValue(createEmptyStructuredResume());
+      }
+
+      setBannerMessage(
+        payload.message === "Resume deleted successfully"
+          ? "简历已删除，列表和存储文件都已同步清理。"
+          : payload.message
+      );
+      if (deletedResumeId === selectedResumeId) {
+        setPageError("");
+      }
+    } catch (error) {
+      setPageError(getErrorMessage(error));
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <>
       <Card className="surface-card border-0 bg-card/85 py-0 shadow-2xl shadow-emerald-950/8">
@@ -389,9 +443,11 @@ export default function DashboardResumePage() {
         </div>
 
         <ResumeDetailPanel
+          isDeleting={isDeleting}
           isRetrying={isRetrying}
           isSaving={isSaving}
           onChangeStructured={setStructuredValue}
+          onDelete={handleDelete}
           onDownload={handleDownload}
           onRetry={handleRetryParse}
           onSave={handleSaveStructured}

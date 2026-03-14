@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, RefreshCw, Save } from "lucide-react";
+import { Download, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import { PageEmptyState } from "@/components/page-state";
 import { ResumeStructuredEditor } from "@/components/resume/resume-structured-editor";
@@ -43,20 +43,24 @@ export function ResumeDetailPanel({
   structuredValue,
   isSaving,
   isRetrying,
+  isDeleting,
   onChangeStructured,
   onSave,
   onRetry,
   onDownload,
+  onDelete,
 }: {
   resume: ResumeRecord | null;
   parseJobs: ResumeParseJob[];
   structuredValue: ResumeStructuredData;
   isSaving: boolean;
   isRetrying: boolean;
+  isDeleting: boolean;
   onChangeStructured: (value: ResumeStructuredData) => void;
   onSave: () => void;
   onRetry: () => void;
   onDownload: () => void;
+  onDelete: () => void;
 }) {
   if (!resume) {
     return (
@@ -107,6 +111,16 @@ export function ResumeDetailPanel({
               >
                 下载原文件
                 <Download className="size-4" />
+              </Button>
+              <Button
+                className="rounded-full"
+                disabled={isDeleting}
+                onClick={onDelete}
+                type="button"
+                variant="destructive"
+              >
+                {isDeleting ? "删除中..." : "删除简历"}
+                <Trash2 className="size-4" />
               </Button>
               <Button
                 className="rounded-full"
