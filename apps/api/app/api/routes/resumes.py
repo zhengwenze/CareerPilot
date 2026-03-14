@@ -13,6 +13,7 @@ from app.db.session import get_db_session, get_session_factory
 from app.models import User
 from app.schemas.common import ApiSuccessResponse
 from app.schemas.resume import (
+    ResumeDeleteResponse,
     ResumeDownloadUrlResponse,
     ResumeParseJobResponse,
     ResumeResponse,
@@ -20,6 +21,7 @@ from app.schemas.resume import (
 )
 from app.services.resume import (
     create_resume_parse_job,
+    delete_resume,
     generate_resume_download_url,
     get_resume_detail,
     list_resume_parse_jobs,
@@ -93,6 +95,23 @@ async def get_resume(
         resume_id=resume_id,
     )
     return success_response(request, resume)
+
+
+@router.delete("/{resume_id}", response_model=ApiSuccessResponse[ResumeDeleteResponse])
+async def delete_resume_file(
+    request: Request,
+    resume_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+) -> ApiSuccessResponse[ResumeDeleteResponse]:
+    payload = await delete_resume(
+        session,
+        current_user=current_user,
+        resume_id=resume_id,
+        storage=storage,
+    )
+    return success_response(request, payload)
 
 
 @router.get(

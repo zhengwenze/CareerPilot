@@ -231,3 +231,48 @@ async def test_resume_upload_accepts_unicode_pdf_filename(client) -> None:
     assert upload_response.status_code == 201
     file_name = upload_response.json()["data"]["file_name"]
     assert re.fullmatch(r"resume-[0-9a-f]{32}\.pdf", file_name)
+
+
+@pytest.mark.asyncio
+async def test_resume_delete_removes_record_and_storage(client, app) -> None:
+    register_response = await client.post(
+        "/auth/register",
+        json={
+            "email": "resume-delete@example.com",
+            "password": "super-secret-123",
+            "nickname": "Resume Delete",
+        },
+    )
+    access_token = register_response.json()["data"]["access_token"]
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+    upload_response = await client.post(
+        "/resumes/upload",
+        headers=auth_headers,
+        files={"file": ("resume.pdf", build_pdf_bytes(), "application/pdf")},
+    )
+
+    assert upload_response.status_code == 201
+    upload_payload = upload_response.json()["data"]
+    resume_id = upload_payload["id"]
+    storage_bucket = upload_payload["storage_bucket"]
+    storage_object_key = upload_payload["storage_object_key"]
+
+    delete_response = await client.delete(
+        f"/resumes/{resume_id}",
+        headers=auth_headers,
+    )
+
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"]["message"] == "Resume deleted successfully"
+
+    list_response = await client.get("/resumes", headers=auth_headers)
+    assert list_response.status_code == 200
+    assert list_response.json()["data"] == []
+
+    detail_response = await client.get(f"/resumes/{resume_id}", headers=auth_headers)
+    assert detail_response.status_code == 404
+    assert detail_response.json()["error"]["code"] == "NOT_FOUND"
+
+    fake_storage = app.state.object_storage
+    assert (storage_bucket, storage_object_key) not in fake_storage.objects

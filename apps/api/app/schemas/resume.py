@@ -67,5 +67,9 @@ class ResumeDownloadUrlResponse(BaseModel):
     expires_in: int
 
 
+class ResumeDeleteResponse(BaseModel):
+    message: str
+
+
 class ResumeStructuredUpdateRequest(BaseModel):
     structured_json: ResumeStructuredData

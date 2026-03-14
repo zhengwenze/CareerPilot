@@ -14,6 +14,7 @@ from app.core.errors import ApiException, ErrorCode
 from app.db.session import get_session_factory
 from app.models import Resume, ResumeParseJob, User
 from app.schemas.resume import (
+    ResumeDeleteResponse,
     ResumeDownloadUrlResponse,
     ResumeParseJobResponse,
     ResumeResponse,
@@ -364,6 +365,26 @@ async def generate_resume_download_url(
         download_url=download_url,
         expires_in=settings.storage_presigned_expire_seconds,
     )
+
+
+async def delete_resume(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    resume_id: UUID,
+    storage: ObjectStorage,
+) -> ResumeDeleteResponse:
+    resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
+
+    await storage.delete_object(
+        bucket_name=resume.storage_bucket,
+        object_key=resume.storage_object_key,
+    )
+
+    await session.delete(resume)
+    await session.commit()
+
+    return ResumeDeleteResponse(message="Resume deleted successfully")
 
 
 async def update_resume_structured_data(
