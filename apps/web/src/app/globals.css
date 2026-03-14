@@ -96,10 +96,21 @@ html {
 
 body {
   min-height: 100vh;
-  background-image:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.24), transparent 28%),
-    radial-gradient(circle at top right, rgba(20, 184, 166, 0.22), transparent 32%),
-    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(244, 236, 221, 0.94));
+  background-image: radial-gradient(
+      circle at top left,
+      rgba(245, 158, 11, 0.24),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(20, 184, 166, 0.22),
+      transparent 32%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 252, 247, 0.98),
+      rgba(244, 236, 221, 0.94)
+    );
   font-family: var(--font-geist-sans), sans-serif;
 }
 
@@ -142,8 +153,7 @@ code {
   border-radius: 32px;
   padding: 1.5rem;
   backdrop-filter: blur(18px);
-  box-shadow:
-    0 24px 80px rgba(18, 49, 44, 0.08),
+  box-shadow: 0 24px 80px rgba(18, 49, 44, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
@@ -156,8 +166,11 @@ code {
 }
 
 .surface-card {
-  background-image:
-    linear-gradient(180deg, color-mix(in oklab, white 74%, transparent), transparent 24%);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, white 74%, transparent),
+    transparent 24%
+  );
 }
 
 @media (min-width: 1024px) {

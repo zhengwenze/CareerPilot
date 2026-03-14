@@ -17,7 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CareerPilot",
-  description: "AI 求职导航台，提供登录注册、求职工作台与后续 AI 求职能力入口。",
+  description:
+    "AI 求职导航台，提供登录注册、求职工作台与后续 AI 求职能力入口。",
 };
 
 export default function RootLayout({
