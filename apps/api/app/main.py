@@ -29,7 +29,7 @@ def serialize_error_code(code: ErrorCode | str) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = get_settings()
+    settings = getattr(app.state, "settings", get_settings())
     app.state.settings = settings
     redis_client: Redis | None = getattr(app.state, "redis", None)
 
@@ -62,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or get_settings()
 
     app = FastAPI(title=config.app_name, lifespan=lifespan)
+    app.state.settings = config
 
     app.add_middleware(
         CORSMiddleware,

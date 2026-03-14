@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.api.deps import get_settings_dependency
+from app.core.config import Settings
 from app.core.responses import success_response
 from app.db.session import get_db_session
 from app.schemas.common import ApiSuccessResponse
@@ -44,8 +45,10 @@ async def readiness(
 
 
 @router.get("/health/version", response_model=ApiSuccessResponse[VersionResponse])
-async def version(request: Request) -> ApiSuccessResponse[VersionResponse]:
-    settings = get_settings()
+async def version(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
+) -> ApiSuccessResponse[VersionResponse]:
     return success_response(
         request,
         VersionResponse(

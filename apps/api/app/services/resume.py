@@ -27,8 +27,13 @@ SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def sanitize_file_name(file_name: str) -> str:
-    normalized = SAFE_FILE_NAME_PATTERN.sub("-", Path(file_name).name).strip("-")
-    return normalized or f"resume-{uuid4().hex}.pdf"
+    original_name = Path(file_name).name
+    suffix = Path(original_name).suffix.lower()
+    stem = SAFE_FILE_NAME_PATTERN.sub("-", Path(original_name).stem).strip("-._")
+
+    if suffix:
+        return f"{stem or f'resume-{uuid4().hex}'}{suffix}"
+    return stem or f"resume-{uuid4().hex}.pdf"
 
 
 def build_storage_object_key(*, user_id: UUID, resume_id: UUID, file_name: str) -> str:

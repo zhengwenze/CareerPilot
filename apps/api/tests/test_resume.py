@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 from typing import Any
 
 import pytest
@@ -206,3 +207,27 @@ async def test_resume_upload_rejects_non_pdf(client) -> None:
 
     assert upload_response.status_code == 400
     assert upload_response.json()["error"]["code"] == "BAD_REQUEST"
+
+
+@pytest.mark.asyncio
+async def test_resume_upload_accepts_unicode_pdf_filename(client) -> None:
+    register_response = await client.post(
+        "/auth/register",
+        json={
+            "email": "resume-unicode@example.com",
+            "password": "super-secret-123",
+            "nickname": "Resume Unicode",
+        },
+    )
+    access_token = register_response.json()["data"]["access_token"]
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+    upload_response = await client.post(
+        "/resumes/upload",
+        headers=auth_headers,
+        files={"file": ("郑文泽简历.pdf", build_pdf_bytes(), "application/pdf")},
+    )
+
+    assert upload_response.status_code == 201
+    file_name = upload_response.json()["data"]["file_name"]
+    assert re.fullmatch(r"resume-[0-9a-f]{32}\.pdf", file_name)

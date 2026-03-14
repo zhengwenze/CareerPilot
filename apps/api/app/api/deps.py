@@ -36,8 +36,8 @@ async def get_object_storage(request: Request) -> ObjectStorage:
     return storage
 
 
-def get_settings_dependency() -> Settings:
-    return get_settings()
+def get_settings_dependency(request: Request) -> Settings:
+    return getattr(request.app.state, "settings", get_settings())
 
 
 async def get_bearer_token(

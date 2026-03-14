@@ -8,10 +8,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "career-pilot-api"
+    app_version: str = "0.1.0"
     app_env: str = "development"
     database_url: str = "postgresql+asyncpg://career:career@localhost:5432/career_pilot"
     alembic_database_url: str | None = "postgresql+psycopg://career:career@localhost:5432/career_pilot"
     redis_url: str | None = "redis://localhost:6380/0"
+    storage_provider: str = "minio"
+    storage_endpoint: str = "localhost:9000"
+    storage_access_key: str = "careerpilot"
+    storage_secret_key: str = "careerpilot123"
+    storage_bucket_name: str = "career-pilot-resumes"
+    storage_use_ssl: bool = False
+    storage_presigned_expire_seconds: int = 3600
+    max_resume_file_size_mb: int = 10
     jwt_secret_key: str = Field(
         default="replace-this-with-a-very-long-dev-secret-key",
         min_length=32,
