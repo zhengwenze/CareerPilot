@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/page-state";
+import {
+  PageEmptyState,
+  PageErrorState,
+  PageLoadingState,
+} from "@/components/page-state";
 import { ResumeDetailPanel } from "@/components/resume/resume-detail-panel";
 import { ResumeList } from "@/components/resume/resume-list";
 import { ResumeUploadCard } from "@/components/resume/resume-upload-card";
@@ -38,7 +42,10 @@ function getErrorMessage(error: unknown) {
   return "操作失败，请稍后重试。";
 }
 
-async function loadResumeListData(token: string, preferredResumeId?: string | null) {
+async function loadResumeListData(
+  token: string,
+  preferredResumeId?: string | null
+) {
   const items = await fetchResumeList(token);
   const nextSelectedId =
     preferredResumeId && items.some((item) => item.id === preferredResumeId)
@@ -61,7 +68,9 @@ export default function DashboardResumePage() {
   const { token } = useAuth();
   const [resumes, setResumes] = useState<ResumeRecord[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [selectedResume, setSelectedResume] = useState<ResumeRecord | null>(null);
+  const [selectedResume, setSelectedResume] = useState<ResumeRecord | null>(
+    null
+  );
   const [parseJobs, setParseJobs] = useState<ResumeParseJob[]>([]);
   const [structuredValue, setStructuredValue] = useState<ResumeStructuredData>(
     createEmptyStructuredResume()
@@ -96,7 +105,10 @@ export default function DashboardResumePage() {
         setSelectedResumeId(result.nextSelectedId);
 
         if (result?.nextSelectedId) {
-          const detail = await loadResumeDetailData(accessToken, result.nextSelectedId);
+          const detail = await loadResumeDetailData(
+            accessToken,
+            result.nextSelectedId
+          );
           if (cancelled) {
             return;
           }
@@ -184,7 +196,10 @@ export default function DashboardResumePage() {
         setSelectedResumeId(result.nextSelectedId);
 
         if (result?.nextSelectedId) {
-          const detail = await loadResumeDetailData(accessToken, result.nextSelectedId);
+          const detail = await loadResumeDetailData(
+            accessToken,
+            result.nextSelectedId
+          );
           setSelectedResume(detail.resume);
           setParseJobs(detail.jobs);
           setStructuredValue(
@@ -279,7 +294,9 @@ export default function DashboardResumePage() {
       const result = await loadResumeListData(token, selectedResumeId);
       setResumes(result.items);
       setSelectedResumeId(result.nextSelectedId);
-      setBannerMessage("人工修正已保存，后续匹配和面试模块会直接使用这份结构化结果。");
+      setBannerMessage(
+        "人工修正已保存，后续匹配和面试模块会直接使用这份结构化结果。"
+      );
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -396,7 +413,8 @@ export default function DashboardResumePage() {
                   简历上传、解析与人工校正
                 </h2>
                 <p className="max-w-2xl text-base leading-8 text-muted-foreground">
-                  这里是简历中心的第一版真实工作流：上传 PDF 后自动解析文本和结构化结果，解析失败可重试，解析成功后可以直接人工修正并保存。
+                  这里是简历中心的第一版真实工作流：上传 PDF
+                  后自动解析文本和结构化结果，解析失败可重试，解析成功后可以直接人工修正并保存。
                 </p>
               </div>
             </div>
