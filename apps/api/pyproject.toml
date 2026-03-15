@@ -10,6 +10,7 @@ dependencies = [
     "email-validator>=2.3.0",
     "fastapi>=0.116.1",
     "greenlet>=3.2.4",
+    "httpx>=0.28.1",
     "minio>=7.2.18",
     "pypdf>=6.1.1",
     "pydantic-settings>=2.11.0",
@@ -26,7 +27,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "aiosqlite>=0.21.0",
-    "httpx>=0.28.1",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "ruff>=0.13.0",

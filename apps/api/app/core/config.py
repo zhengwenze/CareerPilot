@@ -11,7 +11,9 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_env: str = "development"
     database_url: str = "postgresql+asyncpg://career:career@localhost:5432/career_pilot"
-    alembic_database_url: str | None = "postgresql+psycopg://career:career@localhost:5432/career_pilot"
+    alembic_database_url: str | None = (
+        "postgresql+psycopg://career:career@localhost:5432/career_pilot"
+    )
     redis_url: str | None = "redis://localhost:6380/0"
     storage_provider: str = "minio"
     storage_endpoint: str = "localhost:9000"
@@ -28,6 +30,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    match_ai_provider: str = "disabled"
+    match_ai_base_url: str | None = None
+    match_ai_api_key: str | None = None
+    match_ai_model: str | None = None
+    match_ai_timeout_seconds: int = 30
 
     model_config = SettingsConfigDict(
         env_file=".env",
