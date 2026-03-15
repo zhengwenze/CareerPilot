@@ -5,6 +5,10 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --font-geist-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif;
+  --font-geist-mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Monaco",
+    "Consolas", "Liberation Mono", monospace;
   --background: oklch(0.978 0.012 93.8);
   --foreground: oklch(0.268 0.035 185.4);
   --card: oklch(0.993 0.008 93.2);
