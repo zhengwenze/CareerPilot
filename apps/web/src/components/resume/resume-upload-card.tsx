@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { FileUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,8 @@ export function ResumeUploadCard({
   isUploading: boolean;
   onUpload: (file: File) => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   return (
     <Card className="surface-card border-0 bg-card/82 py-0 shadow-xl shadow-emerald-950/6">
       <CardHeader className="px-5 py-5">
@@ -28,32 +31,32 @@ export function ResumeUploadCard({
           上传后会自动进入解析流程，系统会抽取文本并生成可人工修正的结构化结果。
         </p>
 
-        <label className="block">
-          <input
-            accept="application/pdf,.pdf"
-            className="hidden"
-            disabled={isUploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) {
-                return;
-              }
+        <input
+          accept="application/pdf,.pdf"
+          className="hidden"
+          disabled={isUploading}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) {
+              return;
+            }
 
-              onUpload(file);
-              event.currentTarget.value = "";
-            }}
-            type="file"
-          />
-          <Button
-            className="w-full rounded-full"
-            disabled={isUploading}
-            type="button"
-            variant="default"
-          >
-            {isUploading ? "上传中..." : "选择 PDF 文件"}
-            <FileUp className="size-4" />
-          </Button>
-        </label>
+            onUpload(file);
+            event.currentTarget.value = "";
+          }}
+          ref={fileInputRef}
+          type="file"
+        />
+        <Button
+          className="w-full rounded-full"
+          disabled={isUploading}
+          onClick={() => fileInputRef.current?.click()}
+          type="button"
+          variant="default"
+        >
+          {isUploading ? "上传中..." : "选择 PDF 文件"}
+          <FileUp className="size-4" />
+        </Button>
       </CardContent>
     </Card>
   );
