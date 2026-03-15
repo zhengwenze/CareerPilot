@@ -14,6 +14,7 @@ from app.schemas.job import (
     JobStructuredData,
     JobUpdateRequest,
 )
+from app.services.job_parser import build_structured_job
 
 
 def _normalize_required_text(value: str, *, field_name: str) -> str:
@@ -53,6 +54,19 @@ def serialize_job(job: JobDescription) -> JobResponse:
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
+
+
+def _apply_job_parse(job: JobDescription) -> None:
+    structured = build_structured_job(
+        title=job.title,
+        company=job.company,
+        job_city=job.job_city,
+        employment_type=job.employment_type,
+        jd_text=job.jd_text,
+    )
+    job.structured_json = structured.model_dump()
+    job.parse_status = "success"
+    job.parse_error = None
 
 
 async def get_job_or_404(
@@ -98,6 +112,7 @@ async def create_job(
         created_by=current_user.id,
         updated_by=current_user.id,
     )
+    _apply_job_parse(job)
     session.add(job)
     await session.commit()
     await session.refresh(job)
@@ -142,18 +157,19 @@ async def update_job(
     job = await get_job_or_404(session, current_user=current_user, job_id=job_id)
     updates = payload.model_dump(exclude_unset=True)
 
-    should_reset_parse = False
+    should_reparse = job.structured_json is None or job.parse_status != "success"
 
     if "title" in updates:
         next_title = _normalize_required_text(updates["title"], field_name="title")
         if next_title != job.title:
             job.title = next_title
+            should_reparse = True
 
     if "jd_text" in updates:
         next_jd_text = _normalize_required_text(updates["jd_text"], field_name="jd_text")
         if next_jd_text != job.jd_text:
             job.jd_text = next_jd_text
-            should_reset_parse = True
+            should_reparse = True
 
     optional_fields = (
         "company",
@@ -164,16 +180,43 @@ async def update_job(
     )
     for field_name in optional_fields:
         if field_name in updates:
-            setattr(job, field_name, _normalize_optional_text(updates[field_name]))
+            next_value = _normalize_optional_text(updates[field_name])
+            if getattr(job, field_name) != next_value:
+                setattr(job, field_name, next_value)
+                if field_name in {"company", "job_city", "employment_type"}:
+                    should_reparse = True
 
-    if should_reset_parse:
+    if should_reparse:
         job.parse_status = "pending"
         job.parse_error = None
         job.structured_json = None
+        _apply_job_parse(job)
 
     job.updated_by = current_user.id
     if job.created_by is None:
         job.created_by = current_user.id
+
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    return job
+
+
+async def parse_job(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    job_id: UUID,
+) -> JobDescription:
+    job = await get_job_or_404(session, current_user=current_user, job_id=job_id)
+    job.parse_status = "pending"
+    job.parse_error = None
+    job.structured_json = None
+    job.updated_by = current_user.id
+    if job.created_by is None:
+        job.created_by = current_user.id
+
+    _apply_job_parse(job)
 
     session.add(job)
     await session.commit()

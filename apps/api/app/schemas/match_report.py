@@ -27,5 +27,10 @@ class MatchReportResponse(BaseModel):
     updated_at: datetime
 
 
+class MatchReportCreateRequest(BaseModel):
+    resume_id: UUID
+    force_refresh: bool = False
+
+
 class MatchReportDeleteResponse(BaseModel):
     message: str

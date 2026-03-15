@@ -17,6 +17,7 @@ from app.services.job import (
     delete_job,
     get_job_or_404,
     list_jobs,
+    parse_job,
     serialize_job,
     update_job,
 )
@@ -76,6 +77,17 @@ async def update_job_description(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[JobResponse]:
     job = await update_job(session, current_user=current_user, job_id=job_id, payload=payload)
+    return success_response(request, serialize_job(job))
+
+
+@router.post("/{job_id}/parse", response_model=ApiSuccessResponse[JobResponse])
+async def retry_job_parse(
+    request: Request,
+    job_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[JobResponse]:
+    job = await parse_job(session, current_user=current_user, job_id=job_id)
     return success_response(request, serialize_job(job))
 
 
