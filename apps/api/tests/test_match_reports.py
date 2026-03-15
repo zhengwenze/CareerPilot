@@ -38,6 +38,33 @@ async def create_match_report_fixture(*, session_factory, user_id: UUID) -> tupl
             content_type="application/pdf",
             file_size=1024,
             parse_status="success",
+            raw_text=(
+                "张三\n"
+                "zhangsan@example.com 13800138000 上海\n"
+                "教育背景\n复旦大学 统计学 本科\n"
+                "工作经历\n2023.01-至今 CareerPilot 数据分析师\n"
+                "负责 SQL、Python、指标体系与实验分析。\n"
+                "项目经历\n增长分析平台重构\n"
+                "技能\nPython SQL Tableau English"
+            ),
+            structured_json={
+                "basic_info": {
+                    "name": "张三",
+                    "email": "zhangsan@example.com",
+                    "phone": "13800138000",
+                    "location": "上海",
+                    "summary": "负责增长分析和实验分析。",
+                },
+                "education": ["复旦大学 统计学 本科"],
+                "work_experience": ["2023.01-至今 CareerPilot 数据分析师"],
+                "projects": ["增长分析平台重构"],
+                "skills": {
+                    "technical": ["Python", "SQL", "Tableau", "数据分析", "实验分析"],
+                    "tools": [],
+                    "languages": ["English"],
+                },
+                "certifications": [],
+            },
             latest_version=1,
             created_by=user_id,
             updated_by=user_id,
@@ -120,6 +147,106 @@ async def test_match_report_list_detail_and_delete(client, session_factory) -> N
     )
     assert next_list_response.status_code == 200
     assert next_list_response.json()["data"] == []
+
+
+@pytest.mark.asyncio
+async def test_create_match_report_endpoint_generates_report(client, session_factory) -> None:
+    access_token, user_id = await register_user(
+        client,
+        email="match-create@example.com",
+        nickname="Match Create",
+    )
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+    create_response = await client.post(
+        "/jobs",
+        headers=auth_headers,
+        json={
+            "title": "高级数据分析师",
+            "company": "CareerPilot",
+            "job_city": "上海",
+            "employment_type": "全职",
+            "jd_text": (
+                "岗位职责\n"
+                "1. 负责指标体系建设和实验分析。\n"
+                "2. 与产品和运营协作推进增长项目。\n"
+                "任职要求\n"
+                "1. 熟悉 Python、SQL、Tableau。\n"
+                "2. 3年以上数据分析经验，本科及以上。"
+            ),
+        },
+    )
+    assert create_response.status_code == 201
+    job_id = create_response.json()["data"]["id"]
+
+    resume_id = uuid4()
+    async with session_factory() as session:
+        resume = Resume(
+            id=resume_id,
+            user_id=user_id,
+            file_name="candidate.pdf",
+            file_url="minio://career-pilot-resumes/test/candidate.pdf",
+            storage_bucket="career-pilot-resumes",
+            storage_object_key=f"resumes/{user_id}/{resume_id}/candidate.pdf",
+            content_type="application/pdf",
+            file_size=1024,
+            parse_status="success",
+            raw_text=(
+                "李四\n"
+                "lisi@example.com 13800138001 上海\n"
+                "教育背景\n上海交通大学 本科\n"
+                "工作经历\n2022.01-至今 CareerPilot 数据分析师\n"
+                "负责 Python、SQL、Tableau、指标体系和实验分析。\n"
+                "项目经历\n增长实验平台\n"
+                "设计看板并复盘 A/B Testing 结果。"
+            ),
+            structured_json={
+                "basic_info": {
+                    "name": "李四",
+                    "email": "lisi@example.com",
+                    "phone": "13800138001",
+                    "location": "上海",
+                    "summary": "负责增长分析、实验分析和数据建模。",
+                },
+                "education": ["上海交通大学 本科"],
+                "work_experience": ["2022.01-至今 CareerPilot 数据分析师"],
+                "projects": ["增长实验平台"],
+                "skills": {
+                    "technical": ["Python", "SQL", "Tableau", "A/B Testing", "实验分析"],
+                    "tools": [],
+                    "languages": [],
+                },
+                "certifications": [],
+            },
+            latest_version=1,
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        session.add(resume)
+        await session.commit()
+
+    report_response = await client.post(
+        f"/jobs/{job_id}/match-reports",
+        headers=auth_headers,
+        json={
+            "resume_id": str(resume_id),
+            "force_refresh": True,
+        },
+    )
+    assert report_response.status_code == 200
+    payload = report_response.json()["data"]
+    assert payload["status"] == "success"
+    assert payload["rule_score"] != "0.00"
+    assert "required_skills" in payload["dimension_scores_json"]
+    assert "ai_correction_delta" in payload["dimension_scores_json"]
+    assert payload["gap_json"]["actions"]
+
+    list_response = await client.get(
+        f"/jobs/{job_id}/match-reports",
+        headers=auth_headers,
+    )
+    assert list_response.status_code == 200
+    assert len(list_response.json()["data"]) == 1
 
 
 @pytest.mark.asyncio

@@ -46,8 +46,9 @@ async def test_jobs_crud_flow(client, session_factory) -> None:
     assert create_response.status_code == 201
     create_payload = create_response.json()["data"]
     job_id = UUID(create_payload["id"])
-    assert create_payload["parse_status"] == "pending"
-    assert create_payload["structured_json"] is None
+    assert create_payload["parse_status"] == "success"
+    assert create_payload["structured_json"]["basic"]["title"] == "数据分析师"
+    assert "SQL" in create_payload["structured_json"]["requirements"]["required_skills"]
 
     list_response = await client.get("/jobs", headers=auth_headers)
     assert list_response.status_code == 200
@@ -58,21 +59,6 @@ async def test_jobs_crud_flow(client, session_factory) -> None:
     detail_response = await client.get(f"/jobs/{job_id}", headers=auth_headers)
     assert detail_response.status_code == 200
     assert detail_response.json()["data"]["title"] == "数据分析师"
-
-    async with session_factory() as session:
-        job = await session.get(JobDescription, job_id)
-        assert job is not None
-        job.parse_status = "success"
-        job.parse_error = None
-        job.structured_json = {
-            "basic": {"title": "数据分析师"},
-            "requirements": {"required_skills": ["SQL"]},
-            "responsibilities": [],
-            "benefits": [],
-            "raw_summary": "已有结构化结果",
-        }
-        session.add(job)
-        await session.commit()
 
     update_response = await client.put(
         f"/jobs/{job_id}",
@@ -87,8 +73,25 @@ async def test_jobs_crud_flow(client, session_factory) -> None:
     update_payload = update_response.json()["data"]
     assert update_payload["title"] == "高级数据分析师"
     assert update_payload["company"] is None
-    assert update_payload["parse_status"] == "pending"
-    assert update_payload["structured_json"] is None
+    assert update_payload["parse_status"] == "success"
+    assert update_payload["structured_json"]["basic"]["title"] == "高级数据分析师"
+    assert "实验分析" in update_payload["structured_json"]["requirements"]["required_keywords"]
+
+    async with session_factory() as session:
+        job = await session.get(JobDescription, job_id)
+        assert job is not None
+        job.parse_status = "failed"
+        job.parse_error = "stale parse"
+        job.structured_json = None
+        session.add(job)
+        await session.commit()
+
+    reparsed_response = await client.post(f"/jobs/{job_id}/parse", headers=auth_headers)
+    assert reparsed_response.status_code == 200
+    reparsed_payload = reparsed_response.json()["data"]
+    assert reparsed_payload["parse_status"] == "success"
+    assert reparsed_payload["parse_error"] is None
+    assert reparsed_payload["structured_json"]["requirements"]["experience_min_years"] is None
 
     delete_response = await client.delete(f"/jobs/{job_id}", headers=auth_headers)
     assert delete_response.status_code == 200
