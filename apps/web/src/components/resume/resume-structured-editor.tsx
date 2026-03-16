@@ -23,9 +23,9 @@ function StructuredListEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <Label>{label}</Label>
+        <Label className="text-black">{label}</Label>
         <Button
-          className="rounded-full"
+          className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
           onClick={() => onChange([...items, ""])}
           size="sm"
           type="button"
@@ -37,14 +37,14 @@ function StructuredListEditor({
       </div>
       <div className="space-y-3">
         {items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-white px-4 py-4 text-sm text-black/58">
             暂无内容，点击“新增”补充。
           </div>
         ) : null}
         {items.map((item, index) => (
           <div className="flex gap-3" key={`${label}-${index}`}>
             <Textarea
-              className="min-h-20 rounded-2xl border-border/70 bg-white/80"
+              className="min-h-20 rounded-2xl border-black/10 bg-[#f5f5f7] text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               onChange={(event) => {
                 const nextItems = [...items];
                 nextItems[index] = event.target.value;
@@ -54,7 +54,7 @@ function StructuredListEditor({
               value={item}
             />
             <Button
-              className="shrink-0 rounded-2xl"
+              className="shrink-0 rounded-2xl border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
               onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
               size="icon"
               type="button"
@@ -88,18 +88,18 @@ export function ResumeStructuredEditor({
   onChange: (value: ResumeStructuredData) => void;
 }) {
   return (
-    <Card className="surface-card border-0 bg-card/82 py-0 shadow-xl shadow-emerald-950/5">
+    <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
       <CardHeader className="px-6 py-6">
-        <CardTitle className="text-2xl font-semibold text-foreground">
+        <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
           结构化结果编辑
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 px-6 pb-6">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="resume-name">姓名</Label>
+            <Label htmlFor="resume-name" className="text-black">姓名</Label>
             <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="resume-name"
               onChange={(event) =>
                 onChange({
@@ -114,9 +114,9 @@ export function ResumeStructuredEditor({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="resume-email">邮箱</Label>
+            <Label htmlFor="resume-email" className="text-black">邮箱</Label>
             <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="resume-email"
               onChange={(event) =>
                 onChange({
@@ -131,9 +131,9 @@ export function ResumeStructuredEditor({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="resume-phone">手机号</Label>
+            <Label htmlFor="resume-phone" className="text-black">手机号</Label>
             <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="resume-phone"
               onChange={(event) =>
                 onChange({
@@ -148,9 +148,9 @@ export function ResumeStructuredEditor({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="resume-location">地点</Label>
+            <Label htmlFor="resume-location" className="text-black">地点</Label>
             <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="resume-location"
               onChange={(event) =>
                 onChange({
@@ -167,9 +167,9 @@ export function ResumeStructuredEditor({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="resume-summary">摘要</Label>
+          <Label htmlFor="resume-summary" className="text-black">摘要</Label>
           <Textarea
-            className="rounded-2xl border-border/70 bg-white/80"
+            className="rounded-2xl border-black/10 bg-[#f5f5f7] text-black focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
             id="resume-summary"
             onChange={(event) =>
               onChange({
@@ -214,9 +214,9 @@ export function ResumeStructuredEditor({
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="grid gap-2">
-            <Label htmlFor="skills-technical">技术技能</Label>
+            <Label htmlFor="skills-technical" className="text-black">技术技能</Label>
             <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="skills-technical"
               onChange={(event) =>
                 onChange({
@@ -232,9 +232,9 @@ export function ResumeStructuredEditor({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="skills-tools">工具技能</Label>
+            <Label htmlFor="skills-tools" className="text-black">工具技能</Label>
             <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="skills-tools"
               onChange={(event) =>
                 onChange({
@@ -250,9 +250,9 @@ export function ResumeStructuredEditor({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="skills-languages">语言能力</Label>
+            <Label htmlFor="skills-languages" className="text-black">语言能力</Label>
             <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="skills-languages"
               onChange={(event) =>
                 onChange({

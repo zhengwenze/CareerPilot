@@ -9,15 +9,15 @@ import type { ResumeRecord } from "@/lib/api/modules/resume";
 
 function getStatusTone(status: string) {
   if (status === "success") {
-    return "bg-emerald-100 text-emerald-700";
+    return "bg-[#E8F7EE] text-[#18864B]";
   }
   if (status === "failed") {
-    return "bg-rose-100 text-rose-700";
+    return "bg-[#FFF1F0] text-[#D93025]";
   }
   if (status === "processing") {
-    return "bg-amber-100 text-amber-700";
+    return "bg-[#FFF7E6] text-[#B26A00]";
   }
-  return "bg-slate-100 text-slate-700";
+  return "bg-[#f2f2f2] text-black/65";
 }
 
 function formatDate(value: string) {
@@ -52,22 +52,22 @@ export function ResumeList({
           >
             <Card
               className={cn(
-                "rounded-[28px] border py-0 shadow-none transition-all",
+                "rounded-[2rem] border py-0 shadow-none transition-all",
                 isActive
-                  ? "border-primary/35 bg-primary/5"
-                  : "border-border/70 bg-white/72 hover:border-primary/20"
+                  ? "border-[#0071E3]/30 bg-[#F5F9FF]"
+                  : "border-black/10 bg-white hover:border-black/20"
               )}
             >
               <CardContent className="space-y-3 px-5 py-5">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
+                  <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[#f5f5f7] text-black">
                     <FileText className="size-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">
+                    <p className="truncate text-sm font-semibold text-black">
                       {item.file_name}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-1 text-xs text-black/55">
                       上传于 {formatDate(item.created_at)}
                     </p>
                   </div>
@@ -82,7 +82,7 @@ export function ResumeList({
                   >
                     {item.parse_status}
                   </Badge>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-black/45">
                     v{item.latest_version}
                   </span>
                 </div>

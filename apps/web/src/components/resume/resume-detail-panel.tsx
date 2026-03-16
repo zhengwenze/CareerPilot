@@ -17,15 +17,15 @@ import type {
 
 function getStatusTone(status: string) {
   if (status === "success") {
-    return "bg-emerald-100 text-emerald-700";
+    return "bg-[#E8F7EE] text-[#18864B]";
   }
   if (status === "failed") {
-    return "bg-rose-100 text-rose-700";
+    return "bg-[#FFF1F0] text-[#D93025]";
   }
   if (status === "processing") {
-    return "bg-amber-100 text-amber-700";
+    return "bg-[#FFF7E6] text-[#B26A00]";
   }
-  return "bg-slate-100 text-slate-700";
+  return "bg-[#f2f2f2] text-black/65";
 }
 
 function formatDate(value: string) {
@@ -75,7 +75,7 @@ export function ResumeDetailPanel({
 
   return (
     <div className="space-y-5">
-      <Card className="surface-card border-0 bg-card/85 py-0 shadow-2xl shadow-emerald-950/6">
+      <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
         <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
@@ -87,10 +87,10 @@ export function ResumeDetailPanel({
                 {resume.parse_status}
               </Badge>
               <div className="space-y-2">
-                <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+                <h2 className="text-3xl font-semibold tracking-[-0.04em] text-black">
                   {resume.file_name}
                 </h2>
-                <p className="text-sm leading-7 text-muted-foreground">
+                <p className="text-sm leading-7 text-black/62">
                   上传时间 {formatDate(resume.created_at)}，文件大小{" "}
                   {(resume.file_size / 1024).toFixed(1)} KB，当前版本 v
                   {resume.latest_version}
@@ -100,12 +100,12 @@ export function ResumeDetailPanel({
 
             <div className="flex flex-wrap gap-2">
               {isStructuredDirty ? (
-                <Badge className="rounded-full bg-amber-100 px-3 py-1 text-amber-700 hover:bg-amber-100">
+                <Badge className="rounded-full bg-[#FFF7E6] px-3 py-1 text-[#B26A00] hover:bg-[#FFF7E6]">
                   有未保存修改
                 </Badge>
               ) : null}
               <Button
-                className="rounded-full"
+                className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
                 disabled={isRetrying}
                 onClick={onRetry}
                 type="button"
@@ -115,7 +115,7 @@ export function ResumeDetailPanel({
                 <RefreshCw className="size-4" />
               </Button>
               <Button
-                className="rounded-full"
+                className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
                 onClick={onDownload}
                 type="button"
                 variant="outline"
@@ -134,7 +134,7 @@ export function ResumeDetailPanel({
                 <Trash2 className="size-4" />
               </Button>
               <Button
-                className="rounded-full"
+                className="rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
                 disabled={isSaving || !isStructuredDirty}
                 onClick={onSave}
                 type="button"
@@ -150,26 +150,26 @@ export function ResumeDetailPanel({
           </div>
 
           {resume.parse_error ? (
-            <Alert className="mt-5 rounded-2xl border-destructive/20 bg-destructive/5">
-              <AlertTitle>解析失败</AlertTitle>
-              <AlertDescription>{resume.parse_error}</AlertDescription>
+            <Alert className="mt-5 rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
+              <AlertTitle className="text-black">解析失败</AlertTitle>
+              <AlertDescription className="text-black/72">{resume.parse_error}</AlertDescription>
             </Alert>
           ) : null}
 
           {!resume.parse_error &&
           ["pending", "processing"].includes(resume.parse_status) ? (
-            <Alert className="mt-5 rounded-2xl border-primary/20 bg-primary/5">
-              <AlertTitle>解析进行中</AlertTitle>
-              <AlertDescription>
+            <Alert className="mt-5 rounded-[1.5rem] border-[#0071E3]/15 bg-[#F5F9FF]">
+              <AlertTitle className="text-black">解析进行中</AlertTitle>
+              <AlertDescription className="text-black/72">
                 后端已经接收并正在解析这份简历，解析完成后右侧结构化编辑区会自动填入结果。
               </AlertDescription>
             </Alert>
           ) : null}
 
           {resume.parse_error || !resume.structured_json ? (
-            <Alert className="mt-5 rounded-2xl border-amber-200 bg-amber-50">
-              <AlertTitle>可直接人工校正</AlertTitle>
-              <AlertDescription>
+            <Alert className="mt-5 rounded-[1.5rem] border-[#FFD9B3] bg-[#FFF7E6]">
+              <AlertTitle className="text-black">可直接人工校正</AlertTitle>
+              <AlertDescription className="text-black/72">
                 即使自动解析失败或结果不完整，你也可以直接在右侧编辑区录入并保存，后续模块会使用这份人工修正后的结构化简历。
               </AlertDescription>
             </Alert>
@@ -178,15 +178,15 @@ export function ResumeDetailPanel({
       </Card>
 
       <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="surface-card border-0 bg-card/80 py-0 shadow-xl shadow-emerald-950/5">
+        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
           <CardHeader className="px-6 py-6">
-            <CardTitle className="text-2xl font-semibold text-foreground">
+            <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
               原始文本预览
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5 px-6 pb-6">
             <Textarea
-              className="min-h-[360px] rounded-[28px] border-border/70 bg-white/80 font-mono text-xs leading-6"
+              className="min-h-[360px] rounded-[1.75rem] border-black/10 bg-white font-mono text-xs leading-6 text-black focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               readOnly
               value={
                 resume.raw_text ??
@@ -195,18 +195,18 @@ export function ResumeDetailPanel({
             />
 
             <div className="space-y-3">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium text-black">
                 解析任务记录
               </p>
               <div className="space-y-3">
                 {parseJobs.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
+                  <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-white px-4 py-4 text-sm text-black/58">
                     还没有解析任务记录。
                   </div>
                 ) : null}
                 {parseJobs.map((job) => (
                   <div
-                    className="rounded-2xl border border-border/70 bg-white/72 px-4 py-4"
+                    className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
                     key={job.id}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -217,18 +217,18 @@ export function ResumeDetailPanel({
                       >
                         {job.status}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-black/45">
                         尝试 {job.attempt_count} 次
                       </span>
                     </div>
-                    <p className="mt-3 text-xs leading-6 text-muted-foreground">
+                    <p className="mt-3 text-xs leading-6 text-black/55">
                       创建于 {formatDate(job.created_at)}
                       {job.finished_at
                         ? `，结束于 ${formatDate(job.finished_at)}`
                         : ""}
                     </p>
                     {job.error_message ? (
-                      <p className="mt-2 text-sm text-rose-700">
+                      <p className="mt-2 text-sm text-[#D93025]">
                         {job.error_message}
                       </p>
                     ) : null}

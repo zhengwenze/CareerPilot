@@ -80,21 +80,33 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   const isPending = isSubmitting || isRouting || isBootstrapping;
+  const title = mode === "register" ? "创建账号" : "欢迎回来";
+  const description =
+    mode === "register"
+      ? "输入基础信息后即可创建账号，并自动进入你的求职工作台。"
+      : "输入邮箱与密码，继续访问你的简历解析和职位进展。";
 
   return (
-    <div className="w-full space-y-6 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-900/5 sm:p-12">
-      <div className="space-y-2">
-        <div className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700">
-          CareerPilot Auth
+    <div className="w-full rounded-[2rem] border border-black/10 bg-white p-8 shadow-[0_24px_60px_rgba(0,0,0,0.08)] sm:p-10">
+      <div className="space-y-3">
+        <div className="inline-flex items-center rounded-full border border-black/10 px-3 py-1 text-xs font-medium tracking-[0.16em] text-black uppercase">
+          {mode === "register" ? "Create Account" : "Sign In"}
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-3xl font-semibold tracking-[-0.05em] text-black">
+            {title}
+          </h3>
+          <p className="text-sm leading-6 text-black">{description}</p>
         </div>
       </div>
 
-      <form className="space-y-5" onSubmit={handleSubmit}>
+      <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
         {mode === "register" && (
           <div className="space-y-2">
             <Label
               htmlFor="nickname"
-              className="text-sm font-medium text-gray-900"
+              className="text-sm font-medium text-black"
             >
               昵称
             </Label>
@@ -103,13 +115,13 @@ export function AuthForm({ mode }: AuthFormProps) {
               placeholder="比如：阿泽 / 数据分析求职者"
               value={nickname}
               onChange={(event) => setNickname(event.target.value)}
-              className="h-11 rounded-xl border-gray-300 bg-gray-50 text-base placeholder:text-gray-400 focus:border-black focus:ring-black"
+              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-base text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
             />
           </div>
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="email" className="text-sm font-medium text-gray-900">
+          <Label htmlFor="email" className="text-sm font-medium text-black">
             邮箱
           </Label>
           <Input
@@ -119,12 +131,12 @@ export function AuthForm({ mode }: AuthFormProps) {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
-            className="h-11 rounded-xl border-gray-300 bg-gray-50 text-base placeholder:text-gray-400 focus:border-black focus:ring-black"
+            className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-base text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-sm font-medium text-gray-900">
+          <Label htmlFor="password" className="text-sm font-medium text-black">
             密码
           </Label>
           <Input
@@ -135,20 +147,25 @@ export function AuthForm({ mode }: AuthFormProps) {
             onChange={(event) => setPassword(event.target.value)}
             minLength={8}
             required
-            className="h-11 rounded-xl border-gray-300 bg-gray-50 text-base placeholder:text-gray-400 focus:border-black focus:ring-black"
+            className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-base text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
           />
         </div>
 
         {error && (
-          <Alert variant="destructive" className="rounded-xl border-red-200 bg-red-50/50 px-4 py-3">
-            <AlertCircle className="mt-0.5 size-4" />
-            <AlertTitle className="text-sm">提交失败</AlertTitle>
-            <AlertDescription className="text-sm">{error}</AlertDescription>
+          <Alert
+            variant="destructive"
+            className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5] px-4 py-3 text-black"
+          >
+            <AlertCircle className="mt-0.5 size-4 text-[#ff3b30]" />
+            <AlertTitle className="text-sm text-black">提交失败</AlertTitle>
+            <AlertDescription className="text-sm text-black">
+              {error}
+            </AlertDescription>
           </Alert>
         )}
 
         <Button
-          className="h-11 w-full rounded-xl bg-black text-sm font-medium text-white hover:bg-gray-800 focus:ring-black focus:ring-offset-1 disabled:opacity-60"
+          className="h-12 w-full rounded-full bg-[#0071E3] text-sm font-medium text-white shadow-none hover:bg-[#0077ED] focus-visible:ring-[#0071E3]/30 focus-visible:ring-offset-2 disabled:opacity-60"
           disabled={isPending}
           type="submit"
         >
@@ -159,6 +176,10 @@ export function AuthForm({ mode }: AuthFormProps) {
             : "登录并恢复工作台"}
           <ArrowRight className="ml-2 size-4" />
         </Button>
+
+        <p className="text-center text-xs leading-6 text-black">
+          点击继续即表示你将使用 CareerPilot 管理简历、岗位与求职进度。
+        </p>
       </form>
     </div>
   );

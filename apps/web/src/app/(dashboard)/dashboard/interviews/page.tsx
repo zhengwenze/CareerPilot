@@ -3,12 +3,12 @@ import { DashboardPlaceholderPage } from "@/components/dashboard/dashboard-place
 export default function DashboardInterviewsPage() {
   return (
     <DashboardPlaceholderPage
-      description="这是模拟面试页面占位。后续可以放题库、录音记录、AI 评分和复盘建议。"
+      description="模拟面试页会承接练习题、录音与复盘。当前先统一页面风格和导航结构，把噪音减掉，后续接入真实能力时不需要再重做壳层。"
       eyebrow="Mock Interviews"
-      nextSteps={[
-        "整理按岗位或能力维度分类的模拟题目。",
-        "加入练习记录、追问链路和 AI 点评卡片。",
-        "预留录音转写和面试复盘面板。",
+      highlights={[
+        "题目会按岗位方向和能力维度组织，保持入口清晰。",
+        "练习记录、追问链路和 AI 点评会收成同一条练习会话。",
+        "录音转写与复盘建议会作为主内容区的一部分，而不是额外装饰。",
       ]}
       routeLabel="/dashboard/interviews"
       title="模拟面试"

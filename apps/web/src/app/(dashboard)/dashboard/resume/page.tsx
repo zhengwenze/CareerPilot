@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckCircle2, Clock3, FileText } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -12,7 +13,6 @@ import { ResumeDetailPanel } from "@/components/resume/resume-detail-panel";
 import { ResumeList } from "@/components/resume/resume-list";
 import { ResumeUploadCard } from "@/components/resume/resume-upload-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -135,6 +135,10 @@ export default function DashboardResumePage() {
   const [pageError, setPageError] = useState("");
   const [bannerMessage, setBannerMessage] = useState("");
   const [isStructuredDirty, setIsStructuredDirty] = useState(false);
+  const successCount = resumes.filter((item) => item.parse_status === "success").length;
+  const processingCount = resumes.filter((item) =>
+    ["pending", "processing"].includes(item.parse_status)
+  ).length;
 
   function applyResumeDetail(
     detail: Awaited<ReturnType<typeof loadResumeDetailData>>,
@@ -569,46 +573,79 @@ export default function DashboardResumePage() {
   }
 
   return (
-    <>
-      <Card className="surface-card border-0 bg-card/85 py-0 shadow-2xl shadow-emerald-950/8">
-        <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-4">
-              <Badge className="w-fit rounded-full bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
-                Resume Center
-              </Badge>
-              <div className="space-y-3">
-                <h2 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-                  简历上传、解析与人工校正
-                </h2>
-                <p className="max-w-2xl text-base leading-8 text-muted-foreground">
-                  这里是简历中心的第一版真实工作流：上传 PDF
-                  后自动解析文本和结构化结果，解析失败可重试，解析成功后可以直接人工修正并保存。
-                </p>
-              </div>
-            </div>
+    <div className="space-y-8">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
+        <div className="max-w-4xl">
+          <p className="text-sm font-medium tracking-[0.18em] text-black uppercase">
+            Resume Center
+          </p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-black sm:text-5xl">
+            上传、解析、校正，全部收在同一个白色工作区里。
+          </h1>
+          <p className="mt-5 max-w-3xl text-base leading-8 text-black/72">
+            这里保留真实流程：上传 PDF 后自动解析文本和结构化结果，解析失败可重试，解析成功后可直接人工校正并保存，避免用大段占位说明挤占主界面。
+          </p>
+        </div>
 
-            <div className="rounded-[28px] border border-border/70 bg-white/72 p-4 shadow-sm">
-              <p className="text-sm text-muted-foreground">当前路由</p>
-              <p className="mt-2 text-base font-medium text-foreground">
-                /dashboard/resume
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
+          <CardContent className="px-6 py-6">
+            <p className="text-xs font-medium tracking-[0.18em] text-black uppercase">
+              Current Focus
+            </p>
+            <p className="mt-4 text-2xl font-semibold tracking-[-0.04em] text-black">
+              {selectedResume ? selectedResume.file_name : "上传第一份简历"}
+            </p>
+            <p className="mt-3 text-sm leading-7 text-black/65">
+              {selectedResume
+                ? "继续查看解析状态，或直接在右侧编辑结构化结果。"
+                : "上传 PDF 后，系统会自动创建解析任务并刷新状态。"}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        {[
+          { label: "简历总数", value: String(resumes.length), icon: FileText },
+          { label: "解析完成", value: String(successCount), icon: CheckCircle2 },
+          { label: "处理中", value: String(processingCount), icon: Clock3 },
+        ].map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <Card
+              key={item.label}
+              className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
+            >
+              <CardContent className="flex items-center justify-between px-6 py-6">
+                <div>
+                  <p className="text-sm text-black/62">{item.label}</p>
+                  <p className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-black">
+                    {item.value}
+                  </p>
+                </div>
+                <div className="flex size-12 items-center justify-center rounded-2xl bg-[#f5f5f7] text-black">
+                  <Icon className="size-5" />
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </section>
 
       {pageError ? (
-        <Alert className="rounded-2xl border-destructive/20 bg-destructive/5">
-          <AlertTitle>操作提示</AlertTitle>
-          <AlertDescription>{pageError}</AlertDescription>
+        <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
+          <AlertTitle className="text-black">操作提示</AlertTitle>
+          <AlertDescription className="text-black/72">{pageError}</AlertDescription>
         </Alert>
       ) : null}
 
       {bannerMessage ? (
-        <Alert className="rounded-2xl border-primary/20 bg-primary/5">
-          <AlertTitle>状态更新</AlertTitle>
-          <AlertDescription>{bannerMessage}</AlertDescription>
+        <Alert className="rounded-[1.5rem] border-[#0071E3]/15 bg-[#F5F9FF]">
+          <AlertTitle className="text-black">状态更新</AlertTitle>
+          <AlertDescription className="text-black/72">
+            {bannerMessage}
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -647,6 +684,6 @@ export default function DashboardResumePage() {
           structuredValue={structuredValue}
         />
       </section>
-    </>
+    </div>
   );
 }

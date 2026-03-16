@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ArrowRight, FileText, Sparkles, Target } from "lucide-react";
 
 import { JobFormCard } from "@/components/jobs/job-form-card";
 import { JobList } from "@/components/jobs/job-list";
@@ -11,7 +12,6 @@ import {
   PageLoadingState,
 } from "@/components/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth-provider";
@@ -68,6 +68,10 @@ export default function DashboardJobsPage() {
 
   const selectedJob =
     jobs.find((item) => item.id === selectedJobId) ?? null;
+  const parsedJobs = jobs.filter((item) => item.parse_status === "success").length;
+  const successfulResumes = resumes.filter(
+    (item) => item.parse_status === "success"
+  ).length;
 
   useEffect(() => {
     if (!token) {
@@ -333,58 +337,97 @@ export default function DashboardJobsPage() {
   }
 
   return (
-    <>
-      <Card className="surface-card border-0 bg-card/85 py-0 shadow-2xl shadow-emerald-950/8">
-        <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-4">
-              <Badge className="w-fit rounded-full bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
-                Job Matching
-              </Badge>
-              <div className="space-y-3">
-                <h2 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-                  JD 结构化与岗位匹配分析
-                </h2>
-                <p className="max-w-2xl text-base leading-8 text-muted-foreground">
-                  这里已经打通岗位匹配模块的第一版真实闭环：录入 JD、
-                  自动结构化、选择简历、生成规则报告，并为后续 AI 修正预留接口。
-                </p>
-              </div>
-            </div>
+    <div className="space-y-8">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
+        <div className="max-w-4xl">
+          <p className="text-sm font-medium tracking-[0.18em] text-black uppercase">
+            Job Matching
+          </p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-black sm:text-5xl">
+            用一张更干净的面板管理 JD、简历与匹配结果。
+          </h1>
+          <p className="mt-5 max-w-3xl text-base leading-8 text-black/72">
+            这里保留真实工作流：录入岗位、结构化 JD、选择已解析简历并生成匹配报告。无功能的说明卡片已经移除，核心操作直接保留在主内容区。
+          </p>
+        </div>
 
-            <div className="rounded-[28px] border border-border/70 bg-white/72 p-4 shadow-sm">
-              <p className="text-sm text-muted-foreground">当前路由</p>
-              <p className="mt-2 text-base font-medium text-foreground">
-                /dashboard/jobs
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
+          <CardContent className="px-6 py-6">
+            <p className="text-xs font-medium tracking-[0.18em] text-black uppercase">
+              Current Focus
+            </p>
+            <p className="mt-4 text-2xl font-semibold tracking-[-0.04em] text-black">
+              {selectedJob ? selectedJob.title : "创建第一个目标岗位"}
+            </p>
+            <p className="mt-3 text-sm leading-7 text-black/65">
+              {selectedJob
+                ? "继续完善 JD 原文，或切换到右侧生成新的匹配报告。"
+                : "先录入一条岗位信息，系统会自动完成第一版结构化。"}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        {[
+          { label: "目标岗位", value: String(jobs.length), icon: Target },
+          { label: "可用简历", value: String(successfulResumes), icon: FileText },
+          { label: "历史报告", value: String(reports.length), icon: Sparkles },
+        ].map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <Card
+              key={item.label}
+              className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
+            >
+              <CardContent className="flex items-center justify-between px-6 py-6">
+                <div>
+                  <p className="text-sm text-black/62">{item.label}</p>
+                  <p className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-black">
+                    {item.value}
+                  </p>
+                </div>
+                <div className="flex size-12 items-center justify-center rounded-2xl bg-[#f5f5f7] text-black">
+                  <Icon className="size-5" />
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </section>
 
       {pageError ? (
-        <Alert className="rounded-2xl border-destructive/20 bg-destructive/5">
-          <AlertTitle>操作提示</AlertTitle>
-          <AlertDescription>{pageError}</AlertDescription>
+        <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
+          <AlertTitle className="text-black">操作提示</AlertTitle>
+          <AlertDescription className="text-black/72">{pageError}</AlertDescription>
         </Alert>
       ) : null}
 
       {bannerMessage ? (
-        <Alert className="rounded-2xl border-primary/20 bg-primary/5">
-          <AlertTitle>状态更新</AlertTitle>
-          <AlertDescription>{bannerMessage}</AlertDescription>
+        <Alert className="rounded-[1.5rem] border-[#0071E3]/15 bg-[#F5F9FF]">
+          <AlertTitle className="text-black">状态更新</AlertTitle>
+          <AlertDescription className="text-black/72">
+            {bannerMessage}
+          </AlertDescription>
         </Alert>
       ) : null}
 
       <section className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_minmax(0,1.05fr)]">
         <div className="space-y-5">
-          <Card className="surface-card border-0 bg-card/82 py-0 shadow-xl shadow-emerald-950/5">
+          <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
             <CardContent className="space-y-4 px-5 py-5">
-              <p className="text-sm leading-7 text-muted-foreground">
-                左侧保留你的目标岗位列表，中间维护 JD 内容，右侧生成和查看匹配报告。
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-black">岗位列表</p>
+                  <p className="mt-1 text-xs leading-6 text-black/58">
+                    已结构化 {parsedJobs} 条
+                  </p>
+                </div>
+                <ArrowRight className="size-4 text-black/40" />
+              </div>
               <Button
-                className="w-full rounded-full"
+                className="w-full rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
                 onClick={() => {
                   setSelectedJobId(null);
                   setReports([]);
@@ -394,7 +437,6 @@ export default function DashboardJobsPage() {
                   setPageError("");
                 }}
                 type="button"
-                variant="outline"
               >
                 新建目标岗位
               </Button>
@@ -456,6 +498,6 @@ export default function DashboardJobsPage() {
           selectedResumeId={selectedResumeId}
         />
       </section>
-    </>
+    </div>
   );
 }

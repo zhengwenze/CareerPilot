@@ -6,9 +6,8 @@ import { Save } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { PageErrorState, PageLoadingState } from "@/components/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
@@ -59,6 +58,13 @@ export default function DashboardProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const filledCount = [
+    form.nickname,
+    form.jobDirection,
+    form.targetCity,
+    form.targetRole,
+  ].filter((item) => item.trim()).length;
+  const completion = Math.round((filledCount / 4) * 100);
 
   useEffect(() => {
     if (!token) {
@@ -158,50 +164,56 @@ export default function DashboardProfilePage() {
   }
 
   return (
-    <>
-      <Card className="surface-card border-0 bg-card/85 py-0 shadow-2xl shadow-emerald-950/8">
-        <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-4">
-              <Badge className="w-fit rounded-full bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
-                Profile
-              </Badge>
-              <div className="space-y-3">
-                <h2 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-                  个人信息与求职偏好
-                </h2>
-                <p className="max-w-2xl text-base leading-8 text-muted-foreground">
-                  这里是后续简历、岗位匹配、模拟面试都会复用的基础资料层。先把方向、城市和目标岗位填好，后面生成的建议会更贴近你的真实求职目标。
-                </p>
-              </div>
-            </div>
+    <div className="space-y-8">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
+        <div className="max-w-4xl">
+          <p className="text-sm font-medium tracking-[0.18em] text-black uppercase">
+            Profile
+          </p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-black sm:text-5xl">
+            把偏好信息整理清楚，后续建议才会更准确。
+          </h1>
+          <p className="mt-5 max-w-3xl text-base leading-8 text-black/72">
+            个人资料是简历推荐、岗位匹配和模拟面试的输入上下文。这里保留必要字段和保存动作，不再放无实际作用的解释性卡片。
+          </p>
+        </div>
 
-            <div className="rounded-[28px] border border-border/70 bg-white/72 p-4 shadow-sm">
-              <p className="text-sm text-muted-foreground">当前路由</p>
-              <p className="mt-2 text-base font-medium text-foreground">
-                /dashboard/profile
+        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
+          <CardContent className="px-6 py-6">
+            <p className="text-xs font-medium tracking-[0.18em] text-black uppercase">
+              Profile Completion
+            </p>
+            <p className="mt-4 text-3xl font-semibold tracking-[-0.05em] text-black">
+              {completion}%
+            </p>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
+              <div
+                className="h-full rounded-full bg-[#0071E3]"
+                style={{ width: `${completion}%` }}
+              />
+            </div>
+            <p className="mt-4 text-sm leading-7 text-black/65">{profile.email}</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
+          <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
+            <div className="mb-8">
+              <p className="text-2xl font-semibold tracking-[-0.04em] text-black">
+                编辑个人资料
+              </p>
+              <p className="mt-3 text-sm leading-7 text-black/62">
+                保存后会直接更新数据库中的个人资料，并被后续模块复用。
               </p>
             </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="surface-card border-0 bg-card/78 py-0 shadow-xl shadow-emerald-950/5">
-          <CardHeader className="px-6 py-6 sm:px-8">
-            <Badge className="w-fit rounded-full bg-secondary px-3 py-1 text-secondary-foreground">
-              资料表单
-            </Badge>
-            <CardTitle className="text-2xl font-semibold text-foreground">
-              保存后会直接写入数据库
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-6 pb-6 sm:px-8 sm:pb-8">
             <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="grid gap-2">
-                <Label htmlFor="nickname">昵称</Label>
+                <Label htmlFor="nickname" className="text-black">昵称</Label>
                 <Input
-                  className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                   id="nickname"
                   onChange={(event) =>
                     setForm((current) => ({
@@ -215,9 +227,9 @@ export default function DashboardProfilePage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="jobDirection">求职方向</Label>
+                <Label htmlFor="jobDirection" className="text-black">求职方向</Label>
                 <Input
-                  className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                   id="jobDirection"
                   onChange={(event) =>
                     setForm((current) => ({
@@ -231,9 +243,9 @@ export default function DashboardProfilePage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="targetCity">目标城市</Label>
+                <Label htmlFor="targetCity" className="text-black">目标城市</Label>
                 <Input
-                  className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                   id="targetCity"
                   onChange={(event) =>
                     setForm((current) => ({
@@ -247,9 +259,9 @@ export default function DashboardProfilePage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="targetRole">期望岗位</Label>
+                <Label htmlFor="targetRole" className="text-black">期望岗位</Label>
                 <Input
-                  className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
+                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                   id="targetRole"
                   onChange={(event) =>
                     setForm((current) => ({
@@ -263,21 +275,21 @@ export default function DashboardProfilePage() {
               </div>
 
               {error ? (
-                <Alert className="rounded-2xl border-destructive/20 bg-destructive/5 px-4 py-3" variant="destructive">
-                  <AlertTitle>保存失败</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
+                <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5] px-4 py-3" variant="destructive">
+                  <AlertTitle className="text-black">保存失败</AlertTitle>
+                  <AlertDescription className="text-black/72">{error}</AlertDescription>
                 </Alert>
               ) : null}
 
               {successMessage ? (
-                <Alert className="rounded-2xl border-primary/20 bg-primary/5 px-4 py-3">
-                  <AlertTitle>保存成功</AlertTitle>
-                  <AlertDescription>{successMessage}</AlertDescription>
+                <Alert className="rounded-[1.5rem] border-[#0071E3]/15 bg-[#F5F9FF] px-4 py-3">
+                  <AlertTitle className="text-black">保存成功</AlertTitle>
+                  <AlertDescription className="text-black/72">{successMessage}</AlertDescription>
                 </Alert>
               ) : null}
 
               <Button
-                className="h-11 rounded-full px-5"
+                className="h-12 rounded-full bg-[#0071E3] px-5 text-white hover:bg-[#0077ED]"
                 disabled={isSubmitting}
                 type="submit"
               >
@@ -288,37 +300,30 @@ export default function DashboardProfilePage() {
           </CardContent>
         </Card>
 
-        <Card className="surface-card border-0 bg-card/78 py-0 shadow-xl shadow-emerald-950/5">
-          <CardHeader className="space-y-4 px-6 py-6 sm:px-8">
-            <Badge className="w-fit rounded-full bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
-              复用说明
-            </Badge>
-            <CardTitle className="text-2xl font-semibold text-foreground">
-              这层数据会被后续模块直接消费
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-6 pb-6 sm:px-8 sm:pb-8">
+        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
+          <CardContent className="space-y-4 px-6 py-6 sm:px-8 sm:py-8">
+            <p className="text-2xl font-semibold tracking-[-0.04em] text-black">
+              当前资料摘要
+            </p>
             {[
-              "简历中心：默认推荐与求职方向相符的简历版本。",
-              "岗位匹配：结合目标城市和期望岗位生成更稳的匹配逻辑。",
-              "模拟面试：用你的目标岗位和方向定制问题语境。",
-              "Dashboard：把个人资料补全度纳入总览提醒。",
-            ].map((item, index) => (
+              { label: "账号邮箱", value: profile.email },
+              { label: "求职方向", value: form.jobDirection || "暂未填写" },
+              { label: "目标城市", value: form.targetCity || "暂未填写" },
+              { label: "期望岗位", value: form.targetRole || "暂未填写" },
+            ].map((item) => (
               <div
-                className="flex items-start gap-3 rounded-[24px] border border-border/70 bg-white/72 px-4 py-4"
-                key={item}
+                key={item.label}
+                className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-secondary text-sm font-semibold text-secondary-foreground">
-                  {index + 1}
-                </span>
-                <p className="pt-0.5 text-sm leading-7 text-muted-foreground">
-                  {item}
+                <p className="text-xs font-medium tracking-[0.14em] text-black/45 uppercase">
+                  {item.label}
                 </p>
+                <p className="mt-2 text-sm leading-7 text-black">{item.value}</p>
               </div>
             ))}
           </CardContent>
         </Card>
       </section>
-    </>
+    </div>
   );
 }

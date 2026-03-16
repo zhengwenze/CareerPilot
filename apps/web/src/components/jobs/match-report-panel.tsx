@@ -53,7 +53,7 @@ export function MatchReportPanel({
   if (!selectedJob) {
     return (
       <PageEmptyState
-        description="先在中间区域创建或选择一个 JD，右侧才能基于简历生成匹配报告。"
+        description="先在中间区域创建或选择一个 JD，右侧才会显示匹配生成与报告详情。"
         title="还没有选中 JD"
       />
     );
@@ -61,28 +61,28 @@ export function MatchReportPanel({
 
   return (
     <div className="space-y-5">
-      <Card className="surface-card border-0 bg-card/82 py-0 shadow-xl shadow-emerald-950/5">
+      <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
         <CardHeader className="space-y-4 px-6 py-6">
-          <Badge className="w-fit rounded-full bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
+          <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
             Match Generator
           </Badge>
-          <CardTitle className="text-2xl font-semibold text-foreground">
+          <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
             选择简历生成匹配报告
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 px-6 pb-6">
           {availableResumes.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
+            <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-[#f5f5f7] px-4 py-4 text-sm text-black/58">
               还没有可用简历。请先到简历中心完成至少一份简历解析。
             </div>
           ) : (
             <>
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-foreground" htmlFor="resume-select">
+                <label className="text-sm font-medium text-black" htmlFor="resume-select">
                   参与匹配的简历
                 </label>
                 <select
-                  className="h-11 rounded-2xl border border-border/70 bg-white/80 px-4 text-sm text-foreground outline-none"
+                  className="h-12 rounded-2xl border border-black/10 bg-[#f5f5f7] px-4 text-sm text-black outline-none focus:border-[#0071E3]"
                   id="resume-select"
                   onChange={(event) => onSelectResume(event.target.value)}
                   value={selectedResumeId}
@@ -95,7 +95,7 @@ export function MatchReportPanel({
                 </select>
               </div>
               <Button
-                className="w-full rounded-full"
+                className="w-full rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
                 disabled={!selectedResumeId || isGenerating}
                 onClick={onGenerate}
                 type="button"
@@ -109,15 +109,15 @@ export function MatchReportPanel({
       </Card>
 
       <section className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <Card className="surface-card border-0 bg-card/82 py-0 shadow-xl shadow-emerald-950/5">
+        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
           <CardHeader className="px-6 py-6">
-            <CardTitle className="text-xl font-semibold text-foreground">
+            <CardTitle className="text-xl font-semibold text-black">
               历史报告
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 px-6 pb-6">
             {reports.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
+              <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-white px-4 py-4 text-sm text-black/58">
                 还没有报告，生成一次后这里会保留历史记录。
               </div>
             ) : (
@@ -125,7 +125,7 @@ export function MatchReportPanel({
                 const isActive = report.id === selectedReport?.id;
                 return (
                   <button
-                    className="block w-full rounded-[24px] border px-4 py-4 text-left transition-colors"
+                    className="block w-full rounded-[1.5rem] border px-4 py-4 text-left transition-colors"
                     key={report.id}
                     onClick={() => onSelectReport(report.id)}
                     type="button"
@@ -133,14 +133,14 @@ export function MatchReportPanel({
                     <div
                       className={
                         isActive
-                          ? "rounded-[20px] border border-primary/35 bg-primary/5 px-4 py-4"
-                          : "rounded-[20px] border border-border/70 bg-white/72 px-4 py-4"
+                          ? "rounded-[1.25rem] border border-[#0071E3]/30 bg-[#F5F9FF] px-4 py-4"
+                          : "rounded-[1.25rem] border border-black/10 bg-white px-4 py-4"
                       }
                     >
-                      <p className="text-sm font-semibold text-foreground">
+                      <p className="text-sm font-semibold text-black">
                         总分 {report.overall_score}
                       </p>
-                      <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                      <p className="mt-2 text-xs leading-6 text-black/52">
                         {formatDate(report.created_at)}
                       </p>
                     </div>
@@ -157,14 +157,14 @@ export function MatchReportPanel({
             title="还没有报告详情"
           />
         ) : (
-          <Card className="surface-card border-0 bg-card/82 py-0 shadow-xl shadow-emerald-950/5">
+          <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
             <CardHeader className="space-y-4 px-6 py-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-2">
-                  <Badge className="w-fit rounded-full bg-secondary px-3 py-1 text-secondary-foreground">
+                  <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
                     Match Report
                   </Badge>
-                  <CardTitle className="text-2xl font-semibold text-foreground">
+                  <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
                     规则分 {selectedReport.rule_score} · AI 修正{" "}
                     {selectedReport.model_score}
                   </CardTitle>
@@ -185,13 +185,13 @@ export function MatchReportPanel({
               <div className="grid gap-3 md:grid-cols-3">
                 {Object.entries(selectedReport.dimension_scores_json).map(([key, value]) => (
                   <div
-                    className="rounded-[24px] border border-border/70 bg-white/72 px-4 py-4"
+                    className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4"
                     key={key}
                   >
-                    <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                    <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
                       {key}
                     </p>
-                    <p className="mt-2 text-2xl font-semibold text-foreground">
+                    <p className="mt-2 text-2xl font-semibold text-black">
                       {value}
                     </p>
                   </div>
@@ -199,18 +199,18 @@ export function MatchReportPanel({
               </div>
 
               <div className="grid gap-5 xl:grid-cols-3">
-                <div className="rounded-[24px] border border-border/70 bg-white/72 px-4 py-4">
-                  <p className="text-sm font-medium text-foreground">优势</p>
+                <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
+                  <p className="text-sm font-medium text-black">优势</p>
                   <div className="mt-3 space-y-3">
                     {selectedReport.gap_json.strengths.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">暂无优势条目。</p>
+                      <p className="text-sm text-black/58">暂无优势条目。</p>
                     ) : (
                       selectedReport.gap_json.strengths.map((item) => (
                         <div key={`${item.label}-${item.reason}`}>
-                          <p className="text-sm font-medium text-foreground">
+                          <p className="text-sm font-medium text-black">
                             {item.label}
                           </p>
-                          <p className="text-sm leading-7 text-muted-foreground">
+                          <p className="text-sm leading-7 text-black/68">
                             {item.reason}
                           </p>
                         </div>
@@ -219,18 +219,18 @@ export function MatchReportPanel({
                   </div>
                 </div>
 
-                <div className="rounded-[24px] border border-border/70 bg-white/72 px-4 py-4">
-                  <p className="text-sm font-medium text-foreground">短板</p>
+                <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
+                  <p className="text-sm font-medium text-black">短板</p>
                   <div className="mt-3 space-y-3">
                     {selectedReport.gap_json.gaps.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">暂无短板条目。</p>
+                      <p className="text-sm text-black/58">暂无短板条目。</p>
                     ) : (
                       selectedReport.gap_json.gaps.map((item) => (
                         <div key={`${item.label}-${item.reason}`}>
-                          <p className="text-sm font-medium text-foreground">
+                          <p className="text-sm font-medium text-black">
                             {item.label}
                           </p>
-                          <p className="text-sm leading-7 text-muted-foreground">
+                          <p className="text-sm leading-7 text-black/68">
                             {item.reason}
                           </p>
                         </div>
@@ -239,15 +239,15 @@ export function MatchReportPanel({
                   </div>
                 </div>
 
-                <div className="rounded-[24px] border border-border/70 bg-white/72 px-4 py-4">
-                  <p className="text-sm font-medium text-foreground">建议</p>
+                <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
+                  <p className="text-sm font-medium text-black">建议</p>
                   <div className="mt-3 space-y-3">
                     {selectedReport.gap_json.actions.map((item) => (
                       <div key={`${item.priority}-${item.title}`}>
-                        <p className="text-sm font-medium text-foreground">
+                        <p className="text-sm font-medium text-black">
                           P{item.priority} · {item.title}
                         </p>
-                        <p className="text-sm leading-7 text-muted-foreground">
+                        <p className="text-sm leading-7 text-black/68">
                           {item.description}
                         </p>
                       </div>
@@ -256,29 +256,29 @@ export function MatchReportPanel({
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-border/70 bg-white/72 px-4 py-4">
-                <p className="text-sm font-medium text-foreground">证据与 AI 修正</p>
+              <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
+                <p className="text-sm font-medium text-black">证据与 AI 修正</p>
                 <div className="mt-3 grid gap-4 md:grid-cols-2">
                   <div>
-                    <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                    <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
                       命中 JD 字段
                     </p>
-                    <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    <p className="mt-2 text-sm leading-7 text-black/68">
                       {Object.values(selectedReport.evidence_json.matched_jd_fields)
                         .flat()
                         .join("、") || "暂无"}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                    <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
                       缺失项
                     </p>
-                    <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    <p className="mt-2 text-sm leading-7 text-black/68">
                       {selectedReport.evidence_json.missing_items.join("、") || "暂无"}
                     </p>
                   </div>
                 </div>
-                <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                <p className="mt-4 text-sm leading-7 text-black/68">
                   AI 修正状态：{String(selectedReport.evidence_json.ai_correction.status || "unknown")}
                   {selectedReport.evidence_json.ai_correction.reasoning
                     ? ` · ${String(selectedReport.evidence_json.ai_correction.reasoning)}`

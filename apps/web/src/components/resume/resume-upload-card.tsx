@@ -17,17 +17,17 @@ export function ResumeUploadCard({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
-    <Card className="surface-card border-0 bg-card/82 py-0 shadow-xl shadow-emerald-950/6">
+    <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
       <CardHeader className="px-5 py-5">
-        <Badge className="w-fit bg-primary/10 text-primary hover:bg-primary/10">
+        <Badge className="w-fit border border-black/10 bg-white text-black hover:bg-white">
           Upload
         </Badge>
-        <CardTitle className="text-xl font-semibold text-foreground">
+        <CardTitle className="text-xl font-semibold text-black">
           上传 PDF 简历
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 px-5 pb-5">
-        <p className="text-sm leading-7 text-muted-foreground">
+        <p className="text-sm leading-7 text-black/65">
           上传后会自动进入解析流程，系统会抽取文本并生成可人工修正的结构化结果。
         </p>
 
@@ -48,11 +48,10 @@ export function ResumeUploadCard({
           type="file"
         />
         <Button
-          className="w-full rounded-full"
+          className="w-full rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
           disabled={isUploading}
           onClick={() => fileInputRef.current?.click()}
           type="button"
-          variant="default"
         >
           {isUploading ? "上传中..." : "选择 PDF 文件"}
           <FileUp className="size-4" />
