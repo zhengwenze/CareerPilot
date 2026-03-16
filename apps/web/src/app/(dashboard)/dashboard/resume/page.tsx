@@ -42,25 +42,77 @@ function getErrorMessage(error: unknown) {
   return "操作失败，请稍后重试。";
 }
 
+function logResumePage(event: string, payload?: Record<string, unknown>) {
+  console.log(`[resume-page] ${event}`, payload ?? {});
+}
+
+function normalizeStructuredResume(
+  value?: Partial<ResumeStructuredData> | null
+): ResumeStructuredData {
+  const empty = createEmptyStructuredResume();
+
+  return {
+    basic_info: {
+      ...empty.basic_info,
+      ...(value?.basic_info ?? {}),
+    },
+    education: Array.isArray(value?.education) ? value.education : [],
+    work_experience: Array.isArray(value?.work_experience)
+      ? value.work_experience
+      : [],
+    projects: Array.isArray(value?.projects) ? value.projects : [],
+    skills: {
+      ...empty.skills,
+      ...(value?.skills ?? {}),
+      technical: Array.isArray(value?.skills?.technical)
+        ? value.skills.technical
+        : [],
+      tools: Array.isArray(value?.skills?.tools) ? value.skills.tools : [],
+      languages: Array.isArray(value?.skills?.languages)
+        ? value.skills.languages
+        : [],
+    },
+    certifications: Array.isArray(value?.certifications)
+      ? value.certifications
+      : [],
+  };
+}
+
 async function loadResumeListData(
   token: string,
   preferredResumeId?: string | null
 ) {
+  logResumePage("load-list:start", { preferredResumeId });
   const items = await fetchResumeList(token);
   const nextSelectedId =
     preferredResumeId && items.some((item) => item.id === preferredResumeId)
       ? preferredResumeId
       : items[0]?.id ?? null;
 
+  logResumePage("load-list:done", {
+    count: items.length,
+    nextSelectedId,
+  });
   return { items, nextSelectedId };
 }
 
 async function loadResumeDetailData(token: string, resumeId: string) {
-  const [resume, jobs] = await Promise.all([
-    fetchResumeDetail(token, resumeId),
+  logResumePage("load-detail:start", { resumeId });
+  const resume = await fetchResumeDetail(token, resumeId);
+  const jobsResult = await Promise.allSettled([
     fetchResumeParseJobs(token, resumeId),
   ]);
+  const jobs =
+    jobsResult[0].status === "fulfilled" ? jobsResult[0].value : [];
 
+  logResumePage("load-detail:done", {
+    resumeId,
+    parseStatus: resume.parse_status,
+    parseError: resume.parse_error,
+    hasStructuredJson: Boolean(resume.structured_json),
+    jobsCount: jobs.length,
+    parseJobsRequestOk: jobsResult[0].status === "fulfilled",
+  });
   return { resume, jobs };
 }
 
@@ -82,6 +134,32 @@ export default function DashboardResumePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [pageError, setPageError] = useState("");
   const [bannerMessage, setBannerMessage] = useState("");
+  const [isStructuredDirty, setIsStructuredDirty] = useState(false);
+
+  function applyResumeDetail(
+    detail: Awaited<ReturnType<typeof loadResumeDetailData>>,
+    options?: {
+      preserveDraft?: boolean;
+    }
+  ) {
+    logResumePage("apply-detail", {
+      resumeId: detail.resume.id,
+      parseStatus: detail.resume.parse_status,
+      parseError: detail.resume.parse_error,
+      hasRawText: Boolean(detail.resume.raw_text),
+      rawTextLength: detail.resume.raw_text?.length ?? 0,
+      hasStructuredJson: Boolean(detail.resume.structured_json),
+      preserveDraft: options?.preserveDraft ?? false,
+      jobsCount: detail.jobs.length,
+    });
+    setSelectedResume(detail.resume);
+    setParseJobs(detail.jobs);
+
+    if (!options?.preserveDraft) {
+      setStructuredValue(normalizeStructuredResume(detail.resume.structured_json));
+      setIsStructuredDirty(false);
+    }
+  }
 
   useEffect(() => {
     if (!token) {
@@ -94,6 +172,7 @@ export default function DashboardResumePage() {
     async function bootstrap() {
       setIsPageLoading(true);
       setPageError("");
+      logResumePage("bootstrap:start");
 
       try {
         const result = await loadResumeListData(accessToken);
@@ -113,21 +192,22 @@ export default function DashboardResumePage() {
             return;
           }
 
-          setSelectedResume(detail.resume);
-          setParseJobs(detail.jobs);
-          setStructuredValue(
-            detail.resume.structured_json ?? createEmptyStructuredResume()
-          );
+          applyResumeDetail(detail);
         } else {
           setSelectedResume(null);
           setParseJobs([]);
           setStructuredValue(createEmptyStructuredResume());
+          setIsStructuredDirty(false);
         }
       } catch (error) {
+        logResumePage("bootstrap:error", {
+          message: getErrorMessage(error),
+        });
         if (!cancelled) {
           setPageError(getErrorMessage(error));
         }
       } finally {
+        logResumePage("bootstrap:done");
         if (!cancelled) {
           setIsPageLoading(false);
         }
@@ -155,17 +235,18 @@ export default function DashboardResumePage() {
 
     async function syncDetail() {
       try {
+        logResumePage("sync-detail:start", { resumeId: activeResumeId });
         const detail = await loadResumeDetailData(accessToken, activeResumeId);
         if (cancelled) {
           return;
         }
 
-        setSelectedResume(detail.resume);
-        setParseJobs(detail.jobs);
-        setStructuredValue(
-          detail.resume.structured_json ?? createEmptyStructuredResume()
-        );
+        applyResumeDetail(detail);
       } catch (error) {
+        logResumePage("sync-detail:error", {
+          resumeId: activeResumeId,
+          message: getErrorMessage(error),
+        });
         if (!cancelled) {
           setPageError(getErrorMessage(error));
         }
@@ -188,31 +269,57 @@ export default function DashboardResumePage() {
     }
 
     const accessToken = token;
+    let cancelled = false;
     const timer = window.setInterval(() => {
       const activeResumeId = selectedResumeId;
       void (async () => {
-        const result = await loadResumeListData(accessToken, activeResumeId);
-        setResumes(result.items);
-        setSelectedResumeId(result.nextSelectedId);
+        try {
+          logResumePage("poll:start", {
+            resumeId: activeResumeId,
+            currentStatus: selectedResume.parse_status,
+            preserveDraft: isStructuredDirty,
+          });
+          const result = await loadResumeListData(accessToken, activeResumeId);
+          if (cancelled) {
+            return;
+          }
 
-        if (result?.nextSelectedId) {
-          const detail = await loadResumeDetailData(
-            accessToken,
-            result.nextSelectedId
-          );
-          setSelectedResume(detail.resume);
-          setParseJobs(detail.jobs);
-          setStructuredValue(
-            detail.resume.structured_json ?? createEmptyStructuredResume()
-          );
+          setResumes(result.items);
+          setSelectedResumeId(result.nextSelectedId);
+
+          if (result?.nextSelectedId) {
+            const detail = await loadResumeDetailData(
+              accessToken,
+              result.nextSelectedId
+            );
+            if (cancelled) {
+              return;
+            }
+
+            applyResumeDetail(detail, { preserveDraft: isStructuredDirty });
+          }
+        } catch (error) {
+          logResumePage("poll:error", {
+            resumeId: activeResumeId,
+            message: getErrorMessage(error),
+          });
+          if (!cancelled) {
+            setPageError(getErrorMessage(error));
+          }
         }
       })();
-    }, 3000);
+    }, 5000);
 
     return () => {
+      cancelled = true;
       window.clearInterval(timer);
     };
-  }, [selectedResume, selectedResumeId, token]);
+  }, [
+    isStructuredDirty,
+    selectedResume,
+    selectedResumeId,
+    token,
+  ]);
 
   if (!token) {
     return null;
@@ -243,6 +350,10 @@ export default function DashboardResumePage() {
       return;
     }
 
+    logResumePage("upload:start", {
+      fileName: file.name,
+      fileSize: file.size,
+    });
     setIsUploading(true);
     setPageError("");
     setBannerMessage("");
@@ -255,21 +366,42 @@ export default function DashboardResumePage() {
 
       if (result?.nextSelectedId) {
         const detail = await loadResumeDetailData(token, result.nextSelectedId);
-        setSelectedResume(detail.resume);
-        setParseJobs(detail.jobs);
-        setStructuredValue(
-          detail.resume.structured_json ?? createEmptyStructuredResume()
-        );
+        applyResumeDetail(detail);
       }
       setBannerMessage("简历已上传，系统正在自动解析。");
     } catch (error) {
+      logResumePage("upload:error", {
+        fileName: file.name,
+        message: getErrorMessage(error),
+      });
       setPageError(getErrorMessage(error));
     } finally {
+      logResumePage("upload:done", {
+        fileName: file.name,
+      });
       setIsUploading(false);
     }
   }
 
   async function handleSelectResume(resumeId: string) {
+    if (resumeId === selectedResumeId) {
+      return;
+    }
+
+    logResumePage("select-resume", {
+      fromResumeId: selectedResumeId,
+      toResumeId: resumeId,
+      hasDirtyDraft: isStructuredDirty,
+    });
+    if (isStructuredDirty) {
+      const confirmed = window.confirm(
+        "当前简历有未保存的人工修改，切换后会丢失这些内容。确认继续吗？"
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setSelectedResumeId(resumeId);
     setPageError("");
     setBannerMessage("");
@@ -283,6 +415,12 @@ export default function DashboardResumePage() {
     setIsSaving(true);
     setPageError("");
     setBannerMessage("");
+    logResumePage("save-structured:start", {
+      resumeId: selectedResumeId,
+      educationCount: structuredValue.education.length,
+      workCount: structuredValue.work_experience.length,
+      projectCount: structuredValue.projects.length,
+    });
 
     try {
       const updatedResume = await updateResumeStructuredData(
@@ -291,6 +429,8 @@ export default function DashboardResumePage() {
         structuredValue
       );
       setSelectedResume(updatedResume);
+      setStructuredValue(normalizeStructuredResume(updatedResume.structured_json));
+      setIsStructuredDirty(false);
       const result = await loadResumeListData(token, selectedResumeId);
       setResumes(result.items);
       setSelectedResumeId(result.nextSelectedId);
@@ -298,8 +438,15 @@ export default function DashboardResumePage() {
         "人工修正已保存，后续匹配和面试模块会直接使用这份结构化结果。"
       );
     } catch (error) {
+      logResumePage("save-structured:error", {
+        resumeId: selectedResumeId,
+        message: getErrorMessage(error),
+      });
       setPageError(getErrorMessage(error));
     } finally {
+      logResumePage("save-structured:done", {
+        resumeId: selectedResumeId,
+      });
       setIsSaving(false);
     }
   }
@@ -312,6 +459,10 @@ export default function DashboardResumePage() {
     setIsRetrying(true);
     setPageError("");
     setBannerMessage("");
+    setIsStructuredDirty(false);
+    logResumePage("retry:start", {
+      resumeId: selectedResumeId,
+    });
 
     try {
       const retryResult = await retryResumeParse(token, selectedResumeId);
@@ -321,15 +472,18 @@ export default function DashboardResumePage() {
       setSelectedResumeId(result.nextSelectedId);
 
       const detail = await loadResumeDetailData(token, selectedResumeId);
-      setSelectedResume(detail.resume);
-      setParseJobs(detail.jobs);
-      setStructuredValue(
-        detail.resume.structured_json ?? createEmptyStructuredResume()
-      );
+      applyResumeDetail(detail);
       setBannerMessage("已经重新触发解析任务，请稍候查看最新结果。");
     } catch (error) {
+      logResumePage("retry:error", {
+        resumeId: selectedResumeId,
+        message: getErrorMessage(error),
+      });
       setPageError(getErrorMessage(error));
     } finally {
+      logResumePage("retry:done", {
+        resumeId: selectedResumeId,
+      });
       setIsRetrying(false);
     }
   }
@@ -340,9 +494,16 @@ export default function DashboardResumePage() {
     }
 
     try {
+      logResumePage("download:start", {
+        resumeId: selectedResumeId,
+      });
       const payload = await fetchResumeDownloadUrl(token, selectedResumeId);
       window.open(payload.download_url, "_blank", "noopener,noreferrer");
     } catch (error) {
+      logResumePage("download:error", {
+        resumeId: selectedResumeId,
+        message: getErrorMessage(error),
+      });
       setPageError(getErrorMessage(error));
     }
   }
@@ -362,6 +523,10 @@ export default function DashboardResumePage() {
     setIsDeleting(true);
     setPageError("");
     setBannerMessage("");
+    logResumePage("delete:start", {
+      resumeId: selectedResumeId,
+      fileName: selectedResume.file_name,
+    });
 
     try {
       const deletedResumeId = selectedResumeId;
@@ -373,15 +538,12 @@ export default function DashboardResumePage() {
 
       if (result.nextSelectedId) {
         const detail = await loadResumeDetailData(token, result.nextSelectedId);
-        setSelectedResume(detail.resume);
-        setParseJobs(detail.jobs);
-        setStructuredValue(
-          detail.resume.structured_json ?? createEmptyStructuredResume()
-        );
+        applyResumeDetail(detail);
       } else {
         setSelectedResume(null);
         setParseJobs([]);
         setStructuredValue(createEmptyStructuredResume());
+        setIsStructuredDirty(false);
       }
 
       setBannerMessage(
@@ -393,8 +555,15 @@ export default function DashboardResumePage() {
         setPageError("");
       }
     } catch (error) {
+      logResumePage("delete:error", {
+        resumeId: selectedResumeId,
+        message: getErrorMessage(error),
+      });
       setPageError(getErrorMessage(error));
     } finally {
+      logResumePage("delete:done", {
+        resumeId: selectedResumeId,
+      });
       setIsDeleting(false);
     }
   }
@@ -462,9 +631,13 @@ export default function DashboardResumePage() {
 
         <ResumeDetailPanel
           isDeleting={isDeleting}
+          isStructuredDirty={isStructuredDirty}
           isRetrying={isRetrying}
           isSaving={isSaving}
-          onChangeStructured={setStructuredValue}
+          onChangeStructured={(value) => {
+            setStructuredValue(value);
+            setIsStructuredDirty(true);
+          }}
           onDelete={handleDelete}
           onDownload={handleDownload}
           onRetry={handleRetryParse}

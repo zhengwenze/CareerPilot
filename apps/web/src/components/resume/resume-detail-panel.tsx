@@ -41,6 +41,7 @@ export function ResumeDetailPanel({
   resume,
   parseJobs,
   structuredValue,
+  isStructuredDirty,
   isSaving,
   isRetrying,
   isDeleting,
@@ -53,6 +54,7 @@ export function ResumeDetailPanel({
   resume: ResumeRecord | null;
   parseJobs: ResumeParseJob[];
   structuredValue: ResumeStructuredData;
+  isStructuredDirty: boolean;
   isSaving: boolean;
   isRetrying: boolean;
   isDeleting: boolean;
@@ -77,7 +79,11 @@ export function ResumeDetailPanel({
         <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
-              <Badge className={`rounded-full px-3 py-1 hover:bg-inherit ${getStatusTone(resume.parse_status)}`}>
+              <Badge
+                className={`rounded-full px-3 py-1 hover:bg-inherit ${getStatusTone(
+                  resume.parse_status
+                )}`}
+              >
                 {resume.parse_status}
               </Badge>
               <div className="space-y-2">
@@ -93,6 +99,11 @@ export function ResumeDetailPanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
+              {isStructuredDirty ? (
+                <Badge className="rounded-full bg-amber-100 px-3 py-1 text-amber-700 hover:bg-amber-100">
+                  有未保存修改
+                </Badge>
+              ) : null}
               <Button
                 className="rounded-full"
                 disabled={isRetrying}
@@ -124,11 +135,15 @@ export function ResumeDetailPanel({
               </Button>
               <Button
                 className="rounded-full"
-                disabled={isSaving}
+                disabled={isSaving || !isStructuredDirty}
                 onClick={onSave}
                 type="button"
               >
-                {isSaving ? "保存中..." : "保存人工修正"}
+                {isSaving
+                  ? "保存中..."
+                  : isStructuredDirty
+                  ? "保存人工修正"
+                  : "暂无待保存修改"}
                 <Save className="size-4" />
               </Button>
             </div>
@@ -138,6 +153,25 @@ export function ResumeDetailPanel({
             <Alert className="mt-5 rounded-2xl border-destructive/20 bg-destructive/5">
               <AlertTitle>解析失败</AlertTitle>
               <AlertDescription>{resume.parse_error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {!resume.parse_error &&
+          ["pending", "processing"].includes(resume.parse_status) ? (
+            <Alert className="mt-5 rounded-2xl border-primary/20 bg-primary/5">
+              <AlertTitle>解析进行中</AlertTitle>
+              <AlertDescription>
+                后端已经接收并正在解析这份简历，解析完成后右侧结构化编辑区会自动填入结果。
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {resume.parse_error || !resume.structured_json ? (
+            <Alert className="mt-5 rounded-2xl border-amber-200 bg-amber-50">
+              <AlertTitle>可直接人工校正</AlertTitle>
+              <AlertDescription>
+                即使自动解析失败或结果不完整，你也可以直接在右侧编辑区录入并保存，后续模块会使用这份人工修正后的结构化简历。
+              </AlertDescription>
             </Alert>
           ) : null}
         </CardContent>
@@ -154,11 +188,16 @@ export function ResumeDetailPanel({
             <Textarea
               className="min-h-[360px] rounded-[28px] border-border/70 bg-white/80 font-mono text-xs leading-6"
               readOnly
-              value={resume.raw_text ?? "解析尚未完成，完成后这里会展示抽取出来的原始文本。"}
+              value={
+                resume.raw_text ??
+                "解析尚未完成，完成后这里会展示抽取出来的原始文本。"
+              }
             />
 
             <div className="space-y-3">
-              <p className="text-sm font-medium text-foreground">解析任务记录</p>
+              <p className="text-sm font-medium text-foreground">
+                解析任务记录
+              </p>
               <div className="space-y-3">
                 {parseJobs.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
@@ -171,7 +210,11 @@ export function ResumeDetailPanel({
                     key={job.id}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <Badge className={`rounded-full px-3 py-1 hover:bg-inherit ${getStatusTone(job.status)}`}>
+                      <Badge
+                        className={`rounded-full px-3 py-1 hover:bg-inherit ${getStatusTone(
+                          job.status
+                        )}`}
+                      >
                         {job.status}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
@@ -180,10 +223,14 @@ export function ResumeDetailPanel({
                     </div>
                     <p className="mt-3 text-xs leading-6 text-muted-foreground">
                       创建于 {formatDate(job.created_at)}
-                      {job.finished_at ? `，结束于 ${formatDate(job.finished_at)}` : ""}
+                      {job.finished_at
+                        ? `，结束于 ${formatDate(job.finished_at)}`
+                        : ""}
                     </p>
                     {job.error_message ? (
-                      <p className="mt-2 text-sm text-rose-700">{job.error_message}</p>
+                      <p className="mt-2 text-sm text-rose-700">
+                        {job.error_message}
+                      </p>
                     ) : null}
                   </div>
                 ))}
@@ -192,7 +239,10 @@ export function ResumeDetailPanel({
           </CardContent>
         </Card>
 
-        <ResumeStructuredEditor onChange={onChangeStructured} value={structuredValue} />
+        <ResumeStructuredEditor
+          onChange={onChangeStructured}
+          value={structuredValue}
+        />
       </section>
     </div>
   );

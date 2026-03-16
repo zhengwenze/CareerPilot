@@ -5,7 +5,7 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile, status
+from fastapi import APIRouter, Depends, FastAPI, File, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_object_storage, get_settings_dependency
@@ -40,8 +40,90 @@ from app.services.storage import ObjectStorage
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 
-def resolve_session_factory(request: Request):
-    return getattr(request.app.state, "session_factory", get_session_factory())
+def resolve_session_factory(app: FastAPI):
+    logger.info(
+        "Resolved resume session factory from app state: has_custom_factory=%s",
+        hasattr(app.state, "session_factory"),
+    )
+    return getattr(app.state, "session_factory", get_session_factory())
+
+
+async def run_resume_parse_job(
+    app: FastAPI,
+    *,
+    resume_id: UUID,
+    parse_job_id: UUID,
+    storage: ObjectStorage,
+) -> None:
+    logger.info(
+        "Running scheduled resume parse task: resume_id=%s parse_job_id=%s",
+        resume_id,
+        parse_job_id,
+    )
+    try:
+        await process_resume_parse_job(
+            resume_id=resume_id,
+            parse_job_id=parse_job_id,
+            storage=storage,
+            session_factory=resolve_session_factory(app),
+        )
+    except Exception:
+        logger.exception(
+            "Resume parse background job crashed: resume_id=%s parse_job_id=%s",
+            resume_id,
+            parse_job_id,
+        )
+
+
+def schedule_resume_parse_job(
+    app: FastAPI,
+    *,
+    resume_id: UUID,
+    parse_job_id: UUID,
+    storage: ObjectStorage,
+) -> None:
+    tasks: set[asyncio.Task[None]] = getattr(app.state, "resume_parse_tasks", set())
+    app.state.resume_parse_tasks = tasks
+
+    logger.info(
+        "Scheduling resume parse task: resume_id=%s parse_job_id=%s active_tasks_before=%s",
+        resume_id,
+        parse_job_id,
+        len(tasks),
+    )
+    task = asyncio.create_task(
+        run_resume_parse_job(
+            app,
+            resume_id=resume_id,
+            parse_job_id=parse_job_id,
+            storage=storage,
+        )
+    )
+    tasks.add(task)
+    logger.info(
+        "Scheduled resume parse task: resume_id=%s parse_job_id=%s active_tasks_after=%s",
+        resume_id,
+        parse_job_id,
+        len(tasks),
+    )
+
+    def _cleanup(finished_task: asyncio.Task[None]) -> None:
+        tasks.discard(finished_task)
+        logger.info(
+            "Cleaned up resume parse task: resume_id=%s parse_job_id=%s cancelled=%s active_tasks_after=%s",
+            resume_id,
+            parse_job_id,
+            finished_task.cancelled(),
+            len(tasks),
+        )
+        if finished_task.cancelled():
+            logger.warning(
+                "Resume parse task cancelled: resume_id=%s parse_job_id=%s",
+                resume_id,
+                parse_job_id,
+            )
+
+    task.add_done_callback(_cleanup)
 
 
 @router.post(
@@ -51,13 +133,18 @@ def resolve_session_factory(request: Request):
 )
 async def upload_resume_file(
     request: Request,
-    background_tasks: BackgroundTasks,
     file: Annotated[UploadFile, File(...)],
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
     settings: Annotated[Settings, Depends(get_settings_dependency)],
 ) -> ApiSuccessResponse[ResumeResponse]:
+    logger.info(
+        "Received resume upload request: user_id=%s file_name=%s content_type=%s",
+        current_user.id,
+        file.filename,
+        file.content_type,
+    )
     resume = await upload_resume(
         session,
         current_user=current_user,
@@ -65,21 +152,18 @@ async def upload_resume_file(
         storage=storage,
         settings=settings,
     )
-    print(f"Resume uploaded: {resume.id}, latest_parse_job: {resume.latest_parse_job}")
     if resume.latest_parse_job is not None:
-        print(f"Creating async task for resume {resume.id}")
-        task = asyncio.create_task(
-            process_resume_parse_job(
-                resume_id=resume.id,
-                parse_job_id=resume.latest_parse_job.id,
-                storage=storage,
-                session_factory=resolve_session_factory(request),
-            )
+        logger.info(
+            "Queueing resume parse background job: resume_id=%s parse_job_id=%s",
+            resume.id,
+            resume.latest_parse_job.id,
         )
-        # 将任务添加到 app.state.background_tasks 以防止被垃圾回收
-        request.app.state.background_tasks.add(task)
-        task.add_done_callback(lambda t: request.app.state.background_tasks.discard(t))
-        print(f"Async task created for resume {resume.id}")
+        schedule_resume_parse_job(
+            request.app,
+            resume_id=resume.id,
+            parse_job_id=resume.latest_parse_job.id,
+            storage=storage,
+        )
     return success_response(request, resume)
 
 
@@ -89,6 +173,7 @@ async def get_resume_list(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[list[ResumeResponse]]:
+    logger.info("Fetching resume list: user_id=%s", current_user.id)
     items = await list_resumes(session, current_user=current_user)
     return success_response(request, items)
 
@@ -100,6 +185,7 @@ async def get_resume(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[ResumeResponse]:
+    logger.info("Fetching resume detail: user_id=%s resume_id=%s", current_user.id, resume_id)
     resume = await get_resume_detail(
         session,
         current_user=current_user,
@@ -116,6 +202,7 @@ async def delete_resume_file(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
 ) -> ApiSuccessResponse[ResumeDeleteResponse]:
+    logger.info("Deleting resume: user_id=%s resume_id=%s", current_user.id, resume_id)
     payload = await delete_resume(
         session,
         current_user=current_user,
@@ -137,6 +224,7 @@ async def get_resume_download_url(
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
     settings: Annotated[Settings, Depends(get_settings_dependency)],
 ) -> ApiSuccessResponse[ResumeDownloadUrlResponse]:
+    logger.info("Generating resume download url: user_id=%s resume_id=%s", current_user.id, resume_id)
     payload = await generate_resume_download_url(
         session,
         current_user=current_user,
@@ -157,6 +245,7 @@ async def get_resume_parse_job_list(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[list[ResumeParseJobResponse]]:
+    logger.info("Fetching resume parse jobs: user_id=%s resume_id=%s", current_user.id, resume_id)
     items = await list_resume_parse_jobs(
         session,
         current_user=current_user,
@@ -168,24 +257,27 @@ async def get_resume_parse_job_list(
 @router.post("/{resume_id}/parse", response_model=ApiSuccessResponse[ResumeResponse])
 async def retry_resume_parse(
     request: Request,
-    background_tasks: BackgroundTasks,
     resume_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
 ) -> ApiSuccessResponse[ResumeResponse]:
+    logger.info("Retrying resume parse: user_id=%s resume_id=%s", current_user.id, resume_id)
     resume, parse_job = await create_resume_parse_job(
         session,
         current_user=current_user,
         resume_id=resume_id,
     )
-    asyncio.create_task(
-        process_resume_parse_job(
-            resume_id=resume.id,
-            parse_job_id=parse_job.id,
-            storage=storage,
-            session_factory=resolve_session_factory(request),
-        )
+    logger.info(
+        "Queueing resume parse retry background job: resume_id=%s parse_job_id=%s",
+        resume.id,
+        parse_job.id,
+    )
+    schedule_resume_parse_job(
+        request.app,
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=storage,
     )
     return success_response(
         request,
@@ -201,6 +293,14 @@ async def save_resume_structured_data(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[ResumeResponse]:
+    logger.info(
+        "Saving structured resume data: user_id=%s resume_id=%s education_count=%s work_count=%s project_count=%s",
+        current_user.id,
+        resume_id,
+        len(payload.structured_json.education),
+        len(payload.structured_json.work_experience),
+        len(payload.structured_json.projects),
+    )
     resume = await update_resume_structured_data(
         session,
         current_user=current_user,

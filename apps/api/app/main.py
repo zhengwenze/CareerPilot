@@ -48,10 +48,6 @@ async def lifespan(app: FastAPI):
             secret_key=settings.storage_secret_key,
             secure=settings.storage_use_ssl,
         )
-    
-    if not hasattr(app.state, "background_tasks"):
-        app.state.background_tasks = set()
-
     try:
         yield
     finally:

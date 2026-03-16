@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -29,7 +30,9 @@ class Settings(BaseSettings):
     )
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
     match_ai_provider: str = "disabled"
     match_ai_base_url: str | None = None
     match_ai_api_key: str | None = None

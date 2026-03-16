@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from io import BytesIO
@@ -8,6 +9,8 @@ from pypdf import PdfReader
 
 from app.core.errors import ApiException, ErrorCode
 from app.schemas.resume import ResumeStructuredData
+
+logger = logging.getLogger(__name__)
 
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_PATTERN = re.compile(r"(?:\+?\d[\d\s-]{7,}\d)")
@@ -195,6 +198,7 @@ CERTIFICATION_HINTS = (
 
 
 def extract_text_from_pdf_bytes(data: bytes) -> str:
+    logger.info("resume_parser.extract_text:start size_bytes=%s", len(data))
     try:
         reader = PdfReader(BytesIO(data))
     except Exception as exc:
@@ -206,9 +210,16 @@ def extract_text_from_pdf_bytes(data: bytes) -> str:
         ) from exc
 
     pages: list[str] = []
-    for page in reader.pages:
+    for index, page in enumerate(reader.pages):
         extracted = page.extract_text() or ""
         cleaned = _normalize_text(extracted)
+        logger.info(
+            "resume_parser.extract_text:page page_index=%s extracted_length=%s cleaned_length=%s preview=%s",
+            index,
+            len(extracted),
+            len(cleaned),
+            cleaned[:120],
+        )
         if cleaned:
             pages.append(cleaned)
 
@@ -219,6 +230,12 @@ def extract_text_from_pdf_bytes(data: bytes) -> str:
             code=ErrorCode.BAD_REQUEST,
             message="No extractable text found in PDF. Scanned PDFs are not supported yet.",
         )
+    logger.info(
+        "resume_parser.extract_text:done page_count=%s raw_text_length=%s preview=%s",
+        len(pages),
+        len(raw_text),
+        raw_text[:160],
+    )
     return raw_text
 
 
@@ -423,6 +440,13 @@ def _has_meaningful_content(structured: ResumeStructuredData) -> bool:
 def build_structured_resume(raw_text: str) -> ResumeStructuredData:
     lines = _normalize_lines(raw_text)
     sections = _split_sections(lines)
+    logger.info(
+        "resume_parser.build:start raw_text_length=%s line_count=%s section_counts=%s first_lines=%s",
+        len(raw_text),
+        len(lines),
+        {key: len(value) for key, value in sections.items()},
+        lines[:8],
+    )
     education = _dedupe_preserve_order(sections["education"])
     work_experience = _dedupe_preserve_order(sections["work_experience"])
     projects = _dedupe_preserve_order(sections["projects"])
@@ -503,4 +527,15 @@ def build_structured_resume(raw_text: str) -> ResumeStructuredData:
             code=ErrorCode.BAD_REQUEST,
             message="Failed to extract structured resume fields from PDF text",
         )
+    logger.info(
+        "resume_parser.build:done basic_info=%s education_count=%s work_count=%s project_count=%s certifications_count=%s technical_skills=%s tools=%s languages=%s",
+        structured.basic_info.model_dump(),
+        len(structured.education),
+        len(structured.work_experience),
+        len(structured.projects),
+        len(structured.certifications),
+        structured.skills.technical,
+        structured.skills.tools,
+        structured.skills.languages,
+    )
     return structured
