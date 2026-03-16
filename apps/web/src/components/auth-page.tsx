@@ -2,13 +2,6 @@ import Link from "next/link";
 
 import { GuestRoute } from "@/components/guards/guest-route";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 import { AuthForm } from "./auth-form";
 
@@ -21,63 +14,51 @@ export function AuthPage({ mode }: AuthPageProps) {
 
   return (
     <GuestRoute>
-      <main className="auth-layout">
-        <Card className="surface-card relative overflow-hidden border-0 bg-card/80 py-0 shadow-2xl shadow-amber-950/8 backdrop-blur-xl">
-          <div className="absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.26),transparent_62%)]" />
-          <CardHeader className="relative space-y-6 px-6 py-6 sm:px-8 sm:py-8">
-            <Link
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
-              href="/"
-            >
-              <Badge className="rounded-full bg-white/75 px-3 py-1 text-primary hover:bg-white/75">
-                CareerPilot
-              </Badge>
-              返回首页
-            </Link>
+      <main className="min-h-screen w-full bg-white text-black">
+        <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
+          <div className="w-full max-w-md space-y-12">
+            <div className="flex flex-col items-center space-y-6 text-center">
+              <Link
+                href="/"
+                className="group inline-flex items-center gap-2 text-sm font-medium text-black transition-colors hover:text-gray-500"
+              >
+                <Badge className="rounded-full border border-black bg-transparent px-3 py-1 text-black transition-colors hover:bg-black hover:text-white">
+                  CareerPilot
+                </Badge>
+                <span className="transition-transform group-hover:-translate-y-0.5">
+                  返回首页
+                </span>
+              </Link>
 
-            <div className="space-y-5">
-              <p className="eyebrow">求职驾驶舱</p>
-              <CardTitle className="max-w-lg text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-5xl">
-                {isRegister
-                  ? "先注册账号，再把简历优化、JD 匹配和模拟面试接起来。"
-                  : "继续你的求职节奏，把登录态接回到工作台。"}
-              </CardTitle>
-              <CardDescription className="max-w-xl text-base leading-8 text-muted-foreground">
-                当前前端已经正式接入后端认证接口：注册会调用{" "}
-                <code>/auth/register</code>， 登录会调用 <code>/auth/login</code>
-                ，登录态恢复依赖 <code>/auth/me</code>， 退出会调用{" "}
-                <code>/auth/logout</code>。
-              </CardDescription>
+              <div className="space-y-4">
+                <h1 className="text-5xl font-bold tracking-tight text-black sm:text-6xl">
+                  {isRegister
+                    ? "创建你的求职工作台"
+                    : "登录继续你的求职计划"}
+                </h1>
+                <p className="text-lg text-gray-600">
+                  {isRegister
+                    ? "注册后会直接调用后端注册接口，完成账号创建并自动进入已登录状态。"
+                    : "登录后会自动校验当前用户信息，并在本地恢复登录态。"}
+                </p>
+              </div>
             </div>
-          </CardHeader>
 
-          <CardContent className="relative grid gap-4 px-6 pb-6 sm:grid-cols-2 sm:px-8 sm:pb-8">
-            <Card className="rounded-[28px] border border-border/70 bg-white/68 py-0 shadow-none">
-              <CardHeader className="px-5 py-5">
-                <CardTitle className="text-lg font-semibold text-foreground">
-                  登录态恢复
-                </CardTitle>
-                <CardDescription className="text-sm leading-7 text-muted-foreground">
-                  浏览器会保存访问令牌，刷新页面后自动调用 <code>/auth/me</code>{" "}
-                  校验并恢复用户信息。
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="rounded-[28px] border border-border/70 bg-white/68 py-0 shadow-none">
-              <CardHeader className="px-5 py-5">
-                <CardTitle className="text-lg font-semibold text-foreground">
-                  后续扩展准备
-                </CardTitle>
-                <CardDescription className="text-sm leading-7 text-muted-foreground">
-                  这套状态管理可以直接给“简历上传、JD
-                  匹配、模拟面试记录”复用，不用重写用户上下文。
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </CardContent>
-        </Card>
+            <AuthForm mode={mode} />
 
-        <AuthForm mode={mode} />
+            <div className="border-t border-gray-200 pt-8 text-center">
+              <p className="text-sm text-gray-600">
+                {isRegister ? "已经有账号？" : "还没有账号？"}
+                <Link
+                  href={isRegister ? "/login" : "/register"}
+                  className="font-medium text-black transition-colors hover:text-gray-500"
+                >
+                  {isRegister ? "去登录" : "去注册"}
+                </Link>
+              </p>
+            </div>
+          </div>
+        </div>
       </main>
     </GuestRoute>
   );

@@ -1,22 +1,12 @@
 "use client";
 
 import { AlertCircle, ArrowRight } from "lucide-react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -90,109 +80,86 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   const isPending = isSubmitting || isRouting || isBootstrapping;
-  const title =
-    mode === "register" ? "创建你的求职工作台" : "登录继续你的求职计划";
-  const subtitle =
-    mode === "register"
-      ? "注册后会直接调用后端注册接口，完成账号创建并自动进入已登录状态。"
-      : "登录后会自动校验当前用户信息，并在本地恢复登录态。";
 
   return (
-    <Card className="surface-card w-full max-w-xl border-0 bg-card/85 py-0 shadow-2xl shadow-emerald-950/8 backdrop-blur-xl">
-      <CardHeader className="space-y-4 border-b border-border/70 px-6 py-6 sm:px-8">
-        <Badge className="w-fit rounded-full bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
+    <div className="w-full space-y-6 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-900/5 sm:p-12">
+      <div className="space-y-2">
+        <div className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700">
           CareerPilot Auth
-        </Badge>
-        <div className="space-y-3">
-          <CardTitle className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            {title}
-          </CardTitle>
-          <CardDescription className="max-w-lg text-sm leading-7 text-muted-foreground sm:text-base">
-            {subtitle}
-          </CardDescription>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="px-6 py-6 sm:px-8">
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          {mode === "register" ? (
-            <div className="grid gap-2">
-              <Label htmlFor="nickname">昵称</Label>
-              <Input
-                className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
-                id="nickname"
-                placeholder="比如：阿泽 / 数据分析求职者"
-                value={nickname}
-                onChange={(event) => setNickname(event.target.value)}
-              />
-            </div>
-          ) : null}
-
-          <div className="grid gap-2">
-            <Label htmlFor="email">邮箱</Label>
-            <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="password">密码</Label>
-            <Input
-              className="h-11 rounded-2xl border-border/70 bg-white/80 px-4"
-              id="password"
-              type="password"
-              placeholder="至少 8 位，建议包含字母和数字"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              minLength={8}
-              required
-            />
-          </div>
-
-          {error ? (
-            <Alert
-              className="rounded-2xl border-destructive/20 bg-destructive/5 px-4 py-3"
-              variant="destructive"
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        {mode === "register" && (
+          <div className="space-y-2">
+            <Label
+              htmlFor="nickname"
+              className="text-sm font-medium text-gray-900"
             >
-              <AlertCircle className="mt-0.5 size-4" />
-              <AlertTitle>提交失败</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
+              昵称
+            </Label>
+            <Input
+              id="nickname"
+              placeholder="比如：阿泽 / 数据分析求职者"
+              value={nickname}
+              onChange={(event) => setNickname(event.target.value)}
+              className="h-11 rounded-xl border-gray-300 bg-gray-50 text-base placeholder:text-gray-400 focus:border-black focus:ring-black"
+            />
+          </div>
+        )}
 
-          <Button
-            className="h-11 w-full rounded-full text-sm font-semibold shadow-lg shadow-emerald-950/10"
-            disabled={isPending}
-            type="submit"
-          >
-            {isPending
-              ? "处理中..."
-              : mode === "register"
-              ? "注册并进入工作台"
-              : "登录并恢复工作台"}
-            <ArrowRight className="size-4" />
-          </Button>
-        </form>
-      </CardContent>
+        <div className="space-y-2">
+          <Label htmlFor="email" className="text-sm font-medium text-gray-900">
+            邮箱
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+            className="h-11 rounded-xl border-gray-300 bg-gray-50 text-base placeholder:text-gray-400 focus:border-black focus:ring-black"
+          />
+        </div>
 
-      <CardFooter className="flex flex-col gap-3 border-t border-border/70 bg-muted/35 px-6 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <span>{mode === "register" ? "已经有账号？" : "还没有账号？"}</span>
+        <div className="space-y-2">
+          <Label htmlFor="password" className="text-sm font-medium text-gray-900">
+            密码
+          </Label>
+          <Input
+            id="password"
+            type="password"
+            placeholder="至少 8 位，建议包含字母和数字"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            minLength={8}
+            required
+            className="h-11 rounded-xl border-gray-300 bg-gray-50 text-base placeholder:text-gray-400 focus:border-black focus:ring-black"
+          />
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="rounded-xl border-red-200 bg-red-50/50 px-4 py-3">
+            <AlertCircle className="mt-0.5 size-4" />
+            <AlertTitle className="text-sm">提交失败</AlertTitle>
+            <AlertDescription className="text-sm">{error}</AlertDescription>
+          </Alert>
+        )}
+
         <Button
-          asChild
-          className="h-auto rounded-full px-0 py-0 text-primary hover:text-primary/80"
-          variant="link"
+          className="h-11 w-full rounded-xl bg-black text-sm font-medium text-white hover:bg-gray-800 focus:ring-black focus:ring-offset-1 disabled:opacity-60"
+          disabled={isPending}
+          type="submit"
         >
-          <Link href={mode === "register" ? "/login" : "/register"}>
-            {mode === "register" ? "去登录" : "去注册"}
-          </Link>
+          {isPending
+            ? "处理中..."
+            : mode === "register"
+            ? "注册并进入工作台"
+            : "登录并恢复工作台"}
+          <ArrowRight className="ml-2 size-4" />
         </Button>
-      </CardFooter>
-    </Card>
+      </form>
+    </div>
   );
 }
