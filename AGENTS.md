@@ -1,10 +1,21 @@
-# AGENTS.md - CareerPilot 项目开发规范
+# AGENTS.md
 
-## Project
+本文件为编码代理提供 CareerPilot 仓库中的工作约束、导航信息、验证要求与调试流程。
+
+## Repository Overview
 
 - **Monorepo root**: `.`
 - **Backend**: `apps/api` (FastAPI + SQLAlchemy + PostgreSQL)
 - **Frontend**: `apps/web` (Next.js 16 + React 19 + TypeScript)
+
+## Code Navigation
+
+- API routes: `apps/api/app/api/`
+- DB models: `apps/api/app/models/`
+- Resume parse pipeline / background jobs: `apps/api/app/jobs/`, `apps/api/app/services/`
+- Tests: `apps/api/tests/`
+- Upload / resume pages: `apps/web/app/`, `apps/web/src/pages/`
+- Polling logic and client state: `apps/web/src/hooks/`, `apps/web/src/lib/`
 
 ## Environment
 
@@ -18,7 +29,49 @@
 
 启动服务：`docker compose -f docker-compose.middleware.yml up -d`
 
-## Core Workflow (Resume Feature)
+## Default Working Flow
+
+收到任务后，默认按以下顺序执行：
+
+1. 先阅读与任务直接相关的目录与文件，不要全仓扫描
+2. 先复现问题，再修改代码；如果无法复现，说明缺失条件
+3. 优先做最小修改，只修改与当前任务直接相关的文件
+4. 改动后运行最小必要验证；若涉及解析链路，补充状态流转检查
+5. 输出结果时说明：
+   - 修改了哪些文件
+   - 为什么这样改
+   - 跑了哪些验证
+   - 还有哪些风险或未验证项
+
+## Validation Commands
+
+### Backend-only changes
+
+```bash
+cd apps/api
+uv run pytest
+```
+
+### Frontend-only changes
+
+```bash
+cd apps/web
+npm run lint
+```
+
+### API contract / resume parse flow changes
+
+```bash
+cd apps/api
+uv run pytest
+
+cd ../web
+npm run lint
+```
+
+不要默认运行全量耗时命令；优先运行与改动范围直接相关的最小验证。
+
+## Resume Parse Workflow
 
 1. 用户上传 PDF 简历
 2. 后端存储 PDF 到 MinIO，创建 parse job (`pending`)
@@ -36,86 +89,82 @@
 - `pending -> processing -> failed`
 - **Bug**: 任何 job 卡在 `pending` 或 `processing` 超过 120 秒
 
-## Commands
+## Resume Parse Troubleshooting
 
-### 后端 (apps/api)
+当 parse job 在 `pending` 或 `processing` 停留超过 120 秒时，按以下顺序检查：
 
-```bash
-cd apps/api
-cp .env.example .env                    # 首次启动
-uv sync --group dev
-uv run alembic upgrade head
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-uv run pytest                           # 测试
-```
+1. 检查 Docker 依赖服务是否正常运行：`docker compose ps`
+2. 检查后端日志中是否有 job 被消费/执行的记录
+3. 检查数据库中的 `resume_parse_jobs` 状态是否发生流转
+4. 检查 MinIO 中对应 PDF 是否上传成功
+5. 检查解析结果写回是否成功：
+   - `resume.raw_text`
+   - `resume.structured_json`
+   - `resume.parse_status`
+   - `resume_parse_jobs.status`
+   - `resume_parse_jobs.error_message`
+6. 检查前端轮询是否在成功/失败后正确停止
 
-### 前端 (apps/web)
+## Rules for Code Changes
 
-```bash
-cd apps/web
-cp .env.example .env.local              # 首次启动
-npm install
-npm run dev                             # 开发
-npm run lint                            # 检查
-```
+### 允许修改
 
-## .env 关键变量
+- 业务代码
+- 测试代码
+- 前端页面与组件
+- 轮询逻辑与客户端状态管理
 
-### 后端 (apps/api/.env)
+### 慎改
 
-- `DATABASE_URL`: PostgreSQL 连接串
-- `REDIS_URL`: Redis 连接串
-- `STORAGE_ENDPOINT`: MinIO 地址
-- `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY`: MinIO 凭证
-- `JWT_SECRET_KEY`: JWT 密钥
+- 解析 schema 定义
+- 对象存储配置
+- 状态机定义
+- 解析脚本规则
 
-### 前端 (apps/web/.env.local)
+### 禁止修改
 
-- `NEXT_PUBLIC_API_BASE_URL`: 后端地址 (默认 `http://127.0.0.1:8000`)
+- 历史迁移文件 (`alembic/versions/`)
+- 基础设施编排文件（除非任务明确要求）
+- 无关 package lock 文件
+- `.env.example` 中的变量名（除非任务明确要求）
 
-## Rules
+### 代码修改原则
 
-### 代码修改
+- 除非任务明确要求，否则不要顺手重命名文件、抽象公共层、升级依赖或调整目录结构
+- 在开始修改前，先用 3-5 行说明计划与改动范围
+- 完成修改后，列出受影响文件，并说明每个文件为何需要改动
 
-1. 优先做最小修改，不要顺手重构无关代码
-2. 改动前先说明计划，改动后总结影响文件
-3. 不要修改 `alembic/versions/` 迁移文件，除非明确要求
+## Testing Requirements
 
-### 测试要求
+- 新增接口时必须补充测试
+- 修改解析流程时必须补后端集成测试或说明原因
+- 修改前端轮询/编辑时必须给出手工验证步骤
 
-1. 新增接口时必须补充测试
-2. 修改解析流程时必须补后端集成测试或说明原因
-3. 修改前端轮询/编辑时必须给出手工验证步骤
+## Secrets and Environment Safety
 
-### 调试要求 (涉及简历解析)
+- 不要在代码、测试或提交说明中写入真实密钥
+- 不要修改 `.env.example` 中变量名，除非任务明确要求
+- 若新增环境变量，必须同时更新示例文件与说明
 
-必须检查：
+## Done Criteria
 
-- API 日志 (后端 uvicorn 输出)
-- `parse_jobs` 表记录 (状态流转)
-- MinIO 文件是否存在
-- 前端轮询逻辑是否停止
+任务完成需满足：
 
-### 禁止项
-
-1. 不要随意改解析脚本规则和 schema，除非问题确实在解析逻辑本身
-2. 不要新增基础设施依赖或大改架构，除非先说明原因
-3. 不要默认问题在解析脚本，先检查任务调度、状态写回、前端轮询
-
-## Done When
-
-- ✅ 测试通过
-- ✅ Lint 通过
-- ✅ 说明复现步骤与验证结果
-- ⚠️ 若本地缺依赖导致无法完整验证，必须明确写出：ß
+- 测试通过，或明确说明未通过的原因
+- Lint 通过，或明确说明未通过的原因
+- 给出复现步骤、修复说明、验证结果
+- 若本地环境缺依赖或外部服务不可用，必须明确写出：
   - 阻塞项
-  - 已执行的命令
-  - 未完成的验证项
+  - 已执行命令
+  - 已完成验证
+  - 尚未完成验证
 
-## 调试清单 (Resume Parse 问题)
+## Output Format
 
-1. 检查 Docker 服务是否运行：`docker compose ps`
-2. 检查后端日志是否有 parse job 执行记录
-3. 检查数据库 `parse_jobs` 表状态流转
-4. 检查 MinIO 是否有上传的 PDF 文件
-5. 检查前端轮询间隔 (当前 5 秒) 和停止条件
+完成任务后，按以下格式汇报：
+
+1. Summary
+2. Files Changed
+3. Validation
+4. Manual Verification
+5. Risks / Follow-ups
