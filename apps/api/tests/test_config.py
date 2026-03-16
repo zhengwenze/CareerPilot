@@ -27,3 +27,20 @@ def test_settings_dependency_prefers_app_state_settings() -> None:
     )
 
     assert get_settings_dependency(request) is custom_settings
+
+
+def test_settings_normalize_localhost_service_hosts() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://career:career@localhost:5432/career_pilot",
+        alembic_database_url="postgresql+psycopg://career:career@localhost:5432/career_pilot",
+        redis_url="redis://localhost:6380/0",
+        storage_endpoint="localhost:9000",
+    )
+
+    assert settings.database_url == "postgresql+asyncpg://career:career@127.0.0.1:5432/career_pilot"
+    assert (
+        settings.alembic_database_url
+        == "postgresql+psycopg://career:career@127.0.0.1:5432/career_pilot"
+    )
+    assert settings.redis_url == "redis://127.0.0.1:6380/0"
+    assert settings.storage_endpoint == "127.0.0.1:9000"

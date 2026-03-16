@@ -14,8 +14,6 @@ from app.core.responses import success_response
 from app.db.session import get_db_session, get_session_factory
 from app.models import User
 from app.schemas.common import ApiSuccessResponse
-
-logger = logging.getLogger(__name__)
 from app.schemas.resume import (
     ResumeDeleteResponse,
     ResumeDownloadUrlResponse,
@@ -37,7 +35,47 @@ from app.services.resume import (
 )
 from app.services.storage import ObjectStorage
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/resumes", tags=["resumes"])
+
+
+def should_schedule_resume_parse_job(resume: ResumeResponse) -> bool:
+    parse_job = resume.latest_parse_job
+    return (
+        parse_job is not None
+        and resume.parse_status in {"pending", "processing"}
+        and parse_job.status in {"pending", "processing"}
+    )
+
+
+def ensure_resume_parse_job_scheduled(
+    app: FastAPI,
+    *,
+    resume: ResumeResponse,
+    storage: ObjectStorage,
+) -> None:
+    if not should_schedule_resume_parse_job(resume):
+        return
+
+    parse_job = resume.latest_parse_job
+    assert parse_job is not None
+    logger.info(
+        (
+            "Ensuring in-flight resume parse job is scheduled: "
+            "resume_id=%s parse_job_id=%s resume_status=%s job_status=%s"
+        ),
+        resume.id,
+        parse_job.id,
+        resume.parse_status,
+        parse_job.status,
+    )
+    schedule_resume_parse_job(
+        app,
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=storage,
+    )
 
 
 def resolve_session_factory(app: FastAPI):
@@ -83,7 +121,21 @@ def schedule_resume_parse_job(
     storage: ObjectStorage,
 ) -> None:
     tasks: set[asyncio.Task[None]] = getattr(app.state, "resume_parse_tasks", set())
+    active_task_ids: set[UUID] = getattr(app.state, "resume_parse_task_ids", set())
     app.state.resume_parse_tasks = tasks
+    app.state.resume_parse_task_ids = active_task_ids
+
+    if parse_job_id in active_task_ids:
+        logger.info(
+            (
+                "Skipping duplicate resume parse task scheduling: "
+                "resume_id=%s parse_job_id=%s active_tasks=%s"
+            ),
+            resume_id,
+            parse_job_id,
+            len(tasks),
+        )
+        return
 
     logger.info(
         "Scheduling resume parse task: resume_id=%s parse_job_id=%s active_tasks_before=%s",
@@ -100,6 +152,7 @@ def schedule_resume_parse_job(
         )
     )
     tasks.add(task)
+    active_task_ids.add(parse_job_id)
     logger.info(
         "Scheduled resume parse task: resume_id=%s parse_job_id=%s active_tasks_after=%s",
         resume_id,
@@ -109,8 +162,12 @@ def schedule_resume_parse_job(
 
     def _cleanup(finished_task: asyncio.Task[None]) -> None:
         tasks.discard(finished_task)
+        active_task_ids.discard(parse_job_id)
         logger.info(
-            "Cleaned up resume parse task: resume_id=%s parse_job_id=%s cancelled=%s active_tasks_after=%s",
+            (
+                "Cleaned up resume parse task: "
+                "resume_id=%s parse_job_id=%s cancelled=%s active_tasks_after=%s"
+            ),
             resume_id,
             parse_job_id,
             finished_task.cancelled(),
@@ -172,9 +229,12 @@ async def get_resume_list(
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    storage: Annotated[ObjectStorage, Depends(get_object_storage)],
 ) -> ApiSuccessResponse[list[ResumeResponse]]:
     logger.info("Fetching resume list: user_id=%s", current_user.id)
     items = await list_resumes(session, current_user=current_user)
+    for item in items:
+        ensure_resume_parse_job_scheduled(request.app, resume=item, storage=storage)
     return success_response(request, items)
 
 
@@ -184,6 +244,7 @@ async def get_resume(
     resume_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    storage: Annotated[ObjectStorage, Depends(get_object_storage)],
 ) -> ApiSuccessResponse[ResumeResponse]:
     logger.info("Fetching resume detail: user_id=%s resume_id=%s", current_user.id, resume_id)
     resume = await get_resume_detail(
@@ -191,6 +252,7 @@ async def get_resume(
         current_user=current_user,
         resume_id=resume_id,
     )
+    ensure_resume_parse_job_scheduled(request.app, resume=resume, storage=storage)
     return success_response(request, resume)
 
 
@@ -224,7 +286,11 @@ async def get_resume_download_url(
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
     settings: Annotated[Settings, Depends(get_settings_dependency)],
 ) -> ApiSuccessResponse[ResumeDownloadUrlResponse]:
-    logger.info("Generating resume download url: user_id=%s resume_id=%s", current_user.id, resume_id)
+    logger.info(
+        "Generating resume download url: user_id=%s resume_id=%s",
+        current_user.id,
+        resume_id,
+    )
     payload = await generate_resume_download_url(
         session,
         current_user=current_user,
@@ -294,7 +360,10 @@ async def save_resume_structured_data(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[ResumeResponse]:
     logger.info(
-        "Saving structured resume data: user_id=%s resume_id=%s education_count=%s work_count=%s project_count=%s",
+        (
+            "Saving structured resume data: user_id=%s resume_id=%s "
+            "education_count=%s work_count=%s project_count=%s"
+        ),
         current_user.id,
         resume_id,
         len(payload.structured_json.education),

@@ -969,3 +969,50 @@ CareerPilot 当前已经具备一个不错的起点：
 
 如果你愿意，我下一步可以直接帮你继续输出一版：
 **“适合 Cursor / v0 / Lovable / Bolt / ChatGPT 生成网页的完整提示词”**，或者直接给你一份 **HTML + CSS / React 版页面代码提示词**。
+
+确认产品主链路本来就是“简历中心 -> 岗位匹配 -> 简历优化 -> 模拟面试”的闭环。
+把当前岗位匹配模块的骨架摸清了：
+后端已有 job_descriptions 和 match_reports 两张表
+JD 解析目前是规则提取，不是异步任务
+匹配报告目前是“规则分 + AI 修正分”的一次性报告
+前端已经有岗位页和匹配报告面板，但能力还偏单次分析，不是“岗位目标管理中枢”
+我现在正继续读前端岗位页、简历结构数据和模拟面试占位页，接着会补一轮竞品/开源方案调研，然后给你出完整的《岗位匹配模块》重设计方案，包括它如何和简历解析、后续模拟面试形成联动闭环。
+
+我继续补前端和测试侧证据，重点看现在岗位页承载了什么、报告展示了什么、以及模拟面试模块当前预留到什么程度。这样设计方案就不会脱离现有代码。
+
+本地代码已经足够说明“现在有什么”。我再补一轮外部证据，重点看两类：现成求职工作台产品怎么做闭环，以及 GitHub 上有没有值得借鉴的数据模型或流程组织。
+
+现有代码和外部样本都说明了一点：岗位匹配如果只做“打分报告”，价值会很快见顶；真正拉开差距的是它是否成为后续简历优化、模拟面试的“任务编排中心”。我还差两项产品取舍需要你拍板，这会直接影响方案颗粒度和模块边界。
+
+外部样本已经够用了，结论很一致：行业里成熟做法都不是“只给一个分数”，而是把岗位匹配当作后续简历裁剪、题库生成、训练反馈的上游上下文。我再补最后一块代码事实：当前 AI 在本项目里到底只承担了什么角色。
+
+还剩一个会改变方案范围的关键点：岗位匹配是只服务“已拿到的目标 JD”，还是要同时承接“找岗位/导入岗位”。这个会直接影响数据模型和页面结构，我建议现在定掉。
+
+编写计划
+
+《岗位匹配模块》重设计方案：从“打分页”升级为“求职闭环中枢”
+Summary
+当前基线已经明确：后端是同步 JD 结构化 + 一次性匹配报告，前端是“JD 编辑 + 报告查看”页，核心代码集中在 job.py、match_engine.py、page.tsx。
+本次重设计的定位已锁定为“闭环中枢 + 深度联动模拟面试 + 手动录入 JD 为主”。
+模块目标不再是“生成一个分数”，而是沉淀 4 个可复用资产：岗位目标(Job Target)、匹配快照(Match Snapshot)、简历定制任务(Resume Tailoring Plan)、面试蓝图(Interview Blueprint)。
+主链路改为：简历解析成功 -> 选择目标岗位 -> 生成匹配快照 -> 产出改简历任务 -> 产出面试题包/追问点 -> 面试反馈回流岗位准备度 -> 触发再次匹配。
+外部参考信号：成熟产品都在强化“岗位上下文复用”而不是只做 ATS 分数，例如 Teal Match Resume to Job Description、Teal Interview Practice、Jobscan Resume Scanner，以及开源方向上的 CareerCopilot 与 FoloUp。
+Key Changes
+把“岗位匹配”重新定义为“目标岗位工作台”，每个岗位记录都要有 岗位画像、匹配历史、改简历任务、面试准备包、当前准备度 五个视角。
+job_descriptions 保留为主表，但其 structured_json 升级为更完整的岗位画像：basic、requirements、responsibilities、signals、competencies、interview_focus、parse_confidence、normalization_warnings。
+新增 job_parse_jobs，状态流转与简历解析对齐：pending -> processing -> success|failed。JD 结构化不再视为瞬时动作，而是可追踪、可重试、可排障的异步链路。
+保留现有 match_reports 路径与表名以减少破坏性改动，但语义升级为“匹配快照”。它必须变成异步生成资产，status 字段真正参与流转，而不是只存 success。
+match_reports 新增或扩展这些字段/JSON：resume_version、resume_snapshot_json、job_snapshot_json、tailoring_plan_json、interview_blueprint_json、readiness_status、staleness_status。
+匹配生成规则固定为“一次生成三份结果”：scorecard、tailoring plan、interview blueprint。不拆成多个前台按钮，避免用户重复等待和下游模块再做一遍理解。
+resume_tailoring_plan 的输出结构固定为：must_fix_gaps、nice_to_have_gaps、missing_evidence、rewrite_suggestions、section_targets、next_actions。它直接服务后续简历优化模块。
+interview_blueprint 的输出结构固定为：focus_competencies、question_pack、follow_up_prompts、evidence_to_probe、rubric、opening_brief。它直接服务后续模拟面试模块。
+岗位准备度采用统一状态：needs_resume_fix、ready_for_mock_interview、interview_in_progress、ready_to_apply。来源是“最新成功匹配快照 + 最近一次模拟面试反馈”。
+简历模块联动规则固定：只有 parse_status=success 的简历可参与匹配；每次匹配必须绑定 resume_id + resume_version；简历被用户编辑保存成新版本后，旧匹配快照自动标记 stale，岗位页显示“建议重新匹配”。
+模拟面试模块联动规则固定：面试入口必须从 match_report_id 启动，而不是只传 job_id；这样题目、追问、评分维度都能绑定到具体岗位要求和具体简历版本。
+模拟面试回流规则固定：面试结束后写回结构化摘要到匹配快照关联上下文，至少包含 competency_scores、weak_answers、missing_examples、suggested_resume_evidence；岗位页据此更新准备度和下一步动作。
+前端岗位页改为单页工作台，不再把“历史报告列表”放成主视图。信息架构固定为：左侧 岗位列表，中间 岗位画像/匹配结果 Tabs，右侧 下一步动作。
+中间 Tabs 固定为 4 个：岗位画像、匹配得分、改简历、面试准备。历史匹配快照收进二级抽屉或历史下拉，不抢主焦点。
+右侧动作面板固定只保留高价值 CTA：去简历优化、开始模拟面试、重新匹配最新简历版本、查看历史变化。
+保留当前苹果风格 UI 约束：白底、黑字、蓝色主按钮、克制卡片；但岗位页要更“任务驱动”，减少纯展示块。
+Public APIs / Interfaces
+POST /jobs 保留，继续

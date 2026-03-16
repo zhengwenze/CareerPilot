@@ -31,6 +31,10 @@ RESUME_PARSE_TIMEOUT_SECONDS = 120
 logger = logging.getLogger(__name__)
 
 
+def utc_now_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 def build_text_preview(value: str | None, *, limit: int = 160) -> str:
     if not value:
         return ""
@@ -223,7 +227,10 @@ async def upload_resume(
     await session.refresh(resume)
     await session.refresh(parse_job)
     logger.info(
-        "Created resume and parse job records: resume_id=%s parse_job_id=%s parse_status=%s job_status=%s",
+        (
+            "Created resume and parse job records: resume_id=%s "
+            "parse_job_id=%s parse_status=%s job_status=%s"
+        ),
         resume.id,
         parse_job.id,
         resume.parse_status,
@@ -259,7 +266,7 @@ async def process_resume_parse_job(
         parse_job.status = "processing"
         parse_job.attempt_count += 1
         parse_job.error_message = None
-        parse_job.started_at = datetime.now(UTC)
+        parse_job.started_at = utc_now_naive()
         parse_job.updated_by = resume.user_id
         resume.parse_status = "processing"
         resume.parse_error = None
@@ -292,14 +299,21 @@ async def process_resume_parse_job(
                 )
                 raw_text = extract_text_from_pdf_bytes(file_bytes)
                 logger.info(
-                    "Extracted raw resume text: resume_id=%s raw_text_length=%s raw_text_preview=%s",
+                    (
+                        "Extracted raw resume text: resume_id=%s "
+                        "raw_text_length=%s raw_text_preview=%s"
+                    ),
                     resume_id,
                     len(raw_text),
                     build_text_preview(raw_text),
                 )
                 structured = build_structured_resume(raw_text)
                 logger.info(
-                    "Built structured resume data: resume_id=%s name=%s email=%s education_count=%s work_count=%s project_count=%s technical_skill_count=%s",
+                    (
+                        "Built structured resume data: resume_id=%s name=%s email=%s "
+                        "education_count=%s work_count=%s project_count=%s "
+                        "technical_skill_count=%s"
+                    ),
                     resume_id,
                     structured.basic_info.name,
                     structured.basic_info.email,
@@ -329,7 +343,10 @@ async def process_resume_parse_job(
             parse_job.error_message = "Resume parse timed out"
         except ApiException as exc:
             logger.warning(
-                "Resume parse failed with ApiException: resume_id=%s parse_job_id=%s message=%s details=%s",
+                (
+                    "Resume parse failed with ApiException: resume_id=%s "
+                    "parse_job_id=%s message=%s details=%s"
+                ),
                 resume_id,
                 parse_job_id,
                 exc.message,
@@ -350,7 +367,7 @@ async def process_resume_parse_job(
             parse_job.status = "failed"
             parse_job.error_message = str(exc)
         finally:
-            finished_at = datetime.now(UTC)
+            finished_at = utc_now_naive()
             resume.updated_by = resume.user_id
             parse_job.updated_by = resume.user_id
             parse_job.finished_at = finished_at
@@ -358,7 +375,10 @@ async def process_resume_parse_job(
             session.add(parse_job)
             await session.commit()
             logger.info(
-                "Finished resume parse job: resume_id=%s parse_job_id=%s resume_status=%s job_status=%s",
+                (
+                    "Finished resume parse job: resume_id=%s parse_job_id=%s "
+                    "resume_status=%s job_status=%s"
+                ),
                 resume_id,
                 parse_job_id,
                 resume.parse_status,
@@ -458,7 +478,11 @@ async def get_resume_detail(
     resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
     parse_job = await get_latest_parse_job(session, resume_id=resume.id)
     logger.info(
-        "Loaded resume detail: user_id=%s resume_id=%s parse_status=%s parse_error=%s has_raw_text=%s has_structured_json=%s latest_parse_job_status=%s",
+        (
+            "Loaded resume detail: user_id=%s resume_id=%s parse_status=%s "
+            "parse_error=%s has_raw_text=%s has_structured_json=%s "
+            "latest_parse_job_status=%s"
+        ),
         current_user.id,
         resume_id,
         resume.parse_status,
@@ -569,7 +593,10 @@ async def update_resume_structured_data(
     await session.refresh(resume)
     parse_job = await get_latest_parse_job(session, resume_id=resume.id)
     logger.info(
-        "Updated structured resume data: user_id=%s resume_id=%s version=%s parse_status=%s name=%s",
+        (
+            "Updated structured resume data: user_id=%s resume_id=%s "
+            "version=%s parse_status=%s name=%s"
+        ),
         current_user.id,
         resume_id,
         resume.latest_version,

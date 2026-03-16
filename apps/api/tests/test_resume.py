@@ -3,8 +3,12 @@ from __future__ import annotations
 import io
 import re
 from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
+
+from app.models import Resume, ResumeParseJob
+from app.services.resume import process_resume_parse_job
 
 
 def build_pdf_bytes() -> bytes:
@@ -184,6 +188,125 @@ async def test_resume_upload_list_detail_and_download_url(client) -> None:
         headers=auth_headers,
     )
     assert retry_parse_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_resume_detail_reschedules_pending_parse_job(client, app, session_factory) -> None:
+    register_response = await client.post(
+        "/auth/register",
+        json={
+            "email": "resume-reschedule@example.com",
+            "password": "super-secret-123",
+            "nickname": "Resume Reschedule",
+        },
+    )
+    access_token = register_response.json()["data"]["access_token"]
+    user_id = UUID(register_response.json()["data"]["user"]["id"])
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+    resume_id = uuid4()
+    parse_job_id = uuid4()
+    object_key = f"resumes/{user_id}/{resume_id}/resume.pdf"
+    fake_storage = app.state.object_storage
+    fake_storage.objects[("career-pilot-resumes", object_key)] = build_pdf_bytes()
+    app.state.resume_parse_tasks = set()
+    app.state.resume_parse_task_ids = set()
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id=user_id,
+                file_name="resume.pdf",
+                file_url=f"minio://career-pilot-resumes/{object_key}",
+                storage_bucket="career-pilot-resumes",
+                storage_object_key=object_key,
+                content_type="application/pdf",
+                file_size=len(fake_storage.objects[("career-pilot-resumes", object_key)]),
+                parse_status="pending",
+                created_by=user_id,
+                updated_by=user_id,
+            )
+        )
+        session.add(
+            ResumeParseJob(
+                id=parse_job_id,
+                resume_id=resume_id,
+                status="pending",
+                attempt_count=0,
+                created_by=user_id,
+                updated_by=user_id,
+            )
+        )
+        await session.commit()
+
+    detail_response = await client.get(f"/resumes/{resume_id}", headers=auth_headers)
+    assert detail_response.status_code == 200
+    assert detail_response.json()["data"]["parse_status"] in {"pending", "processing"}
+
+    detail_payload = await wait_for_resume_success(
+        client,
+        resume_id=str(resume_id),
+        headers=auth_headers,
+    )
+    assert detail_payload["structured_json"]["basic_info"]["email"] == "john@example.com"
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_persists_naive_timestamps(session_factory, app) -> None:
+    user_id = uuid4()
+    resume_id = uuid4()
+    parse_job_id = uuid4()
+    object_key = f"resumes/{user_id}/{resume_id}/resume.pdf"
+    fake_storage = app.state.object_storage
+    pdf_bytes = build_pdf_bytes()
+    fake_storage.objects[("career-pilot-resumes", object_key)] = pdf_bytes
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id=user_id,
+                file_name="resume.pdf",
+                file_url=f"minio://career-pilot-resumes/{object_key}",
+                storage_bucket="career-pilot-resumes",
+                storage_object_key=object_key,
+                content_type="application/pdf",
+                file_size=len(pdf_bytes),
+                parse_status="pending",
+                created_by=user_id,
+                updated_by=user_id,
+            )
+        )
+        session.add(
+            ResumeParseJob(
+                id=parse_job_id,
+                resume_id=resume_id,
+                status="pending",
+                attempt_count=0,
+                created_by=user_id,
+                updated_by=user_id,
+            )
+        )
+        await session.commit()
+
+    await process_resume_parse_job(
+        resume_id=resume_id,
+        parse_job_id=parse_job_id,
+        storage=fake_storage,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        resume = await session.get(Resume, resume_id)
+        parse_job = await session.get(ResumeParseJob, parse_job_id)
+
+    assert resume is not None
+    assert parse_job is not None
+    assert resume.parse_status == "success"
+    assert parse_job.status == "success"
+    assert parse_job.started_at is not None and parse_job.started_at.tzinfo is None
+    assert parse_job.finished_at is not None and parse_job.finished_at.tzinfo is None
 
 
 @pytest.mark.asyncio

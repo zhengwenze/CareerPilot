@@ -63,3 +63,35 @@ def test_build_structured_resume_handles_spaced_headings_and_inline_sections() -
     assert "Python" in structured.skills.technical
     assert "Excel" in structured.skills.technical
     assert "English" in structured.skills.languages
+
+
+def test_build_structured_resume_handles_flattened_pdf_output_from_real_resume() -> None:
+    raw_text = """
+    郑文泽电话:17590522997 | 邮箱:2017160177@qq.com | 当前状态:在校生求职岗位:AI应用开发 |
+    到岗时间:立即到岗 | 所在城市:北京 | 实习时间:3个月教育背景本科 - 新疆大学 -
+    软件工程(2023.09 至 2027.06) 211 双一流竞赛获奖:第21届百度之星程序设计大赛初赛(省赛)金奖。
+    科研成果:发表 RV-DANet 模型论文。软件著作权:《精灵e站软件》软著。
+    项目经验黑马点评 https://gitee.com/zwz050418/shopping-system
+    技术栈:Java 、Kafka、MySQL、rocketMQ
+    项目成果:
+    完成高可用秒杀系统从0到1的架构设计与实现。
+    可溯源代码库智能助手 https://gitee.com/zwz050418/code-rag-lab
+    技术栈:Python、LangChain、大模型接口、向量数据库、FastAPI 、MySQL
+    专业技能
+    系统架构:精通分布式系统(Redis、Kafka、rocketMQ)、容器化技术(Docker、Kubernetes/K8s)
+    数据库:MySQL、PostgreSQL
+    """
+
+    structured = build_structured_resume(raw_text)
+
+    assert structured.basic_info.name == "郑文泽"
+    assert structured.basic_info.email == "2017160177@qq.com"
+    assert structured.basic_info.phone == "17590522997"
+    assert structured.basic_info.location == "北京"
+    assert "新疆大学" in structured.education[0]
+    assert structured.work_experience == []
+    assert any("黑⻢点评" in item or "黑马点评" in item for item in structured.projects)
+    assert any("可溯源代码库智能助手" in item for item in structured.projects)
+    assert "FastAPI" in structured.skills.technical
+    assert "Docker" in structured.skills.tools
+    assert any("RV-DANet" in item for item in structured.certifications)
