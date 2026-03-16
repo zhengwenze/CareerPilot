@@ -195,6 +195,7 @@ async def process_resume_parse_job(
     storage: ObjectStorage,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> None:
+    print(f"Starting process_resume_parse_job for resume {resume_id}, job {parse_job_id}")
     session_maker = session_factory or get_session_factory()
     async with session_maker() as session:
         resume = await session.get(Resume, resume_id)

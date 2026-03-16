@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -12,6 +14,8 @@ from app.core.responses import success_response
 from app.db.session import get_db_session, get_session_factory
 from app.models import User
 from app.schemas.common import ApiSuccessResponse
+
+logger = logging.getLogger(__name__)
 from app.schemas.resume import (
     ResumeDeleteResponse,
     ResumeDownloadUrlResponse,
@@ -61,14 +65,21 @@ async def upload_resume_file(
         storage=storage,
         settings=settings,
     )
+    print(f"Resume uploaded: {resume.id}, latest_parse_job: {resume.latest_parse_job}")
     if resume.latest_parse_job is not None:
-        background_tasks.add_task(
-            process_resume_parse_job,
-            resume_id=resume.id,
-            parse_job_id=resume.latest_parse_job.id,
-            storage=storage,
-            session_factory=resolve_session_factory(request),
+        print(f"Creating async task for resume {resume.id}")
+        task = asyncio.create_task(
+            process_resume_parse_job(
+                resume_id=resume.id,
+                parse_job_id=resume.latest_parse_job.id,
+                storage=storage,
+                session_factory=resolve_session_factory(request),
+            )
         )
+        # 将任务添加到 app.state.background_tasks 以防止被垃圾回收
+        request.app.state.background_tasks.add(task)
+        task.add_done_callback(lambda t: request.app.state.background_tasks.discard(t))
+        print(f"Async task created for resume {resume.id}")
     return success_response(request, resume)
 
 
@@ -168,12 +179,13 @@ async def retry_resume_parse(
         current_user=current_user,
         resume_id=resume_id,
     )
-    background_tasks.add_task(
-        process_resume_parse_job,
-        resume_id=resume.id,
-        parse_job_id=parse_job.id,
-        storage=storage,
-        session_factory=resolve_session_factory(request),
+    asyncio.create_task(
+        process_resume_parse_job(
+            resume_id=resume.id,
+            parse_job_id=parse_job.id,
+            storage=storage,
+            session_factory=resolve_session_factory(request),
+        )
     )
     return success_response(
         request,
