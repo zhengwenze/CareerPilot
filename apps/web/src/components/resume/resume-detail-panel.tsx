@@ -156,24 +156,7 @@ export function ResumeDetailPanel({
             </Alert>
           ) : null}
 
-          {!resume.parse_error &&
-          ["pending", "processing"].includes(resume.parse_status) ? (
-            <Alert className="mt-5 rounded-[1.5rem] border-[#0071E3]/15 bg-[#F5F9FF]">
-              <AlertTitle className="text-black">解析进行中</AlertTitle>
-              <AlertDescription className="text-black/72">
-                后端已经接收并正在解析这份简历，解析完成后右侧结构化编辑区会自动填入结果。
-              </AlertDescription>
-            </Alert>
-          ) : null}
 
-          {resume.parse_error || !resume.structured_json ? (
-            <Alert className="mt-5 rounded-[1.5rem] border-[#FFD9B3] bg-[#FFF7E6]">
-              <AlertTitle className="text-black">可直接人工校正</AlertTitle>
-              <AlertDescription className="text-black/72">
-                即使自动解析失败或结果不完整，你也可以直接在右侧编辑区录入并保存，后续模块会使用这份人工修正后的结构化简历。
-              </AlertDescription>
-            </Alert>
-          ) : null}
         </CardContent>
       </Card>
 

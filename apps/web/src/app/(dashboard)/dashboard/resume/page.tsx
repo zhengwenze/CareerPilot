@@ -477,7 +477,6 @@ export default function DashboardResumePage() {
 
       const detail = await loadResumeDetailData(token, selectedResumeId);
       applyResumeDetail(detail);
-      setBannerMessage("已经重新触发解析任务，请稍候查看最新结果。");
     } catch (error) {
       logResumePage("retry:error", {
         resumeId: selectedResumeId,
