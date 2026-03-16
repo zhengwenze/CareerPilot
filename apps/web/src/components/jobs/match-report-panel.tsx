@@ -1,15 +1,13 @@
 "use client";
 
-import { Sparkles, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, Sparkles, Trash2 } from "lucide-react";
 
 import { PageEmptyState } from "@/components/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type {
-  JobRecord,
-  MatchReportRecord,
-} from "@/lib/api/modules/jobs";
+import type { JobRecord, MatchReportRecord } from "@/lib/api/modules/jobs";
 import type { ResumeRecord } from "@/lib/api/modules/resume";
 
 function formatDate(value: string) {
@@ -19,6 +17,17 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function getFitBandLabel(value: string) {
+  const labels: Record<string, string> = {
+    excellent: "强适配",
+    strong: "较强适配",
+    partial: "部分适配",
+    weak: "低适配",
+    unknown: "待生成",
+  };
+  return labels[value] ?? value;
 }
 
 export function MatchReportPanel({
@@ -49,11 +58,12 @@ export function MatchReportPanel({
   const availableResumes = resumes.filter((item) => item.parse_status === "success");
   const selectedReport =
     reports.find((item) => item.id === selectedReportId) ?? reports[0] ?? null;
+  const isJobReadyForMatch = selectedJob?.parse_status === "success";
 
   if (!selectedJob) {
     return (
       <PageEmptyState
-        description="先在中间区域创建或选择一个 JD，右侧才会显示匹配生成与报告详情。"
+        description="先在中间区域创建或选择一个 JD，右侧才会显示匹配生成与行动包。"
         title="还没有选中 JD"
       />
     );
@@ -63,15 +73,21 @@ export function MatchReportPanel({
     <div className="space-y-5">
       <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
         <CardHeader className="space-y-4 px-6 py-6">
-          <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
-            Match Generator
-          </Badge>
-          <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-            选择简历生成匹配报告
-          </CardTitle>
+          <div className="space-y-2">
+            <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
+              Next Actions
+            </Badge>
+            <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
+              生成匹配、定制任务和面试蓝图
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4 px-6 pb-6">
-          {availableResumes.length === 0 ? (
+          {!isJobReadyForMatch ? (
+            <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-[#f5f5f7] px-4 py-4 text-sm text-black/58">
+              先等待 JD 解析完成，再生成匹配快照。
+            </div>
+          ) : availableResumes.length === 0 ? (
             <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-[#f5f5f7] px-4 py-4 text-sm text-black/58">
               还没有可用简历。请先到简历中心完成至少一份简历解析。
             </div>
@@ -94,31 +110,53 @@ export function MatchReportPanel({
                   ))}
                 </select>
               </div>
-              <Button
-                className="w-full rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
-                disabled={!selectedResumeId || isGenerating}
-                onClick={onGenerate}
-                type="button"
-              >
-                {isGenerating ? "生成中..." : "生成新的匹配报告"}
-                <Sparkles className="size-4" />
-              </Button>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <Button
+                  className="rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
+                  disabled={!selectedResumeId || isGenerating}
+                  onClick={onGenerate}
+                  type="button"
+                >
+                  {isGenerating ? "生成中..." : "更新匹配"}
+                  <Sparkles className="size-4" />
+                </Button>
+                <Button
+                  asChild
+                  className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
+                  type="button"
+                  variant="outline"
+                >
+                  <a href="#tailoring-plan">查看简历定制任务</a>
+                </Button>
+                <Button
+                  asChild
+                  className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
+                  type="button"
+                  variant="outline"
+                >
+                  <Link href={`/dashboard/interviews?jobId=${selectedJob.id}${selectedReport ? `&reportId=${selectedReport.id}` : ""}`}>
+                    开始模拟面试
+                    <ArrowUpRight className="size-4" />
+                  </Link>
+                </Button>
+              </div>
             </>
           )}
         </CardContent>
       </Card>
 
-      <section className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <section className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
         <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
           <CardHeader className="px-6 py-6">
             <CardTitle className="text-xl font-semibold text-black">
-              历史报告
+              快照时间线
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 px-6 pb-6">
             {reports.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-white px-4 py-4 text-sm text-black/58">
-                还没有报告，生成一次后这里会保留历史记录。
+                还没有报告，生成一次后这里会保留岗位快照历史。
               </div>
             ) : (
               reports.map((report) => {
@@ -138,11 +176,16 @@ export function MatchReportPanel({
                       }
                     >
                       <p className="text-sm font-semibold text-black">
-                        总分 {report.overall_score}
+                        {report.status === "success"
+                          ? `${getFitBandLabel(report.fit_band)} · ${report.overall_score}`
+                          : `状态 ${report.status}`}
                       </p>
                       <p className="mt-2 text-xs leading-6 text-black/52">
-                        {formatDate(report.created_at)}
+                        v{report.resume_version}/v{report.job_version} · {formatDate(report.created_at)}
                       </p>
+                      {report.stale_status === "stale" ? (
+                        <p className="mt-2 text-xs text-[#D93025]">已过期</p>
+                      ) : null}
                     </div>
                   </button>
                 );
@@ -153,7 +196,7 @@ export function MatchReportPanel({
 
         {!selectedReport ? (
           <PageEmptyState
-            description="生成匹配报告后，这里会展示维度分、优势、短板、建议和 AI 修正信息。"
+            description="生成匹配快照后，这里会展示证据、差距分类、定制任务和面试蓝图。"
             title="还没有报告详情"
           />
         ) : (
@@ -162,11 +205,12 @@ export function MatchReportPanel({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-2">
                   <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
-                    Match Report
+                    Match Snapshot
                   </Badge>
                   <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-                    规则分 {selectedReport.rule_score} · AI 修正{" "}
-                    {selectedReport.model_score}
+                    {selectedReport.status === "success"
+                      ? `${getFitBandLabel(selectedReport.fit_band)} · 总分 ${selectedReport.overall_score}`
+                      : `报告${selectedReport.status}`}
                   </CardTitle>
                 </div>
                 <Button
@@ -182,8 +226,13 @@ export function MatchReportPanel({
               </div>
             </CardHeader>
             <CardContent className="space-y-5 px-6 pb-6">
-              <div className="grid gap-3 md:grid-cols-3">
-                {Object.entries(selectedReport.dimension_scores_json).map(([key, value]) => (
+              <div className="grid gap-3 md:grid-cols-4">
+                {[
+                  ["总分", selectedReport.overall_score],
+                  ["规则分", selectedReport.rule_score],
+                  ["AI 修正", selectedReport.model_score],
+                  ["档位", getFitBandLabel(selectedReport.fit_band)],
+                ].map(([key, value]) => (
                   <div
                     className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4"
                     key={key}
@@ -191,99 +240,108 @@ export function MatchReportPanel({
                     <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
                       {key}
                     </p>
-                    <p className="mt-2 text-2xl font-semibold text-black">
-                      {value}
-                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-black">{value}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="grid gap-5 xl:grid-cols-3">
+              <div className="grid gap-5 xl:grid-cols-2">
                 <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                  <p className="text-sm font-medium text-black">优势</p>
-                  <div className="mt-3 space-y-3">
-                    {selectedReport.gap_json.strengths.length === 0 ? (
-                      <p className="text-sm text-black/58">暂无优势条目。</p>
-                    ) : (
-                      selectedReport.gap_json.strengths.map((item) => (
-                        <div key={`${item.label}-${item.reason}`}>
-                          <p className="text-sm font-medium text-black">
-                            {item.label}
-                          </p>
-                          <p className="text-sm leading-7 text-black/68">
-                            {item.reason}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <p className="text-sm font-medium text-black">证据映射</p>
+                  <p className="mt-3 text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
+                    命中 JD 字段
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-black/68">
+                    {Object.values(selectedReport.evidence_map_json.matched_jd_fields ?? {})
+                      .flat()
+                      .join("、") || "暂无"}
+                  </p>
+                  <p className="mt-4 text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
+                    缺失项
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-black/68">
+                    {selectedReport.evidence_map_json.missing_items?.join("、") || "暂无"}
+                  </p>
                 </div>
 
                 <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                  <p className="text-sm font-medium text-black">短板</p>
+                  <p className="text-sm font-medium text-black">差距分类</p>
                   <div className="mt-3 space-y-3">
-                    {selectedReport.gap_json.gaps.length === 0 ? (
-                      <p className="text-sm text-black/58">暂无短板条目。</p>
-                    ) : (
-                      selectedReport.gap_json.gaps.map((item) => (
-                        <div key={`${item.label}-${item.reason}`}>
-                          <p className="text-sm font-medium text-black">
-                            {item.label}
-                          </p>
-                          <p className="text-sm leading-7 text-black/68">
-                            {item.reason}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                  <p className="text-sm font-medium text-black">建议</p>
-                  <div className="mt-3 space-y-3">
-                    {selectedReport.gap_json.actions.map((item) => (
-                      <div key={`${item.priority}-${item.title}`}>
-                        <p className="text-sm font-medium text-black">
-                          P{item.priority} · {item.title}
-                        </p>
-                        <p className="text-sm leading-7 text-black/68">
-                          {item.description}
-                        </p>
+                    {(selectedReport.gap_taxonomy_json.must_fix ?? []).map((item) => (
+                      <div key={`${item.label}-${item.reason}`}>
+                        <p className="text-sm font-medium text-black">必须补：{item.label}</p>
+                        <p className="text-sm leading-7 text-black/68">{item.reason}</p>
                       </div>
                     ))}
+                    {(selectedReport.gap_taxonomy_json.should_fix ?? []).map((item) => (
+                      <div key={`${item.label}-${item.reason}`}>
+                        <p className="text-sm font-medium text-black">建议补：{item.label}</p>
+                        <p className="text-sm leading-7 text-black/68">{item.reason}</p>
+                      </div>
+                    ))}
+                    {selectedReport.gap_taxonomy_json.must_fix?.length ||
+                    selectedReport.gap_taxonomy_json.should_fix?.length ? null : (
+                      <p className="text-sm text-black/58">暂无差距分类。</p>
+                    )}
                   </div>
                 </div>
               </div>
 
+              <div
+                className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4"
+                id="tailoring-plan"
+              >
+                <p className="text-sm font-medium text-black">简历定制任务包</p>
+                <div className="mt-3 space-y-3">
+                  {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).map((item, index) => (
+                    <div key={`${String(item.title)}-${index}`}>
+                      <p className="text-sm font-medium text-black">
+                        P{String(item.priority ?? index + 1)} · {String(item.title ?? "定制任务")}
+                      </p>
+                      <p className="text-sm leading-7 text-black/68">
+                        {String(item.instruction ?? item.description ?? "")}
+                      </p>
+                    </div>
+                  ))}
+                  {selectedReport.tailoring_plan_json.must_add_evidence?.length ? (
+                    <p className="text-sm leading-7 text-black/68">
+                      必须补证据：{selectedReport.tailoring_plan_json.must_add_evidence.join("、")}
+                    </p>
+                  ) : null}
+                  {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).length === 0 ? (
+                    <p className="text-sm text-black/58">当前没有生成简历定制任务。</p>
+                  ) : null}
+                </div>
+              </div>
+
               <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                <p className="text-sm font-medium text-black">证据与 AI 修正</p>
+                <p className="text-sm font-medium text-black">模拟面试蓝图</p>
                 <div className="mt-3 grid gap-4 md:grid-cols-2">
                   <div>
                     <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
-                      命中 JD 字段
+                      训练重点
                     </p>
-                    <p className="mt-2 text-sm leading-7 text-black/68">
-                      {Object.values(selectedReport.evidence_json.matched_jd_fields)
-                        .flat()
-                        .join("、") || "暂无"}
-                    </p>
+                    <div className="mt-2 space-y-2">
+                      {(selectedReport.interview_blueprint_json.focus_areas ?? []).map((item, index) => (
+                        <p className="text-sm leading-7 text-black/68" key={`${String(item.topic)}-${index}`}>
+                          {String(item.topic)} · {String(item.reason ?? "")}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                   <div>
                     <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
-                      缺失项
+                      题包预览
                     </p>
-                    <p className="mt-2 text-sm leading-7 text-black/68">
-                      {selectedReport.evidence_json.missing_items.join("、") || "暂无"}
-                    </p>
+                    <div className="mt-2 space-y-2">
+                      {(selectedReport.interview_blueprint_json.question_pack ?? []).slice(0, 3).map((item, index) => (
+                        <p className="text-sm leading-7 text-black/68" key={`${String(item.question)}-${index}`}>
+                          {String(item.question)}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <p className="mt-4 text-sm leading-7 text-black/68">
-                  AI 修正状态：{String(selectedReport.evidence_json.ai_correction.status || "unknown")}
-                  {selectedReport.evidence_json.ai_correction.reasoning
-                    ? ` · ${String(selectedReport.evidence_json.ai_correction.reasoning)}`
-                    : ""}
-                </p>
               </div>
             </CardContent>
           </Card>

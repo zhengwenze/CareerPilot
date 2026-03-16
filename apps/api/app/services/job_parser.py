@@ -196,6 +196,39 @@ def _build_summary(title: str, required_skills: list[str], responsibilities: lis
     return "；".join(part for part in summary_parts if part)
 
 
+def _build_responsibility_clusters(responsibilities: list[str]) -> list[dict[str, object]]:
+    clusters: list[dict[str, object]] = []
+
+    mapping = [
+        ("分析与洞察", ("分析", "指标", "实验", "建模", "复盘")),
+        ("协作与推进", ("协作", "推进", "对接", "沟通", "项目")),
+        ("建设与交付", ("建设", "搭建", "优化", "负责", "支持")),
+    ]
+    for label, keywords in mapping:
+        items = [item for item in responsibilities if any(keyword in item for keyword in keywords)]
+        if items:
+            clusters.append({"name": label, "items": items[:3]})
+
+    if clusters:
+        return clusters
+    if responsibilities:
+        return [{"name": "核心职责", "items": responsibilities[:4]}]
+    return []
+
+
+def _detect_seniority_hint(title: str, experience_years: int | None) -> str | None:
+    lowered = title.lower()
+    if any(token in lowered for token in ("高级", "senior", "资深")):
+        return "senior"
+    if any(token in lowered for token in ("专家", "lead", "负责人")):
+        return "lead"
+    if experience_years and experience_years >= 5:
+        return "senior"
+    if experience_years and experience_years >= 3:
+        return "mid"
+    return "junior" if experience_years is not None else None
+
+
 def build_structured_job(
     *,
     title: str,
@@ -213,6 +246,9 @@ def build_structured_job(
     required_skills = [skill for skill in all_skills if skill not in preferred_skills]
     responsibilities = _extract_responsibilities(lines)
     benefits = _extract_benefits(lines)
+    experience_years = _extract_experience_years(joined)
+    education = _extract_education(joined)
+    required_keywords = _extract_keywords(joined, KEYWORD_PHRASES)
 
     return JobStructuredData(
         basic={
@@ -221,12 +257,27 @@ def build_structured_job(
             "job_city": job_city,
             "employment_type": employment_type,
         },
+        must_have=required_skills,
+        nice_to_have=preferred_skills,
+        responsibility_clusters=_build_responsibility_clusters(responsibilities),
+        experience_constraints={
+            "education": education,
+            "experience_min_years": experience_years,
+            "location": job_city,
+            "employment_type": employment_type,
+        },
+        domain_context={
+            "keywords": required_keywords,
+            "seniority_hint": _detect_seniority_hint(title, experience_years),
+            "summary": _build_summary(title, required_skills, responsibilities),
+            "benefits": benefits,
+        },
         requirements={
             "required_skills": required_skills,
             "preferred_skills": preferred_skills,
-            "required_keywords": _extract_keywords(joined, KEYWORD_PHRASES),
-            "education": _extract_education(joined),
-            "experience_min_years": _extract_experience_years(joined),
+            "required_keywords": required_keywords,
+            "education": education,
+            "experience_min_years": experience_years,
         },
         responsibilities=responsibilities,
         benefits=benefits,

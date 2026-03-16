@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -19,6 +20,17 @@ async def register_user(client, *, email: str, nickname: str) -> str:
     )
     assert response.status_code == 201
     return response.json()["data"]["access_token"]
+
+
+async def wait_for_job_parse_success(client, *, job_id: UUID, auth_headers: dict[str, str]) -> dict:
+    for _ in range(30):
+        response = await client.get(f"/jobs/{job_id}", headers=auth_headers)
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        if payload["parse_status"] == "success":
+            return payload
+        await asyncio.sleep(0.05)
+    raise AssertionError("job parse did not complete in time")
 
 
 @pytest.mark.asyncio
@@ -46,7 +58,14 @@ async def test_jobs_crud_flow(client, session_factory) -> None:
     assert create_response.status_code == 201
     create_payload = create_response.json()["data"]
     job_id = UUID(create_payload["id"])
-    assert create_payload["parse_status"] == "success"
+    assert create_payload["parse_status"] == "pending"
+    assert create_payload["latest_parse_job"]["status"] == "pending"
+
+    create_payload = await wait_for_job_parse_success(
+        client,
+        job_id=job_id,
+        auth_headers=auth_headers,
+    )
     assert create_payload["structured_json"]["basic"]["title"] == "数据分析师"
     assert "SQL" in create_payload["structured_json"]["requirements"]["required_skills"]
 
@@ -73,7 +92,14 @@ async def test_jobs_crud_flow(client, session_factory) -> None:
     update_payload = update_response.json()["data"]
     assert update_payload["title"] == "高级数据分析师"
     assert update_payload["company"] is None
-    assert update_payload["parse_status"] == "success"
+    assert update_payload["parse_status"] == "pending"
+    assert update_payload["latest_parse_job"]["status"] == "pending"
+
+    update_payload = await wait_for_job_parse_success(
+        client,
+        job_id=job_id,
+        auth_headers=auth_headers,
+    )
     assert update_payload["structured_json"]["basic"]["title"] == "高级数据分析师"
     assert "实验分析" in update_payload["structured_json"]["requirements"]["required_keywords"]
 
@@ -89,7 +115,12 @@ async def test_jobs_crud_flow(client, session_factory) -> None:
     reparsed_response = await client.post(f"/jobs/{job_id}/parse", headers=auth_headers)
     assert reparsed_response.status_code == 200
     reparsed_payload = reparsed_response.json()["data"]
-    assert reparsed_payload["parse_status"] == "success"
+    assert reparsed_payload["parse_status"] == "pending"
+    reparsed_payload = await wait_for_job_parse_success(
+        client,
+        job_id=job_id,
+        auth_headers=auth_headers,
+    )
     assert reparsed_payload["parse_error"] is None
     assert reparsed_payload["structured_json"]["requirements"]["experience_min_years"] is None
 

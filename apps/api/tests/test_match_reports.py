@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -20,6 +21,33 @@ async def register_user(client, *, email: str, nickname: str) -> tuple[str, UUID
     assert response.status_code == 201
     payload = response.json()["data"]
     return payload["access_token"], UUID(payload["user"]["id"])
+
+
+async def wait_for_job_parse_success(client, *, job_id: str, auth_headers: dict[str, str]) -> dict:
+    for _ in range(30):
+        response = await client.get(f"/jobs/{job_id}", headers=auth_headers)
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        if payload["parse_status"] == "success":
+            return payload
+        await asyncio.sleep(0.05)
+    raise AssertionError("job parse did not complete in time")
+
+
+async def wait_for_match_report_success(
+    client,
+    *,
+    report_id: str,
+    auth_headers: dict[str, str],
+) -> dict:
+    for _ in range(30):
+        response = await client.get(f"/match-reports/{report_id}", headers=auth_headers)
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        if payload["status"] == "success":
+            return payload
+        await asyncio.sleep(0.05)
+    raise AssertionError("match report did not complete in time")
 
 
 async def create_match_report_fixture(*, session_factory, user_id: UUID) -> tuple[str, str]:
@@ -178,6 +206,7 @@ async def test_create_match_report_endpoint_generates_report(client, session_fac
     )
     assert create_response.status_code == 201
     job_id = create_response.json()["data"]["id"]
+    await wait_for_job_parse_success(client, job_id=job_id, auth_headers=auth_headers)
 
     resume_id = uuid4()
     async with session_factory() as session:
@@ -235,11 +264,19 @@ async def test_create_match_report_endpoint_generates_report(client, session_fac
     )
     assert report_response.status_code == 200
     payload = report_response.json()["data"]
-    assert payload["status"] == "success"
+    assert payload["status"] == "pending"
+
+    payload = await wait_for_match_report_success(
+        client,
+        report_id=payload["id"],
+        auth_headers=auth_headers,
+    )
     assert payload["rule_score"] != "0.00"
     assert "required_skills" in payload["dimension_scores_json"]
     assert "ai_correction_delta" in payload["dimension_scores_json"]
     assert payload["gap_json"]["actions"]
+    assert payload["tailoring_plan_json"]["rewrite_tasks"]
+    assert payload["interview_blueprint_json"]["question_pack"]
 
     list_response = await client.get(
         f"/jobs/{job_id}/match-reports",

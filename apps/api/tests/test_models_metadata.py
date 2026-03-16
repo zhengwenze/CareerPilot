@@ -3,6 +3,8 @@ from app.db.base import Base
 
 def test_metadata_includes_job_and_match_tables() -> None:
     assert "job_descriptions" in Base.metadata.tables
+    assert "job_parse_jobs" in Base.metadata.tables
+    assert "job_readiness_events" in Base.metadata.tables
     assert "match_reports" in Base.metadata.tables
 
 

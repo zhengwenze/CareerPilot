@@ -31,10 +31,7 @@ import {
   type JobRecord,
   type MatchReportRecord,
 } from "@/lib/api/modules/jobs";
-import {
-  fetchResumeList,
-  type ResumeRecord,
-} from "@/lib/api/modules/resume";
+import { fetchResumeList, type ResumeRecord } from "@/lib/api/modules/resume";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
@@ -46,6 +43,10 @@ function getErrorMessage(error: unknown) {
   }
 
   return "操作失败，请稍后重试。";
+}
+
+function isInFlight(status: string | null | undefined) {
+  return status === "pending" || status === "processing";
 }
 
 export default function DashboardJobsPage() {
@@ -66,11 +67,11 @@ export default function DashboardJobsPage() {
   const [pageError, setPageError] = useState("");
   const [bannerMessage, setBannerMessage] = useState("");
 
-  const selectedJob =
-    jobs.find((item) => item.id === selectedJobId) ?? null;
-  const parsedJobs = jobs.filter((item) => item.parse_status === "success").length;
-  const successfulResumes = resumes.filter(
-    (item) => item.parse_status === "success"
+  const selectedJob = jobs.find((item) => item.id === selectedJobId) ?? null;
+  const successfulResumes = resumes.filter((item) => item.parse_status === "success").length;
+  const interviewReadyCount = jobs.filter((item) => item.status_stage === "interview_ready").length;
+  const staleCount = jobs.filter(
+    (item) => item.latest_match_report?.stale_status === "stale"
   ).length;
 
   useEffect(() => {
@@ -102,9 +103,11 @@ export default function DashboardJobsPage() {
         setSelectedJobId(nextJobId);
         setJobDraft(nextJobId ? toJobDraft(nextJobs[0]) : createEmptyJobDraft());
 
-        const nextResumeId =
-          nextResumes.find((item) => item.parse_status === "success")?.id ?? "";
-        setSelectedResumeId(nextResumeId);
+        const nextSelectedResumeId =
+          nextJobs[0]?.recommended_resume_id ??
+          nextResumes.find((item) => item.parse_status === "success")?.id ??
+          "";
+        setSelectedResumeId(nextSelectedResumeId);
       } catch (error) {
         if (!cancelled) {
           setPageError(getErrorMessage(error));
@@ -160,6 +163,81 @@ export default function DashboardJobsPage() {
     };
   }, [selectedJobId, token]);
 
+  useEffect(() => {
+    if (!selectedJob) {
+      return;
+    }
+    if (selectedJob.recommended_resume_id) {
+      setSelectedResumeId(selectedJob.recommended_resume_id);
+      return;
+    }
+    if (!selectedResumeId) {
+      const fallbackResumeId =
+        resumes.find((item) => item.parse_status === "success")?.id ?? "";
+      setSelectedResumeId(fallbackResumeId);
+    }
+  }, [resumes, selectedJob, selectedResumeId]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const hasActiveJob = jobs.some((item) => isInFlight(item.parse_status));
+    const hasActiveReport = reports.some((item) => isInFlight(item.status));
+    if (!hasActiveJob && !hasActiveReport) {
+      return;
+    }
+
+    const accessToken = token;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const [nextJobs, nextResumes] = await Promise.all([
+            fetchJobList(accessToken),
+            fetchResumeList(accessToken),
+          ]);
+          if (cancelled) {
+            return;
+          }
+          setJobs(nextJobs);
+          setResumes(nextResumes);
+
+          const activeJobId =
+            selectedJobId && nextJobs.some((item) => item.id === selectedJobId)
+              ? selectedJobId
+              : nextJobs[0]?.id ?? null;
+          setSelectedJobId(activeJobId);
+          if (activeJobId) {
+            const nextReports = await fetchJobMatchReports(accessToken, activeJobId);
+            if (cancelled) {
+              return;
+            }
+            setReports(nextReports);
+            setSelectedReportId((current) =>
+              current && nextReports.some((item) => item.id === current)
+                ? current
+                : nextReports[0]?.id ?? null
+            );
+          } else {
+            setReports([]);
+            setSelectedReportId(null);
+          }
+        } catch (error) {
+          if (!cancelled) {
+            setPageError(getErrorMessage(error));
+          }
+        }
+      })();
+    }, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [jobs, reports, selectedJobId, token]);
+
   if (!token) {
     return null;
   }
@@ -167,8 +245,8 @@ export default function DashboardJobsPage() {
   if (isPageLoading) {
     return (
       <PageLoadingState
-        title="正在加载岗位匹配模块"
-        description="我们正在同步 JD 列表、简历列表和历史报告。"
+        title="正在加载目标岗位工作台"
+        description="我们正在同步岗位画像、简历资产和匹配快照。"
       />
     );
   }
@@ -179,7 +257,7 @@ export default function DashboardJobsPage() {
         actionLabel="重新加载"
         description={pageError}
         onAction={() => window.location.reload()}
-        title="岗位匹配模块加载失败"
+        title="岗位工作台加载失败"
       />
     );
   }
@@ -228,8 +306,8 @@ export default function DashboardJobsPage() {
       await reloadJobs(savedJob.id);
       setBannerMessage(
         selectedJobId
-          ? "JD 已更新，并重新完成结构化。"
-          : "JD 已创建，并完成第一版结构化。"
+          ? "岗位已更新，并重新进入解析队列。"
+          : "岗位已创建，系统正在生成岗位画像。"
       );
     } catch (error) {
       setPageError(getErrorMessage(error));
@@ -250,7 +328,7 @@ export default function DashboardJobsPage() {
     try {
       await parseJob(token, selectedJobId);
       await reloadJobs(selectedJobId);
-      setBannerMessage("JD 已重新执行结构化。");
+      setBannerMessage("岗位解析已重新入队。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -301,7 +379,11 @@ export default function DashboardJobsPage() {
       const nextReports = await fetchJobMatchReports(token, selectedJobId);
       setReports(nextReports);
       setSelectedReportId(report.id);
-      setBannerMessage("新的匹配报告已生成。");
+      setBannerMessage(
+        report.status === "pending"
+          ? "匹配快照已开始生成，稍后会自动刷新。"
+          : "新的匹配快照已生成。"
+      );
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -329,6 +411,7 @@ export default function DashboardJobsPage() {
       setReports(nextReports);
       setSelectedReportId(nextReports[0]?.id ?? null);
       setBannerMessage(payload.message);
+      await reloadJobs(selectedJobId);
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -339,15 +422,16 @@ export default function DashboardJobsPage() {
   return (
     <div className="space-y-8">
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
-        <div className="max-w-4xl">
+        <div className="max-w-3xl">
           <p className="text-sm font-medium tracking-[0.18em] text-black uppercase">
-            Job Matching
+            Target Job Workspace
           </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-black sm:text-5xl">
-            用一张更干净的面板管理 JD、简历与匹配结果。
+            岗位匹配不再只是一个分数
           </h1>
-          <p className="mt-5 max-w-3xl text-base leading-8 text-black/72">
-            这里保留真实工作流：录入岗位、结构化 JD、选择已解析简历并生成匹配报告。无功能的说明卡片已经移除，核心操作直接保留在主内容区。
+          <p className="mt-5 max-w-2xl text-base leading-8 text-black/72">
+            这里统一承接目标岗位、结构化岗位画像、匹配快照、简历定制任务和模拟面试蓝图，
+            让岗位模块真正成为求职闭环的中枢。
           </p>
         </div>
 
@@ -361,8 +445,8 @@ export default function DashboardJobsPage() {
             </p>
             <p className="mt-3 text-sm leading-7 text-black/65">
               {selectedJob
-                ? "继续完善 JD 原文，或切换到右侧生成新的匹配报告。"
-                : "先录入一条岗位信息，系统会自动完成第一版结构化。"}
+                ? "岗位画像、匹配快照和面试蓝图都会围绕当前岗位持续刷新。"
+                : "先录入一条岗位信息，系统会异步完成第一版岗位画像。"}
             </p>
           </CardContent>
         </Card>
@@ -371,8 +455,8 @@ export default function DashboardJobsPage() {
       <section className="grid gap-4 md:grid-cols-3">
         {[
           { label: "目标岗位", value: String(jobs.length), icon: Target },
-          { label: "可用简历", value: String(successfulResumes), icon: FileText },
-          { label: "历史报告", value: String(reports.length), icon: Sparkles },
+          { label: "可练面试", value: String(interviewReadyCount), icon: Sparkles },
+          { label: "待重跑快照", value: String(staleCount), icon: FileText },
         ].map((item) => {
           const Icon = item.icon;
 
@@ -413,15 +497,15 @@ export default function DashboardJobsPage() {
         </Alert>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_minmax(0,1.05fr)]">
+      <section className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_minmax(0,1.08fr)]">
         <div className="space-y-5">
           <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
             <CardContent className="space-y-4 px-5 py-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-black">岗位列表</p>
+                  <p className="text-sm font-medium text-black">目标岗位列表</p>
                   <p className="mt-1 text-xs leading-6 text-black/58">
-                    已结构化 {parsedJobs} 条
+                    可用简历 {successfulResumes} 份
                   </p>
                 </div>
                 <ArrowRight className="size-4 text-black/40" />
@@ -445,7 +529,7 @@ export default function DashboardJobsPage() {
 
           {jobs.length === 0 ? (
             <PageEmptyState
-              description="先创建一条 JD，系统会自动完成第一版结构化。"
+              description="先创建一条 JD，系统会异步生成岗位画像并承接后续匹配。"
               title="还没有目标岗位"
             />
           ) : (
@@ -455,6 +539,11 @@ export default function DashboardJobsPage() {
                 setSelectedJobId(jobId);
                 const nextJob = jobs.find((item) => item.id === jobId);
                 setJobDraft(nextJob ? toJobDraft(nextJob) : createEmptyJobDraft());
+                setSelectedResumeId(
+                  nextJob?.recommended_resume_id ||
+                    resumes.find((item) => item.parse_status === "success")?.id ||
+                    ""
+                );
                 setBannerMessage("");
                 setPageError("");
               }}

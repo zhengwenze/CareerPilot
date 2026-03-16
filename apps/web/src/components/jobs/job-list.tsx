@@ -20,6 +20,30 @@ function getStatusTone(status: string) {
   return "bg-[#f2f2f2] text-black/65";
 }
 
+function getStageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    draft: "待解析",
+    analyzed: "已分析",
+    matched: "已匹配",
+    tailoring_needed: "待改简历",
+    interview_ready: "可练面试",
+    training_in_progress: "训练中",
+    ready_to_apply: "可投递",
+  };
+  return labels[stage] ?? stage;
+}
+
+function getFitBandLabel(band: string | undefined) {
+  const labels: Record<string, string> = {
+    excellent: "强适配",
+    strong: "较强适配",
+    partial: "部分适配",
+    weak: "低适配",
+    unknown: "待生成",
+  };
+  return labels[band ?? "unknown"] ?? (band ?? "unknown");
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
     month: "short",
@@ -74,16 +98,26 @@ export function JobList({
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
-                  <Badge
-                    className={cn(
-                      "rounded-full px-3 py-1 hover:bg-inherit",
-                      getStatusTone(item.parse_status)
-                    )}
-                  >
-                    {item.parse_status}
-                  </Badge>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      className={cn(
+                        "rounded-full px-3 py-1 hover:bg-inherit",
+                        getStatusTone(item.parse_status)
+                      )}
+                    >
+                      {getStageLabel(item.status_stage)}
+                    </Badge>
+                    <Badge className="rounded-full border border-black/10 bg-white px-3 py-1 text-black hover:bg-white">
+                      {getFitBandLabel(item.latest_match_report?.fit_band)}
+                    </Badge>
+                    {item.latest_match_report?.stale_status === "stale" ? (
+                      <Badge className="rounded-full bg-[#FFF1F0] px-3 py-1 text-[#D93025] hover:bg-[#FFF1F0]">
+                        待重跑
+                      </Badge>
+                    ) : null}
+                  </div>
                   <span className="text-xs text-black/45">
-                    {item.job_city || "城市未填"}
+                    P{item.priority} · {item.job_city || "城市未填"}
                   </span>
                 </div>
               </CardContent>

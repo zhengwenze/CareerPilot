@@ -39,6 +39,17 @@ class RuleMatchResult:
     evidence: dict[str, object]
 
 
+@dataclass(slots=True)
+class ResumeEvidenceProfile:
+    skills: list[str]
+    keywords: list[str]
+    locations: list[str]
+    education_level: int | None
+    estimated_years: float
+    experience_evidence: list[str]
+    project_evidence: list[str]
+
+
 def _normalize_text(value: str) -> str:
     return value.strip().lower()
 
@@ -132,17 +143,39 @@ def _coverage_score(required: list[str], matched: list[str], *, weight: float) -
     return round(weight * (hit_count / len(required_lower)), 2)
 
 
+def build_resume_evidence_profile(
+    *,
+    resume: ResumeStructuredData,
+    resume_raw_text: str | None,
+) -> ResumeEvidenceProfile:
+    resume_skills = _extract_resume_skills(resume, resume_raw_text)
+    resume_keywords = _extract_resume_keywords(resume, resume_raw_text)
+    resume_locations = _extract_resume_locations(resume, resume_raw_text)
+    resume_years = _estimate_resume_years(resume, resume_raw_text)
+    resume_education_level = _extract_resume_education_level(resume, resume_raw_text)
+    return ResumeEvidenceProfile(
+        skills=resume_skills,
+        keywords=resume_keywords,
+        locations=resume_locations,
+        education_level=resume_education_level,
+        estimated_years=resume_years,
+        experience_evidence=[item for item in resume.work_experience if item.strip()],
+        project_evidence=[item for item in resume.projects if item.strip()],
+    )
+
+
 def build_rule_match_result(
     *,
     resume: ResumeStructuredData,
     resume_raw_text: str | None,
     job: JobStructuredData,
 ) -> RuleMatchResult:
-    resume_skills = _extract_resume_skills(resume, resume_raw_text)
-    resume_keywords = _extract_resume_keywords(resume, resume_raw_text)
-    resume_locations = _extract_resume_locations(resume, resume_raw_text)
-    resume_years = _estimate_resume_years(resume, resume_raw_text)
-    resume_education_level = _extract_resume_education_level(resume, resume_raw_text)
+    profile = build_resume_evidence_profile(resume=resume, resume_raw_text=resume_raw_text)
+    resume_skills = profile.skills
+    resume_keywords = profile.keywords
+    resume_locations = profile.locations
+    resume_years = profile.estimated_years
+    resume_education_level = profile.education_level
 
     required_skill_score = _coverage_score(
         job.requirements.required_skills,
@@ -271,16 +304,22 @@ def build_rule_match_result(
         )
 
     evidence = {
+        "candidate_profile": {
+            "skills": resume_skills[:8],
+            "keywords": resume_keywords[:8],
+            "estimated_years": resume_years,
+            "locations": resume_locations[:4],
+        },
         "matched_resume_fields": {
             "skills": matched_required_skills[:5],
             "projects": [
                 item
-                for item in resume.projects
+                for item in profile.project_evidence
                 if any(term.lower() in item.lower() for term in matched_keywords[:3])
             ][:3],
             "work_experience": [
                 item
-                for item in resume.work_experience
+                for item in profile.experience_evidence
                 if any(
                     term.lower() in item.lower()
                     for term in matched_required_skills[:3] + matched_keywords[:3]
@@ -290,8 +329,31 @@ def build_rule_match_result(
         "matched_jd_fields": {
             "required_skills": matched_required_skills[:5],
             "required_keywords": matched_keywords[:5],
+            "must_have": job.must_have[:5],
+            "responsibility_clusters": [cluster.name for cluster in job.responsibility_clusters[:3]],
         },
         "missing_items": _dedupe(missing_required_skills + missing_keywords)[:6],
+        "missing_must_have": missing_required_skills[:5],
+        "responsibility_alignment": {
+            "matched": [
+                item
+                for item in job.responsibilities[:5]
+                if any(keyword.lower() in " ".join(profile.keywords).lower() for keyword in item.split())
+            ][:3],
+            "unmatched": [
+                item
+                for item in job.responsibilities[:5]
+                if item
+                not in [
+                    matched_item
+                    for matched_item in job.responsibilities[:5]
+                    if any(
+                        keyword.lower() in " ".join(profile.keywords).lower()
+                        for keyword in matched_item.split()
+                    )
+                ]
+            ][:3],
+        },
         "notes": [
             "规则分基于技能覆盖、关键词覆盖、职责匹配、经验等级和教育地点五个维度。",
         ],

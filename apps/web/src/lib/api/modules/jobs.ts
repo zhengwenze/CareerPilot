@@ -7,6 +7,24 @@ export type JobStructuredData = {
     job_city: string | null;
     employment_type: string | null;
   };
+  must_have: string[];
+  nice_to_have: string[];
+  responsibility_clusters: Array<{
+    name: string;
+    items: string[];
+  }>;
+  experience_constraints: {
+    education: string | null;
+    experience_min_years: number | null;
+    location: string | null;
+    employment_type: string | null;
+  };
+  domain_context: {
+    keywords: string[];
+    seniority_hint: string | null;
+    summary: string | null;
+    benefits: string[];
+  };
   requirements: {
     required_skills: string[];
     preferred_skills: string[];
@@ -19,6 +37,42 @@ export type JobStructuredData = {
   raw_summary: string | null;
 };
 
+export type JobParseJobRecord = {
+  id: string;
+  status: string;
+  attempt_count: number;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JobReadinessEventRecord = {
+  id: string;
+  user_id: string;
+  job_id: string;
+  resume_id: string | null;
+  match_report_id: string | null;
+  status_from: string | null;
+  status_to: string;
+  reason: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JobLatestMatchReportSummary = {
+  id: string;
+  status: string;
+  overall_score: string;
+  fit_band: string;
+  stale_status: string;
+  resume_id: string;
+  resume_version: number;
+  created_at: string;
+};
+
 export type JobRecord = {
   id: string;
   user_id: string;
@@ -29,9 +83,19 @@ export type JobRecord = {
   source_name: string | null;
   source_url: string | null;
   jd_text: string;
+  latest_version: number;
+  priority: number;
+  status_stage: string;
+  recommended_resume_id: string | null;
+  latest_match_report_id: string | null;
+  parse_confidence: string | null;
+  competency_graph_json: Record<string, unknown>;
   parse_status: string;
   parse_error: string | null;
   structured_json: JobStructuredData | null;
+  latest_parse_job: JobParseJobRecord | null;
+  latest_match_report: JobLatestMatchReportSummary | null;
+  recent_readiness_events: JobReadinessEventRecord[];
   created_at: string;
   updated_at: string;
 };
@@ -53,7 +117,11 @@ export type MatchReportRecord = {
   user_id: string;
   resume_id: string;
   jd_id: string;
+  resume_version: number;
+  job_version: number;
   status: string;
+  fit_band: string;
+  stale_status: string;
   overall_score: string;
   rule_score: string;
   model_score: string;
@@ -69,6 +137,39 @@ export type MatchReportRecord = {
     missing_items: string[];
     notes: string[];
     ai_correction: Record<string, unknown>;
+  };
+  scorecard_json: Record<string, unknown>;
+  evidence_map_json: {
+    matched_resume_fields?: Record<string, string[]>;
+    matched_jd_fields?: Record<string, string[]>;
+    missing_items?: string[];
+    notes?: string[];
+    candidate_profile?: Record<string, unknown>;
+    resume_version?: number;
+    job_version?: number;
+  };
+  gap_taxonomy_json: {
+    must_fix?: MatchInsightItem[];
+    should_fix?: MatchInsightItem[];
+    watchlist?: Array<Record<string, string>>;
+  };
+  action_pack_json: {
+    resume_tailoring_tasks?: Array<Record<string, unknown>>;
+    interview_focus_areas?: Array<Record<string, unknown>>;
+    missing_user_inputs?: Array<Record<string, string>>;
+  };
+  tailoring_plan_json: {
+    target_summary?: string;
+    rewrite_tasks?: Array<Record<string, unknown>>;
+    must_add_evidence?: string[];
+    missing_info_questions?: Array<Record<string, string>>;
+  };
+  interview_blueprint_json: {
+    target_role?: string;
+    focus_areas?: Array<Record<string, unknown>>;
+    question_pack?: Array<Record<string, unknown>>;
+    follow_up_rules?: string[];
+    rubric?: Array<Record<string, unknown>>;
   };
   error_message: string | null;
   created_at: string;
@@ -123,6 +224,16 @@ function normalizeDraft(draft: JobDraft) {
 
 export async function fetchJobList(token: string): Promise<JobRecord[]> {
   return apiRequest<JobRecord[]>("/jobs", {
+    method: "GET",
+    token,
+  });
+}
+
+export async function fetchJobDetail(
+  token: string,
+  jobId: string
+): Promise<JobRecord> {
+  return apiRequest<JobRecord>(`/jobs/${jobId}`, {
     method: "GET",
     token,
   });

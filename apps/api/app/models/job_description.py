@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -30,6 +30,28 @@ class JobDescription(TimestampMixin, UserAuditMixin, Base):
     source_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     jd_text: Mapped[str] = mapped_column(Text, nullable=False)
+    latest_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=3,
+        server_default="3",
+    )
+    status_stage: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="draft",
+        server_default="draft",
+    )
+    recommended_resume_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    latest_match_report_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    parse_confidence: Mapped[float | None] = mapped_column(Numeric(4, 2), nullable=True)
+    competency_graph_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     parse_status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

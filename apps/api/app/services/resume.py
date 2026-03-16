@@ -23,6 +23,7 @@ from app.schemas.resume import (
     ResumeStructuredData,
     ResumeStructuredUpdateRequest,
 )
+from app.services.match_support import mark_reports_stale_for_resume
 from app.services.resume_parser import build_structured_resume, extract_text_from_pdf_bytes
 from app.services.storage import ObjectStorage
 
@@ -588,6 +589,11 @@ async def update_resume_structured_data(
         resume.parse_status = "success"
         resume.parse_error = None
 
+    await mark_reports_stale_for_resume(
+        session,
+        resume_id=resume.id,
+        resume_version=resume.latest_version,
+    )
     session.add(resume)
     await session.commit()
     await session.refresh(resume)
