@@ -857,14 +857,14 @@ CareerPilot 当前已经具备一个不错的起点：
 
 这张参考图的界面特征大致是：
 
-* **整体风格**：典型苹果官网式极简设计，留白很多，秩序感强
-* **主色调**：大面积白色/浅灰白背景
-* **字体**：全部黑色，标题粗体，大字高对比
-* **按钮**：苹果风格蓝色主按钮，圆角胶囊按钮
-* **布局**：顶部导航 + 中央 Hero 主视觉区域
-* **信息层级**：品牌标题最大，副标题次之，按钮第三层
-* **产品展示**：中间大图居中，突出产品主体
-* **页面气质**：干净、高级、科技感、克制、不花哨
+- **整体风格**：典型苹果官网式极简设计，留白很多，秩序感强
+- **主色调**：大面积白色/浅灰白背景
+- **字体**：全部黑色，标题粗体，大字高对比
+- **按钮**：苹果风格蓝色主按钮，圆角胶囊按钮
+- **布局**：顶部导航 + 中央 Hero 主视觉区域
+- **信息层级**：品牌标题最大，副标题次之，按钮第三层
+- **产品展示**：中间大图居中，突出产品主体
+- **页面气质**：干净、高级、科技感、克制、不花哨
 
 下面是我给你整理好的**可直接用于生成前端界面**的提示词。
 
@@ -876,24 +876,25 @@ CareerPilot 当前已经具备一个不错的起点：
 
 具体要求如下：
 
-* 页面整体采用 **白色为主色调**
-* **所有文字必须使用黑色**
-* 功能按钮使用 **苹果风格蓝色**
-* 顶部为简洁的横向导航栏，导航文字黑色，背景白色
-* 首屏为居中的 Hero 区域
-* 主标题使用超大号黑色粗体字体，视觉中心明确
-* 副标题使用较小一号黑色字体，简洁有力
-* 标题下方放置两个操作按钮：
+- 页面整体采用 **白色为主色调**
+- **所有文字必须使用黑色**
+- 功能按钮使用 **苹果风格蓝色**
+- 顶部为简洁的横向导航栏，导航文字黑色，背景白色
+- 首屏为居中的 Hero 区域
+- 主标题使用超大号黑色粗体字体，视觉中心明确
+- 副标题使用较小一号黑色字体，简洁有力
+- 标题下方放置两个操作按钮：
 
-  * 主按钮：蓝色实心圆角按钮
-  * 次按钮：白底蓝边框圆角按钮
-* 中间展示一张大尺寸产品图，居中排版，突出产品主体
-* 整体布局对齐工整，留白充足，风格接近 Apple 官网
-* 不要复杂装饰，不要渐变背景，不要杂乱配色
-* 设计重点是 **简洁、克制、高级、现代**
-* 页面需具备优秀的响应式表现，桌面端优先
-* 字体风格参考苹果官网，现代无衬线字体
-* 按钮、间距、圆角、排版都要体现苹果设计语言
+  - 主按钮：蓝色实心圆角按钮
+  - 次按钮：白底蓝边框圆角按钮
+
+- 中间展示一张大尺寸产品图，居中排版，突出产品主体
+- 整体布局对齐工整，留白充足，风格接近 Apple 官网
+- 不要复杂装饰，不要渐变背景，不要杂乱配色
+- 设计重点是 **简洁、克制、高级、现代**
+- 页面需具备优秀的响应式表现，桌面端优先
+- 字体风格参考苹果官网，现代无衬线字体
+- 按钮、间距、圆角、排版都要体现苹果设计语言
 
 ---
 
@@ -903,26 +904,28 @@ CareerPilot 当前已经具备一个不错的起点：
 
 设计规范：
 
-* Background: pure white
-* Text color: black only
-* Primary action buttons: Apple-style blue
-* Layout: clean, centered, spacious, minimal
-* Top navigation bar: white background, black text, simple horizontal menu
-* Hero section:
+- Background: pure white
+- Text color: black only
+- Primary action buttons: Apple-style blue
+- Layout: clean, centered, spacious, minimal
+- Top navigation bar: white background, black text, simple horizontal menu
+- Hero section:
 
-  * very large bold black headline
-  * medium-size black subheadline
-  * two CTA buttons below headline
-* Buttons:
+  - very large bold black headline
+  - medium-size black subheadline
+  - two CTA buttons below headline
 
-  * primary button: filled blue, pill-shaped, elegant hover effect
-  * secondary button: white background, blue border, blue text, pill-shaped
-* Product image centered below text
-* Large whitespace, premium composition, perfect alignment
-* Overall feel: premium, futuristic, calm, minimal, Apple.com inspired
-* No clutter, no dark theme, no colorful decorations
-* Typography should look like SF Pro / Apple-style sans-serif
-* Responsive and production-quality UI
+- Buttons:
+
+  - primary button: filled blue, pill-shaped, elegant hover effect
+  - secondary button: white background, blue border, blue text, pill-shaped
+
+- Product image centered below text
+- Large whitespace, premium composition, perfect alignment
+- Overall feel: premium, futuristic, calm, minimal, Apple.com inspired
+- No clutter, no dark theme, no colorful decorations
+- Typography should look like SF Pro / Apple-style sans-serif
+- Responsive and production-quality UI
 
 ---
 
@@ -930,16 +933,16 @@ CareerPilot 当前已经具备一个不错的起点：
 
 设计一个 **苹果官网风格的产品展示页面**：
 
-* 白色背景
-* 黑色字体
-* 蓝色操作按钮
-* 顶部极简导航栏
-* 中间大标题 + 副标题 + 双按钮
-* 下方展示产品主图
-* 风格高级、极简、留白充足
-* 视觉干净、现代、科技感强
-* 类似 Apple 官网新品发布页的首屏视觉
-* 强调居中构图、超大标题、精致圆角按钮、整洁间距
+- 白色背景
+- 黑色字体
+- 蓝色操作按钮
+- 顶部极简导航栏
+- 中间大标题 + 副标题 + 双按钮
+- 下方展示产品主图
+- 风格高级、极简、留白充足
+- 视觉干净、现代、科技感强
+- 类似 Apple 官网新品发布页的首屏视觉
+- 强调居中构图、超大标题、精致圆角按钮、整洁间距
 
 ---
 
@@ -947,14 +950,14 @@ CareerPilot 当前已经具备一个不错的起点：
 
 请输出高质量前端代码，并满足以下要求：
 
-* 使用现代响应式布局
-* 代码结构清晰，组件化
-* 视觉高度还原苹果官网风格
-* 不使用复杂炫技动画
-* Hover 效果克制自然
-* 按钮圆角较大，具有苹果官网质感
-* 页面宽度、间距、字号比例协调
-* 优先保证简洁与高级感
+- 使用现代响应式布局
+- 代码结构清晰，组件化
+- 视觉高度还原苹果官网风格
+- 不使用复杂炫技动画
+- Hover 效果克制自然
+- 按钮圆角较大，具有苹果官网质感
+- 页面宽度、间距、字号比例协调
+- 优先保证简洁与高级感
 
 ---
 

@@ -52,10 +52,29 @@ SECTION_PATTERNS = {
     "certifications": [
         "证书",
         "证书奖项",
+        "竞赛获奖",
+        "科研成果",
+        "软件著作权",
         "certifications",
         "awards",
     ],
 }
+INLINE_SECTION_HEADINGS = (
+    "教育背景",
+    "教育经历",
+    "工作经历",
+    "实习经历",
+    "项目经历",
+    "项目经验",
+    "项目背景",
+    "专业技能",
+    "技术栈",
+    "项目成果",
+    "证书奖项",
+    "竞赛获奖",
+    "科研成果",
+    "软件著作权",
+)
 
 TECHNICAL_KEYWORDS = [
     "A/B Testing",
@@ -247,9 +266,17 @@ def _normalize_text(value: str) -> str:
     return normalized.strip()
 
 
+def _inject_inline_section_breaks(value: str) -> str:
+    result = value
+    for heading in INLINE_SECTION_HEADINGS:
+        result = re.sub(rf"([^\s\n|｜])({re.escape(heading)})", r"\1\n\2", result)
+    return result
+
+
 def _normalize_lines(raw_text: str) -> list[str]:
+    prepared_text = _inject_inline_section_breaks(_normalize_text(raw_text))
     lines: list[str] = []
-    for block in raw_text.splitlines():
+    for block in prepared_text.splitlines():
         normalized = _normalize_text(block)
         if not normalized:
             continue
@@ -275,6 +302,15 @@ def _detect_location(lines: list[str]) -> str:
 
 
 def _guess_name(lines: list[str]) -> str:
+    if lines:
+        match = re.match(
+            r"^([\u4e00-\u9fffA-Za-z·\s]{2,30}?)(?=(?:电话|手机|邮箱|email|phone)\s*[:：])",
+            lines[0],
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).strip()
+
     for line in lines[:5]:
         lowered = line.lower()
         if EMAIL_PATTERN.search(line) or PHONE_PATTERN.search(line):
@@ -312,6 +348,8 @@ def _match_section(line: str) -> str | None:
             if normalized.startswith(f"{heading}:") or normalized.startswith(f"{heading}："):
                 return section
             if normalized.startswith(f"{heading} "):
+                return section
+            if normalized.startswith(heading):
                 return section
     return None
 
@@ -385,6 +423,12 @@ def _looks_like_education_line(line: str) -> bool:
 
 def _looks_like_work_line(line: str) -> bool:
     lowered = line.lower()
+    if lowered.startswith("实习时间") or lowered.startswith("到岗时间"):
+        return False
+    if any(token in lowered for token in EDUCATION_HINTS) and not any(
+        token in lowered for token in ("有限公司", "公司", "intern", "工程师", "经理", "分析师", "产品", "运营", "研发")
+    ):
+        return False
     return bool(DATE_SPAN_PATTERN.search(lowered)) or any(token in lowered for token in WORK_HINTS)
 
 
