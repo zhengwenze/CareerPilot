@@ -34,6 +34,10 @@ from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 RESUME_PARSE_TIMEOUT_SECONDS = 120
+AI_STATUS_PENDING = "pending"
+AI_STATUS_APPLIED = "applied"
+AI_STATUS_FALLBACK_RULE = "fallback_rule"
+AI_STATUS_SKIPPED = "skipped"
 logger = logging.getLogger(__name__)
 
 
@@ -58,6 +62,16 @@ def sanitize_file_name(file_name: str) -> str:
     if suffix:
         return f"{stem or f'resume-{uuid4().hex}'}{suffix}"
     return stem or f"resume-{uuid4().hex}.pdf"
+
+
+def set_parse_job_ai_result(
+    parse_job: ResumeParseJob,
+    *,
+    status: str | None,
+    message: str | None,
+) -> None:
+    parse_job.ai_status = status
+    parse_job.ai_message = message
 
 
 def build_storage_object_key(*, user_id: UUID, resume_id: UUID, file_name: str) -> str:
@@ -273,6 +287,11 @@ async def process_resume_parse_job(
 
         parse_job.status = "processing"
         parse_job.attempt_count += 1
+        set_parse_job_ai_result(
+            parse_job,
+            status=AI_STATUS_PENDING,
+            message="AI 校准进行中",
+        )
         parse_job.error_message = None
         parse_job.started_at = utc_now_naive()
         parse_job.updated_by = resume.user_id
@@ -345,6 +364,11 @@ async def process_resume_parse_job(
                             rule_result=structured,
                             ai_result=ai_result.structured_data,
                         )
+                        set_parse_job_ai_result(
+                            parse_job,
+                            status=AI_STATUS_APPLIED,
+                            message="AI 校准成功",
+                        )
                         logger.info(
                             (
                                 "Applied resume AI correction: resume_id=%s provider=%s model=%s "
@@ -357,6 +381,11 @@ async def process_resume_parse_job(
                             len(ai_result.corrections),
                         )
                     else:
+                        set_parse_job_ai_result(
+                            parse_job,
+                            status=AI_STATUS_SKIPPED,
+                            message="AI 校准未启用",
+                        )
                         logger.info(
                             "Skipped resume AI correction: resume_id=%s provider=%s status=%s",
                             resume_id,
@@ -364,6 +393,11 @@ async def process_resume_parse_job(
                             ai_result.status,
                         )
                 except Exception as exc:
+                    set_parse_job_ai_result(
+                        parse_job,
+                        status=AI_STATUS_FALLBACK_RULE,
+                        message="AI 校准失败，已回退规则解析",
+                    )
                     logger.warning(
                         "Resume AI correction fallback to rule result: resume_id=%s reason=%s",
                         resume_id,
@@ -384,6 +418,7 @@ async def process_resume_parse_job(
                 parse_job_id,
                 RESUME_PARSE_TIMEOUT_SECONDS,
             )
+            set_parse_job_ai_result(parse_job, status=None, message=None)
             resume.parse_status = "failed"
             resume.parse_error = "Resume parse timed out"
             parse_job.status = "failed"
@@ -399,6 +434,7 @@ async def process_resume_parse_job(
                 exc.message,
                 exc.details,
             )
+            set_parse_job_ai_result(parse_job, status=None, message=None)
             resume.parse_status = "failed"
             resume.parse_error = exc.message
             parse_job.status = "failed"
@@ -409,6 +445,7 @@ async def process_resume_parse_job(
                 resume_id,
                 parse_job_id,
             )
+            set_parse_job_ai_result(parse_job, status=None, message=None)
             resume.parse_status = "failed"
             resume.parse_error = "Unexpected parse failure"
             parse_job.status = "failed"
