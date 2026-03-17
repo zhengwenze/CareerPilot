@@ -35,6 +35,8 @@ class ResumeParseJobResponse(BaseModel):
     id: UUID
     status: str
     attempt_count: int
+    ai_status: str | None
+    ai_message: str | None
     error_message: str | None
     started_at: datetime | None
     finished_at: datetime | None

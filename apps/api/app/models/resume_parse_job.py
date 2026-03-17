@@ -34,6 +34,8 @@ class ResumeParseJob(TimestampMixin, UserAuditMixin, Base):
         default=0,
         server_default="0",
     )
+    ai_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
