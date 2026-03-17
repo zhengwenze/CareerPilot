@@ -31,6 +31,8 @@ export type ResumeParseJob = {
   id: string;
   status: string;
   attempt_count: number;
+  ai_status: string | null;
+  ai_message: string | null;
   error_message: string | null;
   started_at: string | null;
   finished_at: string | null;
@@ -223,6 +225,7 @@ export async function fetchResumeParseJobs(
     jobs: response.map((job) => ({
       id: job.id,
       status: job.status,
+      aiStatus: job.ai_status,
       attempts: job.attempt_count,
       startedAt: job.started_at,
       finishedAt: job.finished_at,

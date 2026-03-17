@@ -4,29 +4,21 @@ import { Download, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import { PageEmptyState } from "@/components/page-state";
 import { ResumeStructuredEditor } from "@/components/resume/resume-structured-editor";
+import {
+  getResumeAIStatusMeta,
+  getResumeStatusMeta,
+} from "@/components/resume/status-meta";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type {
   ResumeParseJob,
   ResumeRecord,
   ResumeStructuredData,
 } from "@/lib/api/modules/resume";
-
-function getStatusTone(status: string) {
-  if (status === "success") {
-    return "bg-[#E8F7EE] text-[#18864B]";
-  }
-  if (status === "failed") {
-    return "bg-[#FFF1F0] text-[#D93025]";
-  }
-  if (status === "processing") {
-    return "bg-[#FFF7E6] text-[#B26A00]";
-  }
-  return "bg-[#f2f2f2] text-black/65";
-}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -73,19 +65,43 @@ export function ResumeDetailPanel({
     );
   }
 
+  const statusMeta = getResumeStatusMeta(resume.parse_status);
+  const aiStatusMeta = getResumeAIStatusMeta(
+    resume.latest_parse_job?.ai_status,
+    resume.latest_parse_job?.ai_message
+  );
+
   return (
     <div className="space-y-5">
       <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
         <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
-              <Badge
-                className={`rounded-full px-3 py-1 hover:bg-inherit ${getStatusTone(
-                  resume.parse_status
-                )}`}
-              >
-                {resume.parse_status}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  className={cn(
+                    "rounded-full px-3 py-1 hover:bg-inherit",
+                    statusMeta.className
+                  )}
+                >
+                  {statusMeta.label}
+                </Badge>
+                {aiStatusMeta ? (
+                  <Badge
+                    className={cn(
+                      "rounded-full px-3 py-1 hover:bg-inherit",
+                      aiStatusMeta.className
+                    )}
+                  >
+                    {aiStatusMeta.label}
+                  </Badge>
+                ) : null}
+                {isStructuredDirty ? (
+                  <Badge className="rounded-full bg-[#FFF7E6] px-3 py-1 text-[#B26A00] hover:bg-[#FFF7E6]">
+                    有未保存修改
+                  </Badge>
+                ) : null}
+              </div>
               <div className="space-y-2">
                 <h2 className="text-3xl font-semibold tracking-[-0.04em] text-black">
                   {resume.file_name}
@@ -96,14 +112,15 @@ export function ResumeDetailPanel({
                   {resume.latest_version}
                 </p>
               </div>
+              {resume.latest_parse_job?.ai_status === "fallback_rule" &&
+              resume.latest_parse_job.ai_message ? (
+                <p className="text-sm text-[#B26A00]">
+                  {resume.latest_parse_job.ai_message}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {isStructuredDirty ? (
-                <Badge className="rounded-full bg-[#FFF7E6] px-3 py-1 text-[#B26A00] hover:bg-[#FFF7E6]">
-                  有未保存修改
-                </Badge>
-              ) : null}
               <Button
                 className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
                 disabled={isRetrying}
@@ -142,8 +159,8 @@ export function ResumeDetailPanel({
                 {isSaving
                   ? "保存中..."
                   : isStructuredDirty
-                  ? "保存人工修正"
-                  : "暂无待保存修改"}
+                    ? "保存人工修正"
+                    : "暂无待保存修改"}
                 <Save className="size-4" />
               </Button>
             </div>
@@ -152,11 +169,11 @@ export function ResumeDetailPanel({
           {resume.parse_error ? (
             <Alert className="mt-5 rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
               <AlertTitle className="text-black">解析失败</AlertTitle>
-              <AlertDescription className="text-black/72">{resume.parse_error}</AlertDescription>
+              <AlertDescription className="text-black/72">
+                {resume.parse_error}
+              </AlertDescription>
             </Alert>
           ) : null}
-
-
         </CardContent>
       </Card>
 
@@ -178,45 +195,65 @@ export function ResumeDetailPanel({
             />
 
             <div className="space-y-3">
-              <p className="text-sm font-medium text-black">
-                解析任务记录
-              </p>
+              <p className="text-sm font-medium text-black">解析任务记录</p>
               <div className="space-y-3">
                 {parseJobs.length === 0 ? (
                   <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-white px-4 py-4 text-sm text-black/58">
                     还没有解析任务记录。
                   </div>
                 ) : null}
-                {parseJobs.map((job) => (
-                  <div
-                    className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
-                    key={job.id}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <Badge
-                        className={`rounded-full px-3 py-1 hover:bg-inherit ${getStatusTone(
-                          job.status
-                        )}`}
-                      >
-                        {job.status}
-                      </Badge>
-                      <span className="text-xs text-black/45">
-                        尝试 {job.attempt_count} 次
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs leading-6 text-black/55">
-                      创建于 {formatDate(job.created_at)}
-                      {job.finished_at
-                        ? `，结束于 ${formatDate(job.finished_at)}`
-                        : ""}
-                    </p>
-                    {job.error_message ? (
-                      <p className="mt-2 text-sm text-[#D93025]">
-                        {job.error_message}
+                {parseJobs.map((job) => {
+                  const jobStatusMeta = getResumeStatusMeta(job.status);
+                  const jobAiStatusMeta = getResumeAIStatusMeta(
+                    job.ai_status,
+                    job.ai_message
+                  );
+
+                  return (
+                    <div
+                      className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
+                      key={job.id}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            className={cn(
+                              "rounded-full px-3 py-1 hover:bg-inherit",
+                              jobStatusMeta.className
+                            )}
+                          >
+                            {jobStatusMeta.label}
+                          </Badge>
+                          {jobAiStatusMeta ? (
+                            <Badge
+                              className={cn(
+                                "rounded-full px-3 py-1 hover:bg-inherit",
+                                jobAiStatusMeta.className
+                              )}
+                            >
+                              {jobAiStatusMeta.label}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <span className="text-xs text-black/45">
+                          尝试 {job.attempt_count} 次
+                        </span>
+                      </div>
+                      <p className="mt-3 text-xs leading-6 text-black/55">
+                        创建于 {formatDate(job.created_at)}
+                        {job.finished_at ? `，结束于 ${formatDate(job.finished_at)}` : ""}
                       </p>
-                    ) : null}
-                  </div>
-                ))}
+                      {job.ai_status === "fallback_rule" && job.ai_message ? (
+                        <p className="mt-2 text-sm text-[#B26A00]">{job.ai_message}</p>
+                      ) : null}
+                      {job.error_message ? (
+                        <p className="mt-2 text-sm text-[#D93025]">
+                          {job.error_message}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </CardContent>

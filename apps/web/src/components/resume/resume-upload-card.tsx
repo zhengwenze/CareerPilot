@@ -3,7 +3,6 @@
 import { useRef } from "react";
 import { FileUp } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -19,16 +18,13 @@ export function ResumeUploadCard({
   return (
     <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
       <CardHeader className="px-5 py-5">
-        <Badge className="w-fit border border-black/10 bg-white text-black hover:bg-white">
-          Upload
-        </Badge>
         <CardTitle className="text-xl font-semibold text-black">
           上传 PDF 简历
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 px-5 pb-5">
         <p className="text-sm leading-7 text-black/65">
-          上传后会自动进入解析流程，系统会抽取文本并生成可人工修正的结构化结果。
+          上传后会自动解析，并生成可直接修正的结构化结果。
         </p>
 
         <input

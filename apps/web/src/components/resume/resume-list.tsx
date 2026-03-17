@@ -2,23 +2,11 @@
 
 import { FileText } from "lucide-react";
 
+import { getResumeStatusMeta } from "@/components/resume/status-meta";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { ResumeRecord } from "@/lib/api/modules/resume";
-
-function getStatusTone(status: string) {
-  if (status === "success") {
-    return "bg-[#E8F7EE] text-[#18864B]";
-  }
-  if (status === "failed") {
-    return "bg-[#FFF1F0] text-[#D93025]";
-  }
-  if (status === "processing") {
-    return "bg-[#FFF7E6] text-[#B26A00]";
-  }
-  return "bg-[#f2f2f2] text-black/65";
-}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -42,6 +30,7 @@ export function ResumeList({
     <div className="space-y-3">
       {items.map((item) => {
         const isActive = item.id === selectedResumeId;
+        const statusMeta = getResumeStatusMeta(item.parse_status);
 
         return (
           <button
@@ -77,10 +66,10 @@ export function ResumeList({
                   <Badge
                     className={cn(
                       "rounded-full px-3 py-1 hover:bg-inherit",
-                      getStatusTone(item.parse_status)
+                      statusMeta.className
                     )}
                   >
-                    {item.parse_status}
+                    {statusMeta.label}
                   </Badge>
                   <span className="text-xs text-black/45">
                     v{item.latest_version}
