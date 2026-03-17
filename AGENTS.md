@@ -1,44 +1,126 @@
 # AGENTS.md
 
-本文件为编码代理提供 CareerPilot 仓库中的工作约束、导航信息、验证要求与调试流程。
+本文件为 CareerPilot 仓库中的编码代理提供任务驱动的工作约束、导航入口、验证要求与交付规范。目标不是描述整个仓库，而是帮助代理更快找到正确入口、执行最小修改、完成最小必要验证。
 
-## Scope and Precedence
+## 1. Scope and Core Rules
+
+### Scope and precedence
 
 - 本文件适用于仓库根目录及所有未被子目录 AGENTS.md 覆盖的目录。
-- 若子目录存在更具体的 AGENTS.md（或工具支持的 override 文件），以子目录规则为准。
+- 若子目录存在更具体的 AGENTS.md 或 override 文件，以更具体的规则为准。
 - 若用户在当前任务中给出明确指令，优先遵循用户指令；若与本文件冲突，需在结果中说明偏离原因。
 
-## Repository Overview
+### Repository snapshot
 
-- **Monorepo root**: `.`
-- **Backend**: `apps/api` (FastAPI + SQLAlchemy + PostgreSQL)
-- **Frontend**: `apps/web` (Next.js 16 + React 19 + TypeScript)
-- **中间件服务**: PostgreSQL (5432), Redis (6380), MinIO (9000/9001)
+- Monorepo root: `.`
+- Backend: `apps/api`，FastAPI + SQLAlchemy + PostgreSQL
+- Frontend: `apps/web`，Next.js 16 + React 19 + TypeScript
+- 中间件服务: PostgreSQL `5432`、Redis `6380`、MinIO `9000/9001`
 
-### 代理最常见的任务类型
+### Hard rules
 
-- 新增/修改 API 接口
-- 修改数据模型或数据库迁移
-- 调试简历解析/岗位匹配/简历优化等核心业务链路
-- 前端页面开发与状态管理
-- 后台任务调试与日志排查
+- 不要默认重装依赖；优先使用已有依赖环境，仅在明确需要时执行 `uv sync` 或 `npm install`。
+- 不要默认跑全量测试；优先运行与改动范围直接相关的最小验证。
+- 不要无任务目的地扫描整个仓库；先看与当前任务直接相关的文件。
+- 除非任务明确要求，否则不要顺手重命名文件、抽象公共层、升级依赖或调整目录结构。
+- 在开始修改前，先用 3-5 行说明计划与改动范围。
+- 完成修改后，列出受影响文件，并说明每个文件为何需要改动。
 
-## Task-oriented Navigation
+### Change boundaries
 
-根据任务类型快速定位相关代码：
+允许修改：
 
-- **新增/修改 API**：先看 `apps/api/app/api/`
-- **修改数据模型**：先看 `apps/api/app/models/`
-- **解析任务/后台链路**：先看 `apps/api/app/services/`
-- **前端上传与简历页面**：先看 `apps/web/src/app/(dashboard)/dashboard/resume/`
-- **前端岗位匹配页面**：先看 `apps/web/src/app/(dashboard)/dashboard/jobs/`
-- **前端简历优化页面**：先看 `apps/web/src/app/(dashboard)/dashboard/optimizer/`
-- **轮询与客户端状态**：先看 `apps/web/src/hooks/` 和 `apps/web/src/lib/`
-- **后端测试**：`apps/api/tests/`
+- 业务代码
+- 测试代码
+- 前端页面与组件
+- 轮询逻辑与客户端状态管理
 
-## Environment and Services
+慎改：
 
-### 依赖服务启动命令
+- 解析 schema 定义
+- 对象存储配置
+- 状态机定义
+- 解析脚本规则
+
+禁止修改：
+
+- 历史迁移文件 `alembic/versions/`
+- 基础设施编排文件，除非任务明确要求
+- 无关的 package lock 文件
+- `.env.example` 中的变量名，除非任务明确要求
+
+### Frontend visual rule
+
+- 前端默认采用 Apple 风格：白色背景、黑色文字、蓝色主按钮，不使用杂乱配色和深色主题。
+- 导航优先放顶部，布局居中，对齐整齐，留白充足，桌面端优先再适配移动端。
+- 组件视觉保持克制：大圆角、细边框、轻阴影，不使用复杂渐变、厚重毛玻璃或炫技动画。
+- 页面优先展示真实功能与真实数据，删除无实际作用的占位卡片、解释性文案和假内容。
+- 文案简短直接，信息层级清楚；一个区域只表达一个核心目的，避免界面拥挤。
+
+### Must stop and report
+
+如果出现以下任一情况，必须停下并说明原因、已执行排查、缺失条件与建议后续步骤：
+
+- 任务需要修改禁止区域
+- 无法复现且缺少必要输入
+- 外部依赖不可用，导致无法继续
+- 验证无法完成
+
+### Secrets and environment safety
+
+- 不要在代码、测试、日志或提交说明中写入真实密钥。
+- 不要修改 `.env.example` 中变量名，除非任务明确要求。
+- 若新增环境变量，必须同时更新示例文件与说明。
+
+## 2. High-Frequency Paths
+
+按任务类型快速进入，避免大范围搜索。
+
+### Resume upload / parse / retry / structured save
+
+- 上传入口：`apps/api/app/api/routes/resumes.py`
+- 业务编排：`apps/api/app/services/resume.py`
+- 规则解析：`apps/api/app/services/resume_parser.py`
+- AI 校正：`apps/api/app/services/resume_ai.py`
+- 数据模型：`apps/api/app/models/resume.py`、`apps/api/app/models/resume_parse_job.py`
+- API schema：`apps/api/app/schemas/resume.py`
+- 前端页面：`apps/web/src/app/(dashboard)/dashboard/resume/page.tsx`
+- 前端 API 映射：`apps/web/src/lib/api/modules/resume.ts`
+- 前端详情组件：`apps/web/src/components/resume/`
+- 后端测试：`apps/api/tests/test_resume.py`、`apps/api/tests/test_resume_parser.py`
+
+### Match report
+
+- API 入口：`apps/api/app/api/routes/match_reports.py`
+- 业务编排：`apps/api/app/services/match_report.py`
+- 规则匹配：`apps/api/app/services/match_engine.py`
+- AI 修正：`apps/api/app/services/match_ai.py`
+- 数据模型：`apps/api/app/models/match_report.py`、`apps/api/app/models/job_description.py`
+- 测试：`apps/api/tests/test_match_reports.py`、`apps/api/tests/test_jobs.py`
+
+### Resume optimization
+
+- API 入口：`apps/api/app/api/routes/resume_optimization.py`
+- 业务逻辑：`apps/api/app/services/resume_optimizer.py`
+- 数据模型：`apps/api/app/models/resume_optimization_session.py`
+- 前端页面：`apps/web/src/app/(dashboard)/dashboard/optimizer/page.tsx`
+- 测试：`apps/api/tests/test_resume_optimizer.py`
+
+### Profile and auth
+
+- Profile API：`apps/api/app/api/routes/profile.py`
+- Auth API：`apps/api/app/api/routes/auth.py`
+- 服务层：`apps/api/app/services/profile.py`、`apps/api/app/services/auth.py`
+- 测试：`apps/api/tests/test_profile.py`、`apps/api/tests/test_auth.py`
+
+### Config, storage, and fixtures
+
+- 运行时配置：`apps/api/app/core/config.py`
+- Object storage：`apps/api/app/services/storage.py`
+- 测试夹具：`apps/api/tests/conftest.py`
+- 本地大模型代理：`scripts/codex2gpt/`
+
+### Environment commands
 
 ```bash
 # 检查依赖服务状态
@@ -49,202 +131,230 @@ docker compose -f docker-compose.middleware.yml up -d
 
 # 停止依赖服务
 docker compose -f docker-compose.middleware.yml down
-```
 
-### 后端启动命令
-
-```bash
+# 启动后端
 cd apps/api
 uv sync --group dev
 uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
 
-### 前端启动命令
-
-```bash
+# 启动前端
 cd apps/web
 npm run dev
 ```
 
-### 前端 Apple 风格 UI 规则
-
-- 前端默认采用苹果Apple官网风格：白色背景、黑色文字、蓝色主按钮，不使用杂乱配色和深色主题
-- 导航优先放顶部，布局居中，对齐整齐，留白充足，桌面端优先再适配移动端
-- 组件视觉保持克制：大圆角、细边框、轻阴影，不使用复杂渐变、厚重毛玻璃或炫技动画
-- 页面优先展示真实功能与真实数据，删除无实际作用的占位卡片、解释性文案和假内容
-- 文案简短直接，信息层级清楚；一个区域只表达一个核心目的，避免界面拥挤
-
-### 不要做什么
-
-- 不要默认重装依赖（优先使用 `uv sync` / `npm install`）
-- 不要默认跑全量测试（优先运行与改动范围直接相关的最小验证）
-- 不要无任务目的地扫描整个仓库
-
-## Default Work Loop
+## 3. Default Work Loop
 
 收到任务后，默认按以下顺序执行：
 
-1. 先阅读与任务直接相关的文件，避免全仓扫描
-2. 优先复现问题；不能复现则明确缺失条件
-3. 先定位第一个偏离预期的状态节点，再决定修改点
-4. 仅做与当前问题直接相关的最小修改
-5. 修改后运行最小必要验证
-6. 输出修改说明、验证结果、风险与未验证项
+1. 先阅读与任务直接相关的文件，避免全仓扫描。
+2. 优先复现问题；不能复现则明确缺失条件。
+3. 先定位第一个偏离预期的状态节点，再决定修改点。
+4. 仅做与当前问题直接相关的最小修改。
+5. 修改后运行最小必要验证。
+6. 输出修改说明、验证结果、风险与未验证项。
 
-## Verification Matrix
+### Preferred debug loop
 
-根据改动类型选择最小必要验证：
+对异步任务、轮询、后台作业类问题，优先按以下顺序排查：
 
-| 改动类型                             | 验证命令                                                                                                                    | 验证要点                |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| Backend-only changes                 | `cd apps/api && uv run pytest`                                                                                              | 后端测试通过            |
-| Frontend-only changes                | `cd apps/web && npm run lint`                                                                                               | ESLint 通过             |
-| API contract changes                 | `cd apps/api && uv run pytest`<br>`cd ../web && npm run lint`                                                               | 后端测试 + 前端 lint    |
-| Resume parse workflow changes        | `cd apps/api && uv run pytest`<br>验证状态流转：`pending -> processing -> success\|failed`<br>检查前端轮询在成功/失败后停止 | 状态流转正确 + 轮询停止 |
-| Polling / client state changes       | `cd apps/web && npm run lint`<br>手工验证：上传、轮询、成功/失败、停止轮询                                                  | 轮询逻辑正确            |
-| Match report workflow changes        | `cd apps/api && uv run pytest`<br>验证岗位画像生成 → 匹配评分 → 报告生成                                                    | 匹配报告正确生成        |
-| Resume optimization workflow changes | `cd apps/api && uv run pytest`<br>验证会话创建 → 草案生成 → 应用到简历                                                      | 优化建议正确应用        |
+1. 请求是否到达，记录是否创建。
+2. 状态是否从初始态进入下一状态。
+3. 外部依赖是否被调用。
+4. 结果是否成功写回数据库。
+5. 前端是否正确感知最终状态并停止轮询。
 
-## Critical Workflow: Resume Parse
+### Small change vs workflow change
 
-### Primary records
+- 小改动：局部字段、局部文案、单函数逻辑修复。保持最小范围说明、最小验证、精简结果。
+- 工作流改动：涉及 schema、状态机、后台任务、轮询、AI 接入、持久化写回。必须明确状态流转、失败策略、验证覆盖点。
+- 若改动涉及解析链路、匹配链路、优化链路、AI 接入或异步任务，默认按工作流改动处理。
 
-- `resume`：简历主表
-- `resume_parse_jobs`：解析任务表
+## 4. Workflow Specs
 
-### Key fields
+### Resume Parse
 
-- `resume.raw_text`：抽取的原始文本
-- `resume.structured_json`：结构化数据（教育、工作经历、项目经验等）
-- `resume.parse_status`：解析状态（`pending` / `processing` / `success` / `failed`）
-- `resume_parse_jobs.status`：任务状态
-- `resume_parse_jobs.error_message`：错误信息（失败时）
+Primary records：
 
-### Expected status transition
+- `resumes`
+- `resume_parse_jobs`
+
+Standard flow：
+
+1. 用户上传 PDF，文件写入 MinIO。
+2. 创建 `resume` 和 `resume_parse_job` 记录，初始状态为 `pending`。
+3. 后台任务进入 `processing`，读取 PDF 字节并抽取 `raw_text`。
+4. 执行规则解析，得到规则结构化结果。
+5. 若开启 LLM 校正，则执行 `规则解析 -> LLM 校正 -> 校验/兜底 -> 最终 structured_json`。
+6. 写回 `raw_text`、`structured_json`、`parse_status`，任务结束。
+
+Key fields：
+
+- `resume.raw_text`
+- `resume.structured_json`
+- `resume.parse_status`，仅使用 `pending / processing / success / failed`
+- `resume.parse_error`
+- `resume_parse_jobs.status`
+- `resume_parse_jobs.error_message`
+
+Expected status transition：
 
 - `pending -> processing -> success`
 - `pending -> processing -> failed`
-- **Bug**: 任何 job 卡在 `pending` 或 `processing` 超过 120 秒
+- Bug：任何 job 卡在 `pending` 或 `processing` 超过 120 秒
 
-### Success criteria
+Success criteria：
 
 - PDF 已上传到 MinIO
-- job 状态完成流转（`pending -> processing -> success`）
-- 解析结果已写回（`raw_text`、`structured_json`、`parse_status`）
-- 前端展示正确且轮询停止
+- job 状态完成流转
+- `raw_text` 与 `structured_json` 已写回
+- 前端正确展示并停止轮询
 
-### Common failure points
+Common failure points：
 
-1. Docker 依赖服务未启动（PostgreSQL/Redis/MinIO）
-2. 后台任务未被消费（检查后端日志）
-3. 解析结果写回失败（检查数据库字段）
-4. 前端轮询未停止（检查成功/失败后的轮询终止逻辑）
+1. 中间件未启动
+2. 后台任务未被调度或执行
+3. 文本抽取失败
+4. 规则解析失败
+5. AI 校正异常但未正确兜底
+6. 结果写回失败
+7. 前端轮询未停止
 
-## Critical Workflow: Match Report
+### Match Report
 
-### Primary records
+Primary records：
 
-- `job_descriptions`：岗位描述主表
-- `match_reports`：匹配报告表
+- `job_descriptions`
+- `match_reports`
 
-### Key fields
+Expected flow：
 
-- `job_descriptions.structured_json`：岗位画像（必备能力、加分项、职责语义簇等）
-- `match_reports.status`：报告状态（`pending` / `processing` / `success`）
-- `match_reports.fit_band`：匹配度（`excellent` / `strong` / `partial` / `weak`）
-- `match_reports.tailoring_plan`：改写任务清单
-- `match_reports.interview_blueprint`：面试蓝图
+1. 录入 JD 并异步结构化。
+2. 选择简历生成匹配报告。
+3. 报告生成评分卡、改写任务、面试蓝图。
 
-### Expected flow
-
-1. 录入 JD → 异步结构化 → 生成岗位画像
-2. 选择简历 → 生成匹配报告 → 保存历史
-3. 匹配报告包含：评分卡、改写任务、面试蓝图
-
-### Success criteria
+Success criteria：
 
 - 岗位画像生成成功
-- 匹配报告包含可执行的改写任务
+- 匹配报告包含可执行改写任务
 - 报告可被简历优化模块消费
 
-## Critical Workflow: Resume Optimization
+### Resume Optimization
 
-### Primary records
+Primary records：
 
-- `resume_optimization_sessions`：优化会话表
+- `resume_optimization_sessions`
 
-### Key fields
+Expected flow：
 
-- `draft_sections`：草案区块（教育、工作经历、项目经验等）
-- `selected_tasks`：选中的改写任务
-- `suggestions`：AI 生成的改写建议
-- `applied_resume_version`：应用后的简历版本号
-- `is_stale`：是否过期（匹配快照过期时为 `true`）
+1. 从岗位匹配页进入创建优化会话。
+2. 选择改写任务生成草案。
+3. 编辑草案并应用到简历。
+4. 简历版本提升，原岗位快照标记为 `stale`。
 
-### Expected flow
-
-1. 从岗位匹配页进入 → 创建优化会话
-2. 选择改写任务 → 生成草案
-3. 编辑草案 → 应用到简历 → 提升简历版本
-4. 原岗位快照自动标记为 `stale`
-
-### Success criteria
+Success criteria：
 
 - 草案可编辑且可保存
 - 应用后简历版本正确提升
 - 岗位快照正确标记为过期
 
-## Troubleshooting Playbooks
+## 5. LLM Integration Guardrails
 
-### A. 页面无响应类
+所有新增或修改的大模型接入，默认遵循以下原则：
 
-当 UI 出现无响应时，按以下顺序排查：
+- 优先复用仓库内已有的 OpenAI-compatible provider 模式，不要为单个功能重新发明接入方式。
+- 本地开发默认优先对接 `scripts/codex2gpt`，不要把脚本路径硬编码进业务逻辑。
+- Prompt 必须明确限制模型角色；若任务是校正器，就不要让模型扮演重解析器或自由生成器。
+- 结果必须是 strict JSON，可被 Pydantic 或等价校验器验证。
+- 模型原始自然语言输出不得直接落库。
+- 必须有明确 fallback；外部 AI 调用失败时，系统行为必须可预期。
+- 未经明确确认，不要新增前端公开状态机。
 
-1. 检查浏览器 Network 面板，请求是否发出
-2. 检查对应后端接口是否收到（查看后端日志）
-3. 检查后端是否报错（查看完整 stack trace）
-4. 检查依赖服务状态（`docker compose ps`）
-5. 检查状态是否回写前端（检查数据库字段更新）
+### Resume parse specific guardrails
 
-### B. 后台任务卡住类
+- 标准链路是：`PDF -> 规则解析 -> LLM 校正 -> 校验/兜底 -> structured_json`
+- 规则解析是主链路，LLM 仅负责校正、补全、去重、归类，不负责自由抽取。
+- 若规则解析失败，任务整体失败；不要再调用 AI。
+- 若规则解析成功但 AI 失败、超时、返回非法 JSON 或出现幻觉风险，必须回退到规则结果，并允许任务仍然 `success`。
+- 不允许让模型生成当前 schema 之外的新字段，除非用户先确认要升级 schema。
+- 不允许仅为了展示更细粒度进度而扩展公开状态机；若确有必要，先给方案再改。
 
-当后台任务卡住时，按以下分类排查：
+## 6. Verification Matrix
 
-- **创建失败**：检查请求是否到达、参数是否校验通过、记录是否创建
-- **调度失败**：检查任务调度逻辑、外部依赖调用是否成功
-- **执行失败**：检查后台任务日志、外部依赖调用前后日志
-- **写回失败**：检查数据库字段更新、事务是否提交
-- **前端感知失败**：检查前端轮询逻辑、成功/失败后的处理
+优先最小必要验证，不默认跑全量。
 
-### C. 状态不流转类
+### Known good command pattern
 
-当状态一直不变时：
+- `UV_CACHE_DIR=.uv-cache uv run ...`：当默认 `uv` 缓存目录权限受限时，优先使用仓库内缓存目录。
+- 后端定向 pytest：优先直接点到相关测试文件。
+- 前端改动：优先 `npm run lint`，再补必要手工验证。
 
-1. 确认任务是否已创建
-2. 确认是否进入下一状态
-3. 若未进入，失败点是在调度前、调度时还是状态更新时
-4. 若已进入，失败点是在依赖调用、业务处理还是结果写回
+### Verification by change type
 
-## Logging Contract
+| 改动类型 | 最小验证命令 | 验证要点 |
+| --- | --- | --- |
+| 仅改 `resume_parser.py` / `resume_ai.py` / `resume.py` | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 解析状态流转、AI fallback、结构化结果写回 |
+| Resume parse API 或 schema 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 上传、详情、重试、parse jobs 正常 |
+| Match report 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_match_reports.py tests/test_jobs.py` | 匹配报告生成与 AI 修正逻辑正常 |
+| Resume optimization 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume_optimizer.py` | 会话创建、草案生成、应用版本提升 |
+| Profile/Auth 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_profile.py tests/test_auth.py` | 登录、鉴权、资料读写正常 |
+| Frontend-only changes | `cd apps/web && npm run lint` | ESLint 通过 |
+| Resume page / polling 改动 | `cd apps/web && npm run lint` | 手工验证上传、轮询、成功/失败、停止轮询 |
+| API contract changes | 后端定向 pytest + `cd apps/web && npm run lint` | 接口与前端映射一致 |
 
-### 必须打日志的场景
+### Testing requirements
 
-- 收到请求（带 `request_id`、`user_id`、业务主键）
-- 参数校验通过/失败
-- 创建或更新业务记录（带业务主键、当前状态）
-- 状态流转前后（带 previous status / next status）
+- 新增接口时必须补测试。
+- 修改解析流程时必须补最小后端集成测试或说明原因。
+- 修改前端轮询或编辑时必须给出手工验证步骤。
+- 修改关键日志、状态流转或后台任务处理时，优先补能覆盖该流转的最小测试。
+
+## 7. Debug Playbooks
+
+### UI no-response
+
+当 UI 无响应时，按以下顺序排查：
+
+1. 浏览器 Network 是否发出请求。
+2. 对应后端接口是否收到请求。
+3. 后端是否报错，是否有完整 stack trace。
+4. 依赖服务是否正常。
+5. 状态是否已写回数据库但前端未更新。
+
+### Background job stuck
+
+- 创建失败：检查请求是否到达、参数是否校验通过、记录是否创建。
+- 调度失败：检查后台任务调度逻辑。
+- 执行失败：检查任务日志与外部依赖调用。
+- 写回失败：检查数据库更新和事务提交。
+- 前端感知失败：检查轮询、成功/失败终止逻辑。
+
+### State not moving
+
+1. 确认任务是否已创建。
+2. 确认是否进入下一状态。
+3. 若未进入，判断失败点在调度前、调度时还是状态更新。
+4. 若已进入，判断失败点在依赖调用、业务处理还是结果写回。
+
+### Logging contract
+
+必须打日志的场景：
+
+- 收到请求，带 `request_id`、`user_id`、业务主键
+- 参数校验通过或失败
+- 创建或更新业务记录
+- 状态流转前后
 - 调用数据库、Redis、MinIO、AI 服务、第三方 API 前后
 - 后台任务开始、结束、失败
 
-### 日志最少包含字段
+日志最少包含：
 
 - `request_id`
 - `user_id`
-- 业务主键（`resume_id`、`job_id`、`task_id`、`session_id` 等）
-- 当前状态值（`status`、`parse_status` 等）
+- 业务主键，如 `resume_id`、`job_id`、`task_id`、`session_id`
+- 当前状态值，如 `status`、`parse_status`
 
-### 绝对禁止输出
+绝对禁止输出：
 
 - 明文密码
 - 完整 token
@@ -252,78 +362,34 @@ npm run dev
 - 身份证号、手机号、邮箱原文的大量明文
 - 大段简历全文、用户隐私内容或第三方敏感响应
 
-## Rules for Code Changes
+## 8. Output Contract
 
-### 允许修改
-
-- 业务代码
-- 测试代码
-- 前端页面与组件
-- 轮询逻辑与客户端状态管理
-
-### 慎改
-
-- 解析 schema 定义
-- 对象存储配置
-- 状态机定义
-- 解析脚本规则
-
-### 禁止修改
-
-- 历史迁移文件 (`alembic/versions/`)
-- 基础设施编排文件（除非任务明确要求）
-- 无关 package lock 文件
-- `.env.example` 中的变量名（除非任务明确要求）
-
-### 代码修改原则
-
-- 除非任务明确要求，否则不要顺手重命名文件、抽象公共层、升级依赖或调整目录结构
-- 在开始修改前，先用 3-5 行说明计划与改动范围
-- 完成修改后，列出受影响文件，并说明每个文件为何需要改动
-
-### 必须停下的场景
-
-如果任务需要修改禁止区域，或无法复现且缺输入，或外部依赖不可用，或验证无法完成，必须停下并说明：
-
-- 为什么需要修改禁止区域（或为什么无法继续）
-- 已执行的排查步骤
-- 缺失的条件
-- 建议的后续步骤
-
-## Testing Requirements
-
-- 新增接口时必须补充测试
-- 修改解析流程时必须补后端集成测试或说明原因
-- 修改前端轮询/编辑时必须给出手工验证步骤
-- 修改关键日志、状态流转或后台任务处理时，优先补充能覆盖该流转的最小测试
-
-## Secrets and Environment Safety
-
-- 不要在代码、测试或提交说明中写入真实密钥
-- 不要修改 `.env.example` 中变量名，除非任务明确要求
-- 若新增环境变量，必须同时更新示例文件与说明
-
-## Done Criteria
+### Done criteria
 
 任务完成需满足：
 
-- 测试通过，或明确说明未通过的原因
-- Lint 通过，或明确说明未通过的原因
+- 测试通过，或明确说明未通过原因
+- Lint 通过，或明确说明未通过原因
 - 给出复现步骤、修复说明、验证结果
-- 若本地环境缺依赖或外部服务不可用，必须明确写出：
-  - 阻塞项
-  - 已执行命令
-  - 已完成验证
-  - 尚未完成验证
+- 若本地环境缺依赖或外部服务不可用，明确写出阻塞项、已执行命令、已完成验证、尚未完成验证
 
-## Output Contract
+### Required output sections
 
-完成任务后，必须包含以下内容：
+完成任务后，默认输出以下内容：
 
-1. **Summary**：一句话说明完成内容
-2. **Files Changed**：列出所有修改文件
-3. **Why Each File Changed**：说明每个文件的改动原因
-4. **Validation**：运行的验证命令与结果
-5. **Manual Verification**：手工验证步骤（如有）
-6. **Risks / Follow-ups**：风险与后续跟进项
-7. **Blockers**：阻塞项（如有）
+1. `Summary`
+2. `Files Changed`
+3. `Why Each File Changed`
+4. `Validation`
+5. `Risks / Follow-ups`
+
+以下内容按需提供：
+
+- `Manual Verification`：前端交互、异步轮询、外部依赖联调相关改动时必须提供
+- `Blockers`：存在阻塞项时必须提供
+
+### Output expectations
+
+- 小改动可以简洁，但不能省略验证结果。
+- 工作流改动必须明确状态流转、失败策略与未覆盖风险。
+- 若验证未完成，不要模糊表达；明确哪些已验证、哪些未验证、为什么未验证。

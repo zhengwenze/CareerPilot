@@ -5,10 +5,14 @@ import re
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 
+from app.core.errors import ApiException, ErrorCode
 from app.models import Resume, ResumeParseJob
+from app.schemas.resume import ResumeStructuredData
 from app.services.resume import process_resume_parse_job
+from app.services.resume_ai import ResumeAICorrectionResult
 
 
 def build_pdf_bytes() -> bytes:
@@ -75,6 +79,77 @@ def build_pdf_bytes() -> bytes:
         ).encode()
     )
     return buffer.getvalue()
+
+
+class FakeAppliedResumeAIProvider:
+    def __init__(self, structured_data: ResumeStructuredData) -> None:
+        self.structured_data = structured_data
+        self.calls: list[dict[str, Any]] = []
+
+    async def correct(self, payload) -> ResumeAICorrectionResult:
+        self.calls.append(payload.rule_structured_json)
+        return ResumeAICorrectionResult(
+            provider="test",
+            model="fake-model",
+            status="applied",
+            structured_data=self.structured_data,
+            corrections=[{"field": "basic_info.name", "reason": "matched raw text"}],
+            confidence=0.8,
+            reasoning="Applied supported corrections",
+        )
+
+
+class RaisingResumeAIProvider:
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+        self.calls = 0
+
+    async def correct(self, payload) -> ResumeAICorrectionResult:
+        self.calls += 1
+        raise self.exc
+
+
+async def seed_resume_parse_records(
+    session_factory,
+    *,
+    storage,
+    pdf_bytes: bytes,
+) -> tuple[UUID, UUID]:
+    user_id = uuid4()
+    resume_id = uuid4()
+    parse_job_id = uuid4()
+    object_key = f"resumes/{user_id}/{resume_id}/resume.pdf"
+    storage.objects[("career-pilot-resumes", object_key)] = pdf_bytes
+
+    async with session_factory() as session:
+        session.add(
+            Resume(
+                id=resume_id,
+                user_id=user_id,
+                file_name="resume.pdf",
+                file_url=f"minio://career-pilot-resumes/{object_key}",
+                storage_bucket="career-pilot-resumes",
+                storage_object_key=object_key,
+                content_type="application/pdf",
+                file_size=len(pdf_bytes),
+                parse_status="pending",
+                created_by=user_id,
+                updated_by=user_id,
+            )
+        )
+        session.add(
+            ResumeParseJob(
+                id=parse_job_id,
+                resume_id=resume_id,
+                status="pending",
+                attempt_count=0,
+                created_by=user_id,
+                updated_by=user_id,
+            )
+        )
+        await session.commit()
+
+    return resume_id, parse_job_id
 
 
 async def wait_for_resume_success(
@@ -399,3 +474,249 @@ async def test_resume_delete_removes_record_and_storage(client, app) -> None:
 
     fake_storage = app.state.object_storage
     assert (storage_bucket, storage_object_key) not in fake_storage.objects
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_applies_ai_corrections(
+    session_factory,
+    app,
+    monkeypatch,
+) -> None:
+    fake_storage = app.state.object_storage
+    resume_id, parse_job_id = await seed_resume_parse_records(
+        session_factory,
+        storage=fake_storage,
+        pdf_bytes=b"fake-pdf",
+    )
+    raw_text = (
+        "Jane Doe jane@example.com 13900001111 Beijing "
+        "Education Fudan University Computer Science "
+        "Experience CareerPilot Frontend Intern "
+        "Projects Resume Platform Reconstruction "
+        "Skills Python Docker English"
+    )
+    rule_result = ResumeStructuredData.model_validate(
+        {
+            "basic_info": {
+                "name": "Wrong Name",
+                "email": "jane@example.com",
+                "phone": "13900001111",
+                "location": "Beijing",
+                "summary": "",
+            },
+            "education": ["Fudan University Computer Science"],
+            "work_experience": ["CareerPilot Frontend Intern"],
+            "projects": ["Resume Platform Reconstruction"],
+            "skills": {
+                "technical": ["Python", "Docker"],
+                "tools": [],
+                "languages": ["English"],
+            },
+            "certifications": [],
+        }
+    )
+    ai_result = ResumeStructuredData.model_validate(
+        {
+            "basic_info": {
+                "name": "Jane Doe",
+                "email": "jane@example.com",
+                "phone": "13900001111",
+                "location": "Beijing",
+                "summary": "Frontend intern focused on resume platforms",
+            },
+            "education": ["Fudan University Computer Science"],
+            "work_experience": ["CareerPilot Frontend Intern"],
+            "projects": ["Resume Platform Reconstruction"],
+            "skills": {
+                "technical": ["Python"],
+                "tools": ["Docker"],
+                "languages": ["English"],
+            },
+            "certifications": [],
+        }
+    )
+    provider = FakeAppliedResumeAIProvider(ai_result)
+    monkeypatch.setattr("app.services.resume.extract_text_from_pdf_bytes", lambda _: raw_text)
+    monkeypatch.setattr("app.services.resume.build_structured_resume", lambda _: rule_result)
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _: provider,
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume_id,
+        parse_job_id=parse_job_id,
+        storage=fake_storage,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        resume = await session.get(Resume, resume_id)
+
+    assert resume is not None
+    assert resume.parse_status == "success"
+    assert resume.structured_json["basic_info"]["name"] == "Jane Doe"
+    assert resume.structured_json["skills"]["technical"] == ["Python"]
+    assert resume.structured_json["skills"]["tools"] == ["Docker"]
+    assert provider.calls
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_falls_back_to_rule_result_on_ai_error(
+    session_factory,
+    app,
+    monkeypatch,
+) -> None:
+    fake_storage = app.state.object_storage
+    resume_id, parse_job_id = await seed_resume_parse_records(
+        session_factory,
+        storage=fake_storage,
+        pdf_bytes=b"fake-pdf",
+    )
+    raw_text = (
+        "John Doe john@example.com 13800138000 Shanghai "
+        "Education Fudan University Computer Science "
+        "Experience CareerPilot Frontend Intern"
+    )
+    rule_result = ResumeStructuredData.model_validate(
+        {
+            "basic_info": {
+                "name": "John Doe",
+                "email": "john@example.com",
+                "phone": "13800138000",
+                "location": "Shanghai",
+                "summary": "",
+            },
+            "education": ["Fudan University Computer Science"],
+            "work_experience": ["CareerPilot Frontend Intern"],
+            "projects": [],
+            "skills": {"technical": ["Python"], "tools": [], "languages": []},
+            "certifications": [],
+        }
+    )
+    provider = RaisingResumeAIProvider(ValueError("invalid json"))
+    monkeypatch.setattr("app.services.resume.extract_text_from_pdf_bytes", lambda _: raw_text)
+    monkeypatch.setattr("app.services.resume.build_structured_resume", lambda _: rule_result)
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _: provider,
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume_id,
+        parse_job_id=parse_job_id,
+        storage=fake_storage,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        resume = await session.get(Resume, resume_id)
+        parse_job = await session.get(ResumeParseJob, parse_job_id)
+
+    assert resume is not None
+    assert parse_job is not None
+    assert resume.parse_status == "success"
+    assert parse_job.status == "success"
+    assert resume.structured_json == rule_result.model_dump()
+    assert provider.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_falls_back_to_rule_result_on_ai_timeout(
+    session_factory,
+    app,
+    monkeypatch,
+) -> None:
+    fake_storage = app.state.object_storage
+    resume_id, parse_job_id = await seed_resume_parse_records(
+        session_factory,
+        storage=fake_storage,
+        pdf_bytes=b"fake-pdf",
+    )
+    raw_text = "John Doe john@example.com 13800138000 Shanghai Skills Python"
+    rule_result = ResumeStructuredData.model_validate(
+        {
+            "basic_info": {
+                "name": "John Doe",
+                "email": "john@example.com",
+                "phone": "13800138000",
+                "location": "Shanghai",
+                "summary": "",
+            },
+            "education": [],
+            "work_experience": [],
+            "projects": [],
+            "skills": {"technical": ["Python"], "tools": [], "languages": []},
+            "certifications": [],
+        }
+    )
+    provider = RaisingResumeAIProvider(httpx.ReadTimeout("timeout"))
+    monkeypatch.setattr("app.services.resume.extract_text_from_pdf_bytes", lambda _: raw_text)
+    monkeypatch.setattr("app.services.resume.build_structured_resume", lambda _: rule_result)
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _: provider,
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume_id,
+        parse_job_id=parse_job_id,
+        storage=fake_storage,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        resume = await session.get(Resume, resume_id)
+
+    assert resume is not None
+    assert resume.parse_status == "success"
+    assert resume.structured_json == rule_result.model_dump()
+    assert provider.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_skips_ai_when_rule_parse_fails(
+    session_factory,
+    app,
+    monkeypatch,
+) -> None:
+    fake_storage = app.state.object_storage
+    resume_id, parse_job_id = await seed_resume_parse_records(
+        session_factory,
+        storage=fake_storage,
+        pdf_bytes=b"fake-pdf",
+    )
+    provider = FakeAppliedResumeAIProvider(ResumeStructuredData())
+    monkeypatch.setattr("app.services.resume.extract_text_from_pdf_bytes", lambda _: "raw text")
+    monkeypatch.setattr(
+        "app.services.resume.build_structured_resume",
+        lambda _: (_ for _ in ()).throw(
+            ApiException(
+                status_code=400,
+                code=ErrorCode.BAD_REQUEST,
+                message="rule parse failed",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _: provider,
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume_id,
+        parse_job_id=parse_job_id,
+        storage=fake_storage,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        resume = await session.get(Resume, resume_id)
+        parse_job = await session.get(ResumeParseJob, parse_job_id)
+
+    assert resume is not None
+    assert parse_job is not None
+    assert resume.parse_status == "failed"
+    assert resume.parse_error == "rule parse failed"
+    assert parse_job.status == "failed"
+    assert provider.calls == []

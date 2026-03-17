@@ -11,7 +11,7 @@ from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.errors import ApiException, ErrorCode
 from app.db.session import get_session_factory
 from app.models import Resume, ResumeParseJob, User
@@ -24,6 +24,11 @@ from app.schemas.resume import (
     ResumeStructuredUpdateRequest,
 )
 from app.services.match_support import mark_reports_stale_for_resume
+from app.services.resume_ai import (
+    ResumeAICorrectionRequest,
+    build_resume_ai_correction_provider,
+    merge_resume_ai_correction,
+)
 from app.services.resume_parser import build_structured_resume, extract_text_from_pdf_bytes
 from app.services.storage import ObjectStorage
 
@@ -246,6 +251,7 @@ async def process_resume_parse_job(
     parse_job_id: UUID,
     storage: ObjectStorage,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
+    settings: Settings | None = None,
 ) -> None:
     logger.info(
         "Starting resume parse job: resume_id=%s parse_job_id=%s",
@@ -253,6 +259,7 @@ async def process_resume_parse_job(
         parse_job_id,
     )
     session_maker = session_factory or get_session_factory()
+    config = settings or get_settings()
     async with session_maker() as session:
         resume = await session.get(Resume, resume_id)
         parse_job = await session.get(ResumeParseJob, parse_job_id)
@@ -323,9 +330,48 @@ async def process_resume_parse_job(
                     len(structured.projects),
                     len(structured.skills.technical),
                 )
+                final_structured = structured
+                ai_provider = build_resume_ai_correction_provider(config)
+                try:
+                    ai_result = await ai_provider.correct(
+                        ResumeAICorrectionRequest(
+                            raw_text=raw_text,
+                            rule_structured_json=structured.model_dump(),
+                        )
+                    )
+                    if ai_result.status == "applied" and ai_result.structured_data is not None:
+                        final_structured = merge_resume_ai_correction(
+                            raw_text=raw_text,
+                            rule_result=structured,
+                            ai_result=ai_result.structured_data,
+                        )
+                        logger.info(
+                            (
+                                "Applied resume AI correction: resume_id=%s provider=%s model=%s "
+                                "confidence=%s corrections=%s"
+                            ),
+                            resume_id,
+                            ai_result.provider,
+                            ai_result.model,
+                            ai_result.confidence,
+                            len(ai_result.corrections),
+                        )
+                    else:
+                        logger.info(
+                            "Skipped resume AI correction: resume_id=%s provider=%s status=%s",
+                            resume_id,
+                            ai_result.provider,
+                            ai_result.status,
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "Resume AI correction fallback to rule result: resume_id=%s reason=%s",
+                        resume_id,
+                        str(exc),
+                    )
 
             resume.raw_text = raw_text
-            resume.structured_json = structured.model_dump()
+            resume.structured_json = final_structured.model_dump()
             resume.parse_status = "success"
             resume.parse_error = None
             resume.latest_version = max(resume.latest_version, 1)

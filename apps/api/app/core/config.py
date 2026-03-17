@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     match_ai_api_key: str | None = None
     match_ai_model: str | None = None
     match_ai_timeout_seconds: int = 30
+    resume_ai_provider: str = "disabled"
+    resume_ai_base_url: str = "http://127.0.0.1:18100/v1"
+    resume_ai_api_key: str | None = None
+    resume_ai_model: str = "gpt-5.4"
+    resume_ai_timeout_seconds: int = 30
 
     model_config = SettingsConfigDict(
         env_file=".env",
