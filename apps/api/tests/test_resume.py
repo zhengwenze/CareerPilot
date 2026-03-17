@@ -210,6 +210,8 @@ async def test_resume_upload_list_detail_and_download_url(client) -> None:
     assert detail_payload["raw_text"]
     assert detail_payload["structured_json"]["basic_info"]["email"] == "john@example.com"
     assert "Python" in detail_payload["structured_json"]["skills"]["technical"]
+    assert detail_payload["latest_parse_job"]["ai_status"] == "skipped"
+    assert detail_payload["latest_parse_job"]["ai_message"] == "AI 校准未启用"
 
     download_response = await client.get(
         f"/resumes/{resume_id}/download-url",
@@ -227,6 +229,8 @@ async def test_resume_upload_list_detail_and_download_url(client) -> None:
     assert parse_jobs_response.status_code == 200
     parse_jobs_payload = parse_jobs_response.json()["data"]
     assert parse_jobs_payload[0]["status"] == "success"
+    assert parse_jobs_payload[0]["ai_status"] == "skipped"
+    assert parse_jobs_payload[0]["ai_message"] == "AI 校准未启用"
 
     structured_update_response = await client.put(
         f"/resumes/{resume_id}/structured",
@@ -380,6 +384,8 @@ async def test_process_resume_parse_job_persists_naive_timestamps(session_factor
     assert parse_job is not None
     assert resume.parse_status == "success"
     assert parse_job.status == "success"
+    assert parse_job.ai_status == "skipped"
+    assert parse_job.ai_message == "AI 校准未启用"
     assert parse_job.started_at is not None and parse_job.started_at.tzinfo is None
     assert parse_job.finished_at is not None and parse_job.finished_at.tzinfo is None
 
@@ -552,12 +558,16 @@ async def test_process_resume_parse_job_applies_ai_corrections(
 
     async with session_factory() as session:
         resume = await session.get(Resume, resume_id)
+        parse_job = await session.get(ResumeParseJob, parse_job_id)
 
     assert resume is not None
+    assert parse_job is not None
     assert resume.parse_status == "success"
     assert resume.structured_json["basic_info"]["name"] == "Jane Doe"
     assert resume.structured_json["skills"]["technical"] == ["Python"]
     assert resume.structured_json["skills"]["tools"] == ["Docker"]
+    assert parse_job.ai_status == "applied"
+    assert parse_job.ai_message == "AI 校准成功"
     assert provider.calls
 
 
@@ -617,6 +627,8 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_ai_error(
     assert parse_job is not None
     assert resume.parse_status == "success"
     assert parse_job.status == "success"
+    assert parse_job.ai_status == "fallback_rule"
+    assert parse_job.ai_message == "AI 校准失败，已回退规则解析"
     assert resume.structured_json == rule_result.model_dump()
     assert provider.calls == 1
 
@@ -667,10 +679,14 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_ai_timeout(
 
     async with session_factory() as session:
         resume = await session.get(Resume, resume_id)
+        parse_job = await session.get(ResumeParseJob, parse_job_id)
 
     assert resume is not None
+    assert parse_job is not None
     assert resume.parse_status == "success"
     assert resume.structured_json == rule_result.model_dump()
+    assert parse_job.ai_status == "fallback_rule"
+    assert parse_job.ai_message == "AI 校准失败，已回退规则解析"
     assert provider.calls == 1
 
 
@@ -719,4 +735,6 @@ async def test_process_resume_parse_job_skips_ai_when_rule_parse_fails(
     assert resume.parse_status == "failed"
     assert resume.parse_error == "rule parse failed"
     assert parse_job.status == "failed"
+    assert parse_job.ai_status is None
+    assert parse_job.ai_message is None
     assert provider.calls == []
