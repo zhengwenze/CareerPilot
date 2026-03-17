@@ -32,64 +32,111 @@
 
 ## 2. 当前项目状态
 
-当前项目并不是“已经完成大半产品功能”，而是：
-
-> **基础工程骨架已搭好，核心业务能力正处于逐步落地阶段。**
+> **基础工程骨架已完全就位，核心业务闭环已跑通，正处于从"可用"到"好用"的优化阶段。**
 
 ### 2.1 已完成能力
 
-#### 前端
+#### 前端（Apple 风格极简设计）
 
-- 已有登录页、注册页
-- 已有 Dashboard 路由壳层与左侧导航
-- 已有各模块占位页
-- 已具备基本登录态恢复能力
-- 已建立 Tailwind + shadcn/ui 风格基线
+- 登录/注册页：完整认证流程
+- Dashboard 布局：顶部导航 + 侧边栏 + 页面内容区
+- **简历中心**：PDF 上传 → 自动解析 → 人工校正 → 版本管理完整闭环
+- **岗位匹配**：JD 录入 → 结构化 → 匹配报告生成 → 历史保存完整闭环
+- **简历优化**：基于岗位快照生成可执行改写建议 → 应用到简历完整闭环
+- **投递追踪**：岗位列表 + 状态管理（待解析/已分析/可练面试等）
+- **模拟面试**：页面框架已就位
+- 通用组件：PageLoadingState / PageEmptyState / PageErrorState
+- 路由守卫：ProtectedRoute / GuestRoute
+- API Client：统一错误处理与响应格式
 
-#### 后端
+#### 后端（FastAPI + SQLAlchemy）
 
-- 已有 FastAPI 应用入口
-- 已完成认证主链路：
-  - `POST /auth/register`
-  - `POST /auth/login`
-  - `POST /auth/logout`
-  - `GET /auth/me`
-- 已有用户模型与迁移
-- 已有密码哈希、JWT 签发、Redis token blocklist 登出机制
-- 已有认证相关测试
+**认证模块**：
+- `POST /auth/register`：用户注册
+- `POST /auth/login`：用户登录（JWT access token）
+- `POST /auth/logout`：登出（Redis token blocklist）
+- `GET /auth/me`：当前用户查询
+
+**简历中心**：
+- `POST /resumes/upload`：上传 PDF 简历
+- `GET /resumes`：简历列表
+- `GET /resumes/{id}`：简历详情
+- `DELETE /resumes/{id}`：删除简历
+- `GET /resumes/{id}/download-url`：生成下载链接
+- `GET /resumes/{id}/parse-jobs`：解析任务历史
+- `POST /resumes/{id}/parse`：重试解析
+- `PUT /resumes/{id}/structured`：保存人工校正的结构化数据
+- 异步解析任务：自动抽取文本 → 结构化解析 → 回写数据库
+
+**岗位匹配**：
+- `POST /jobs`：创建岗位 JD
+- `GET /jobs`：岗位列表（支持 keyword / parse_status / status_stage / priority / stale 过滤）
+- `GET /jobs/{id}`：岗位详情
+- `PUT /jobs/{id}`：更新岗位
+- `POST /jobs/{id}/parse`：重跑解析
+- `DELETE /jobs/{id}`：删除岗位
+- `POST /jobs/{id}/match-reports`：生成匹配报告
+- `GET /jobs/{id}/match-reports`：匹配报告列表
+- `GET /match-reports/{id}`：匹配报告详情
+- `DELETE /match-reports/{id}`：删除匹配报告
+- 异步匹配任务：岗位画像生成 → 简历匹配评分 → 生成可解释报告
+
+**简历优化**：
+- `POST /resume-optimization-sessions`：创建优化会话
+- `GET /resume-optimization-sessions/{id}`：获取优化会话
+- `PUT /resume-optimization-sessions/{id}`：更新优化草案
+- `POST /resume-optimization-sessions/{id}/suggestions`：生成改写建议
+- `POST /resume-optimization-sessions/{id}/apply`：应用优化到简历
+
+**个人资料**：
+- `GET /profile/me`：查询个人资料
+- `PUT /profile/me`：更新个人资料（求职方向、目标城市、目标岗位等）
+
+**系统健康检查**：
+- `GET /health`：服务状态
+- `GET /health/readiness`：就绪检查（DB + Redis）
+- `GET /health/version`：版本信息
+
+#### 数据模型
+
+- `User`：用户
+- `UserProfile`：用户资料（求职偏好）
+- `Resume`：简历（原始 PDF + 结构化数据 + 版本管理）
+- `ResumeParseJob`：简历解析任务
+- `JobDescription`：岗位描述（JD）
+- `JobParseJob`：岗位解析任务
+- `JobReadinessEvent`：岗位准备度事件历史
+- `MatchReport`：匹配报告（评分、优势、短板、建议、证据）
+- `ResumeOptimizationSession`：简历优化会话
 
 #### 基础设施
 
-- PostgreSQL / Redis / MinIO 本地启动能力已准备好
-- Docker Compose 可启动本地中间件服务
+- PostgreSQL（pgvector）：`localhost:5432`
+- Redis：`localhost:6380`
+- MinIO：`http://localhost:9000`（文件存储）
+- MinIO Console：`http://localhost:9001`
+- Docker Compose 一键启动全部中间件
 
-### 2.2 当前主要缺口
+### 2.2 当前阶段判断
 
-当前最主要的缺口不是结构，而是业务能力尚未真正落地，包括：
+当前项目已经完成：
 
-- 简历中心上传、解析、校正、版本化闭环
-- JD 录入、结构化、匹配报告闭环
-- 简历优化建议闭环
-- 模拟面试会话闭环
-- 投递追踪与 Dashboard 聚合闭环
-- AI Provider 适配层
-- 异步任务体系
-- E2E 测试
-- 部署、观测与告警能力
+- ✅ 工程结构清晰（前后端分层明确）
+- ✅ 认证链路稳定（JWT + Redis blocklist）
+- ✅ 简历中心闭环（上传 → 解析 → 校正 → 版本）
+- ✅ 岗位匹配闭环（录入 → 结构化 → 匹配 → 报告）
+- ✅ 简历优化闭环（会话 → 草案 → 建议 → 应用）
+- ✅ 异步任务体系（后台任务自动调度）
+- ✅ 文件存储集成（MinIO）
+- ✅ Apple 风格 UI 基线（极简、克制、高级）
 
-### 2.3 当前阶段判断
+需要持续优化：
 
-这个阶段其实是一个很好的推进期，因为：
-
-- 技术栈已经明确，不需要再反复选型
-- 前后端路由和工程结构没有走偏
-- 认证链路已跑通，具备真实业务落地前提
-- 基础设施已经为文件上传、异步任务、AI 扩展预留空间
-- 文档已经足够支撑按模块持续推进
-
-一句话判断：
-
-> **当前项目最真实的状态是：基础骨架已成，业务能力待逐步落地。**
+- 🔲 AI Provider 适配层（当前为占位实现）
+- 🔲 模拟面试会话闭环（页面已就位，业务逻辑待补充）
+- 🔲 投递追踪完整功能（页面已就位，状态流转待补充）
+- 🔲 E2E 测试覆盖
+- 🔲 部署与可观测性（日志、监控、告警）
 
 ---
 
@@ -836,183 +883,21 @@ README 的职责也应保持克制：
 
 ## 总结
 
-CareerPilot 当前已经具备一个不错的起点：
+CareerPilot 当前已经完成：
 
-- 技术栈明确
-- 工程结构清晰
-- 认证链路可用
-- 基础设施已就位
+- ✅ 技术栈明确（Next.js 16 + FastAPI + PostgreSQL + Redis + MinIO）
+- ✅ 工程结构清晰（前后端分层明确，模块职责清晰）
+- ✅ 认证链路可用（JWT + Redis blocklist）
+- ✅ 基础设施就位（Docker Compose 一键启动全部中间件）
+- ✅ **简历中心闭环跑通**（上传 → 解析 → 校正 → 版本管理）
+- ✅ **岗位匹配闭环跑通**（录入 JD → 结构化 → 匹配 → 报告生成）
+- ✅ **简历优化闭环跑通**（会话创建 → 草案生成 → 应用到简历）
+- ✅ Apple 风格 UI 基线（极简、克制、高级）
 
-接下来的关键不是“做更多页面”，而是：
+接下来的关键不是"做更多页面"，而是：
 
-> **优先打通“简历中心 -> 岗位匹配 -> 简历优化”这条最有价值的业务主链路。**
+> **围绕"简历中心 → 岗位匹配 → 简历优化"这条核心业务链路持续优化，让每一个环节都真正可用、好用、可复用。**
 
-只要第一条闭环跑通，CareerPilot 就会从“一个工程骨架”真正进入“一个有产品价值的 AI 求职工作台”。
+当前项目已经从"一个工程骨架"进入"一个有产品价值的 AI 求职工作台"阶段。只要继续沿着已跑通的闭环深化，CareerPilot 将真正成为求职者可持续使用的 AI 求职工作台。
 
 可以。
-
-我能理解这张参考图的核心设计语言，并帮你提炼成适合给 AI 生成前端页面的提示词。
-
-我先帮你拆解这张图的视觉特征，再给你一版高质量提示词。
-
-这张参考图的界面特征大致是：
-
-- **整体风格**：典型苹果官网式极简设计，留白很多，秩序感强
-- **主色调**：大面积白色/浅灰白背景
-- **字体**：全部黑色，标题粗体，大字高对比
-- **按钮**：苹果风格蓝色主按钮，圆角胶囊按钮
-- **布局**：顶部导航 + 中央 Hero 主视觉区域
-- **信息层级**：品牌标题最大，副标题次之，按钮第三层
-- **产品展示**：中间大图居中，突出产品主体
-- **页面气质**：干净、高级、科技感、克制、不花哨
-
-下面是我给你整理好的**可直接用于生成前端界面**的提示词。
-
----
-
-## 通用中文提示词
-
-请生成一个 **苹果官网风格的前端落地页首页**，整体设计要求极简、高级、留白充足、科技感强。
-
-具体要求如下：
-
-- 页面整体采用 **白色为主色调**
-- **所有文字必须使用黑色**
-- 功能按钮使用 **苹果风格蓝色**
-- 顶部为简洁的横向导航栏，导航文字黑色，背景白色
-- 首屏为居中的 Hero 区域
-- 主标题使用超大号黑色粗体字体，视觉中心明确
-- 副标题使用较小一号黑色字体，简洁有力
-- 标题下方放置两个操作按钮：
-
-  - 主按钮：蓝色实心圆角按钮
-  - 次按钮：白底蓝边框圆角按钮
-
-- 中间展示一张大尺寸产品图，居中排版，突出产品主体
-- 整体布局对齐工整，留白充足，风格接近 Apple 官网
-- 不要复杂装饰，不要渐变背景，不要杂乱配色
-- 设计重点是 **简洁、克制、高级、现代**
-- 页面需具备优秀的响应式表现，桌面端优先
-- 字体风格参考苹果官网，现代无衬线字体
-- 按钮、间距、圆角、排版都要体现苹果设计语言
-
----
-
-## 更适合 AI 代码生成的提示词
-
-生成一个 **Apple 风格的产品官网首页前端页面**，使用现代极简设计语言。
-
-设计规范：
-
-- Background: pure white
-- Text color: black only
-- Primary action buttons: Apple-style blue
-- Layout: clean, centered, spacious, minimal
-- Top navigation bar: white background, black text, simple horizontal menu
-- Hero section:
-
-  - very large bold black headline
-  - medium-size black subheadline
-  - two CTA buttons below headline
-
-- Buttons:
-
-  - primary button: filled blue, pill-shaped, elegant hover effect
-  - secondary button: white background, blue border, blue text, pill-shaped
-
-- Product image centered below text
-- Large whitespace, premium composition, perfect alignment
-- Overall feel: premium, futuristic, calm, minimal, Apple.com inspired
-- No clutter, no dark theme, no colorful decorations
-- Typography should look like SF Pro / Apple-style sans-serif
-- Responsive and production-quality UI
-
----
-
-## 如果你要给 AI 画图/出设计稿，用这个版本
-
-设计一个 **苹果官网风格的产品展示页面**：
-
-- 白色背景
-- 黑色字体
-- 蓝色操作按钮
-- 顶部极简导航栏
-- 中间大标题 + 副标题 + 双按钮
-- 下方展示产品主图
-- 风格高级、极简、留白充足
-- 视觉干净、现代、科技感强
-- 类似 Apple 官网新品发布页的首屏视觉
-- 强调居中构图、超大标题、精致圆角按钮、整洁间距
-
----
-
-## 如果你要生成 HTML/CSS/React 页面，我建议再加这段约束
-
-请输出高质量前端代码，并满足以下要求：
-
-- 使用现代响应式布局
-- 代码结构清晰，组件化
-- 视觉高度还原苹果官网风格
-- 不使用复杂炫技动画
-- Hover 效果克制自然
-- 按钮圆角较大，具有苹果官网质感
-- 页面宽度、间距、字号比例协调
-- 优先保证简洁与高级感
-
----
-
-## 一版更精炼的最终提示词
-
-仿照苹果官网设计一个极简产品首页，整体以白色为主色调，所有文字使用黑色，功能按钮使用苹果风格蓝色。页面包含顶部白色导航栏、中央 Hero 区域、超大黑色粗体标题、黑色副标题、两个圆角操作按钮，以及下方居中的产品展示图。整体风格要求高级、简洁、现代、留白充足、排版工整，具有 Apple 官网式的科技感与秩序感。桌面端优先，支持响应式布局。
-
----
-
-如果你愿意，我下一步可以直接帮你继续输出一版：
-**“适合 Cursor / v0 / Lovable / Bolt / ChatGPT 生成网页的完整提示词”**，或者直接给你一份 **HTML + CSS / React 版页面代码提示词**。
-
-确认产品主链路本来就是“简历中心 -> 岗位匹配 -> 简历优化 -> 模拟面试”的闭环。
-把当前岗位匹配模块的骨架摸清了：
-后端已有 job_descriptions 和 match_reports 两张表
-JD 解析目前是规则提取，不是异步任务
-匹配报告目前是“规则分 + AI 修正分”的一次性报告
-前端已经有岗位页和匹配报告面板，但能力还偏单次分析，不是“岗位目标管理中枢”
-我现在正继续读前端岗位页、简历结构数据和模拟面试占位页，接着会补一轮竞品/开源方案调研，然后给你出完整的《岗位匹配模块》重设计方案，包括它如何和简历解析、后续模拟面试形成联动闭环。
-
-我继续补前端和测试侧证据，重点看现在岗位页承载了什么、报告展示了什么、以及模拟面试模块当前预留到什么程度。这样设计方案就不会脱离现有代码。
-
-本地代码已经足够说明“现在有什么”。我再补一轮外部证据，重点看两类：现成求职工作台产品怎么做闭环，以及 GitHub 上有没有值得借鉴的数据模型或流程组织。
-
-现有代码和外部样本都说明了一点：岗位匹配如果只做“打分报告”，价值会很快见顶；真正拉开差距的是它是否成为后续简历优化、模拟面试的“任务编排中心”。我还差两项产品取舍需要你拍板，这会直接影响方案颗粒度和模块边界。
-
-外部样本已经够用了，结论很一致：行业里成熟做法都不是“只给一个分数”，而是把岗位匹配当作后续简历裁剪、题库生成、训练反馈的上游上下文。我再补最后一块代码事实：当前 AI 在本项目里到底只承担了什么角色。
-
-还剩一个会改变方案范围的关键点：岗位匹配是只服务“已拿到的目标 JD”，还是要同时承接“找岗位/导入岗位”。这个会直接影响数据模型和页面结构，我建议现在定掉。
-
-编写计划
-
-《岗位匹配模块》重设计方案：从“打分页”升级为“求职闭环中枢”
-Summary
-当前基线已经明确：后端是同步 JD 结构化 + 一次性匹配报告，前端是“JD 编辑 + 报告查看”页，核心代码集中在 job.py、match_engine.py、page.tsx。
-本次重设计的定位已锁定为“闭环中枢 + 深度联动模拟面试 + 手动录入 JD 为主”。
-模块目标不再是“生成一个分数”，而是沉淀 4 个可复用资产：岗位目标(Job Target)、匹配快照(Match Snapshot)、简历定制任务(Resume Tailoring Plan)、面试蓝图(Interview Blueprint)。
-主链路改为：简历解析成功 -> 选择目标岗位 -> 生成匹配快照 -> 产出改简历任务 -> 产出面试题包/追问点 -> 面试反馈回流岗位准备度 -> 触发再次匹配。
-外部参考信号：成熟产品都在强化“岗位上下文复用”而不是只做 ATS 分数，例如 Teal Match Resume to Job Description、Teal Interview Practice、Jobscan Resume Scanner，以及开源方向上的 CareerCopilot 与 FoloUp。
-Key Changes
-把“岗位匹配”重新定义为“目标岗位工作台”，每个岗位记录都要有 岗位画像、匹配历史、改简历任务、面试准备包、当前准备度 五个视角。
-job_descriptions 保留为主表，但其 structured_json 升级为更完整的岗位画像：basic、requirements、responsibilities、signals、competencies、interview_focus、parse_confidence、normalization_warnings。
-新增 job_parse_jobs，状态流转与简历解析对齐：pending -> processing -> success|failed。JD 结构化不再视为瞬时动作，而是可追踪、可重试、可排障的异步链路。
-保留现有 match_reports 路径与表名以减少破坏性改动，但语义升级为“匹配快照”。它必须变成异步生成资产，status 字段真正参与流转，而不是只存 success。
-match_reports 新增或扩展这些字段/JSON：resume_version、resume_snapshot_json、job_snapshot_json、tailoring_plan_json、interview_blueprint_json、readiness_status、staleness_status。
-匹配生成规则固定为“一次生成三份结果”：scorecard、tailoring plan、interview blueprint。不拆成多个前台按钮，避免用户重复等待和下游模块再做一遍理解。
-resume_tailoring_plan 的输出结构固定为：must_fix_gaps、nice_to_have_gaps、missing_evidence、rewrite_suggestions、section_targets、next_actions。它直接服务后续简历优化模块。
-interview_blueprint 的输出结构固定为：focus_competencies、question_pack、follow_up_prompts、evidence_to_probe、rubric、opening_brief。它直接服务后续模拟面试模块。
-岗位准备度采用统一状态：needs_resume_fix、ready_for_mock_interview、interview_in_progress、ready_to_apply。来源是“最新成功匹配快照 + 最近一次模拟面试反馈”。
-简历模块联动规则固定：只有 parse_status=success 的简历可参与匹配；每次匹配必须绑定 resume_id + resume_version；简历被用户编辑保存成新版本后，旧匹配快照自动标记 stale，岗位页显示“建议重新匹配”。
-模拟面试模块联动规则固定：面试入口必须从 match_report_id 启动，而不是只传 job_id；这样题目、追问、评分维度都能绑定到具体岗位要求和具体简历版本。
-模拟面试回流规则固定：面试结束后写回结构化摘要到匹配快照关联上下文，至少包含 competency_scores、weak_answers、missing_examples、suggested_resume_evidence；岗位页据此更新准备度和下一步动作。
-前端岗位页改为单页工作台，不再把“历史报告列表”放成主视图。信息架构固定为：左侧 岗位列表，中间 岗位画像/匹配结果 Tabs，右侧 下一步动作。
-中间 Tabs 固定为 4 个：岗位画像、匹配得分、改简历、面试准备。历史匹配快照收进二级抽屉或历史下拉，不抢主焦点。
-右侧动作面板固定只保留高价值 CTA：去简历优化、开始模拟面试、重新匹配最新简历版本、查看历史变化。
-保留当前苹果风格 UI 约束：白底、黑字、蓝色主按钮、克制卡片；但岗位页要更“任务驱动”，减少纯展示块。
-Public APIs / Interfaces
-POST /jobs 保留，继续
