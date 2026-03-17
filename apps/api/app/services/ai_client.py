@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass, is_dataclass
 
 import httpx
 
 EMPTY_PROVIDER_VALUES = {"", "disabled", "none", "off"}
 ANTHROPIC_COMPATIBLE_PROVIDERS = {"minimax", "anthropic"}
+MAX_ERROR_BODY_LENGTH = 240
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +67,11 @@ async def _request_openai_text(
                 "text": {"verbosity": "low"},
             },
         )
-        response.raise_for_status()
+        _raise_for_status_with_context(
+            response,
+            provider=config.provider,
+            model=config.model,
+        )
 
     return _openai_response_text(response.json())
 
@@ -76,12 +83,29 @@ async def _request_anthropic_text(
     payload: object,
     max_tokens: int,
 ) -> str:
+    logger.debug(
+        (
+            "AI provider request starting: provider=%s model=%s "
+            "instructions_length=%d payload_type=%s max_tokens=%d"
+        ),
+        config.provider,
+        config.model,
+        len(instructions),
+        type(payload).__name__,
+        max_tokens,
+    )
+
     headers = {
         "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
     }
-    if config.api_key:
-        headers["x-api-key"] = config.api_key
+    headers.update(_anthropic_auth_headers(config))
+
+    logger.debug(
+        "AI provider request headers: provider=%s has_api_key=%s",
+        config.provider,
+        bool(config.api_key),
+    )
 
     async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
         response = await client.post(
@@ -104,7 +128,23 @@ async def _request_anthropic_text(
                 ],
             },
         )
-        response.raise_for_status()
+
+        logger.debug(
+            (
+                "AI provider request completed: provider=%s model=%s "
+                "status=%d url=%s"
+            ),
+            config.provider,
+            config.model,
+            response.status_code,
+            str(response.request.url),
+        )
+
+        _raise_for_status_with_context(
+            response,
+            provider=config.provider,
+            model=config.model,
+        )
 
     return _anthropic_response_text(response.json())
 
@@ -113,6 +153,62 @@ def _serialize_payload(payload: object) -> str:
     if is_dataclass(payload):
         payload = asdict(payload)
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _anthropic_auth_headers(config: AIProviderConfig) -> dict[str, str]:
+    if not config.api_key:
+        return {}
+    if config.provider == "minimax":
+        return {"Authorization": f"Bearer {config.api_key}"}
+    return {"x-api-key": config.api_key}
+
+
+def _raise_for_status_with_context(
+    response: httpx.Response,
+    *,
+    provider: str,
+    model: str,
+) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        body_excerpt = _response_body_excerpt(response)
+        full_body = response.text.strip() if response.text else "<empty>"
+        logger.warning(
+            (
+                "AI provider request failed: provider=%s model=%s status=%s url=%s "
+                "request_id=%s response_full=%s"
+            ),
+            provider,
+            model,
+            response.status_code,
+            str(response.request.url),
+            response.headers.get("x-request-id", "unknown"),
+            full_body,
+        )
+        raise RuntimeError(
+            (
+                "AI provider request failed: provider=%s model=%s status=%s url=%s "
+                "response_excerpt=%s"
+            )
+            % (
+                provider,
+                model,
+                response.status_code,
+                str(response.request.url),
+                body_excerpt,
+            )
+        ) from exc
+
+
+def _response_body_excerpt(response: httpx.Response) -> str:
+    body = response.text.strip()
+    if not body:
+        return "<empty>"
+    normalized = " ".join(body.split())
+    if len(normalized) <= MAX_ERROR_BODY_LENGTH:
+        return normalized
+    return f"{normalized[:MAX_ERROR_BODY_LENGTH]}..."
 
 
 def _extract_json_object(content: str) -> str:

@@ -8,11 +8,24 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
+from app.core.config import Settings
 from app.core.errors import ApiException, ErrorCode
 from app.models import Resume, ResumeParseJob
 from app.schemas.resume import ResumeStructuredData
 from app.services.resume import process_resume_parse_job
-from app.services.resume_ai import ResumeAICorrectionResult
+from app.services.resume_ai import (
+    ResumeAICorrectionRequest,
+    ResumeAICorrectionResult,
+    build_resume_ai_correction_provider,
+)
+
+
+def build_disabled_resume_ai_settings() -> Settings:
+    return Settings(
+        resume_ai_provider="disabled",
+        resume_ai_base_url="",
+        resume_ai_model="",
+    )
 
 
 def build_pdf_bytes() -> bytes:
@@ -374,6 +387,7 @@ async def test_process_resume_parse_job_persists_naive_timestamps(session_factor
         parse_job_id=parse_job_id,
         storage=fake_storage,
         session_factory=session_factory,
+        settings=build_disabled_resume_ai_settings(),
     )
 
     async with session_factory() as session:
@@ -388,6 +402,81 @@ async def test_process_resume_parse_job_persists_naive_timestamps(session_factor
     assert parse_job.ai_message == "AI 校准未启用"
     assert parse_job.started_at is not None and parse_job.started_at.tzinfo is None
     assert parse_job.finished_at is not None and parse_job.finished_at.tzinfo is None
+
+
+@pytest.mark.asyncio
+async def test_minimax_resume_ai_provider_uses_anthropic_messages_endpoint(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeRequest:
+        @property
+        def url(self) -> str:
+            return "https://api.minimaxi.com/anthropic/v1/messages"
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        @property
+        def status_code(self) -> int:
+            return 200
+
+        @property
+        def headers(self) -> dict[str, str]:
+            return {}
+
+        @property
+        def request(self) -> FakeRequest:
+            return FakeRequest()
+
+        def json(self) -> dict[str, object]:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            '{"structured_json":{"basic_info":{"name":"Jane Doe","email":"jane@example.com",'
+                            '"phone":"13900001111","location":"Beijing","summary":"Summary"},'
+                            '"education":[],"work_experience":[],"projects":[],"skills":{"technical":[],'
+                            '"tools":[],"languages":[]},"certifications":[]},'
+                            '"corrections":[],"confidence":0.9,"reasoning":"ok"}'
+                        ),
+                    }
+                ]
+            }
+
+    async def fake_post(self, url, *, headers=None, json=None):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        return FakeResponse()
+
+    monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient.post", fake_post)
+
+    provider = build_resume_ai_correction_provider(
+        Settings(
+            resume_ai_api_key="resume-ai-key",
+        )
+    )
+    result = await provider.correct(
+        ResumeAICorrectionRequest(
+            raw_text="Jane Doe jane@example.com 13900001111 Beijing",
+            rule_structured_json=ResumeStructuredData().model_dump(),
+        )
+    )
+
+    assert result.status == "applied"
+    assert result.model == "MiniMax-M2.5"
+    assert captured["url"] == "https://api.minimaxi.com/anthropic/v1/messages"
+    assert captured["headers"] == {
+        "Authorization": "Bearer resume-ai-key",
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+    }
+    assert captured["json"]["model"] == "MiniMax-M2.5"
+    assert "messages" in captured["json"]
 
 
 @pytest.mark.asyncio

@@ -387,9 +387,14 @@ async def process_resume_parse_job(
                             message="AI 校准未启用",
                         )
                         logger.info(
-                            "Skipped resume AI correction: resume_id=%s provider=%s status=%s",
+                            (
+                                "Skipped resume AI correction: resume_id=%s provider=%s "
+                                "model=%s base_url=%s status=%s"
+                            ),
                             resume_id,
                             ai_result.provider,
+                            ai_result.model,
+                            config.resume_ai_base_url,
                             ai_result.status,
                         )
                 except Exception as exc:
@@ -398,9 +403,17 @@ async def process_resume_parse_job(
                         status=AI_STATUS_FALLBACK_RULE,
                         message="AI 校准失败，已回退规则解析",
                     )
-                    logger.warning(
-                        "Resume AI correction fallback to rule result: resume_id=%s reason=%s",
+                    logger.exception(
+                        (
+                            "Resume AI correction failed: resume_id=%s "
+                            "provider=%s model=%s base_url=%s "
+                            "raw_text_length=%d exception=%s"
+                        ),
                         resume_id,
+                        config.resume_ai_provider,
+                        config.resume_ai_model,
+                        config.resume_ai_base_url,
+                        len(raw_text),
                         str(exc),
                     )
 
