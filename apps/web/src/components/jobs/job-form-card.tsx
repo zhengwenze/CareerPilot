@@ -3,7 +3,6 @@
 import { Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -65,14 +64,9 @@ export function JobFormCard({
       <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
         <CardHeader className="space-y-4 px-6 py-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-2">
-              <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
-                Job Cockpit
-              </Badge>
-              <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-                {selectedJob ? "目标岗位驾驶舱" : "创建目标岗位"}
-              </CardTitle>
-            </div>
+            <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
+              {selectedJob ? "编辑目标岗位" : "创建目标岗位"}
+            </CardTitle>
 
             <div className="flex flex-wrap gap-2">
               <Button
@@ -119,7 +113,9 @@ export function JobFormCard({
         <CardContent className="space-y-5 px-6 pb-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="job-title" className="text-black">岗位标题</Label>
+              <Label htmlFor="job-title" className="text-black">
+                岗位标题
+              </Label>
               <Input
                 className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                 id="job-title"
@@ -129,7 +125,9 @@ export function JobFormCard({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="job-company" className="text-black">公司</Label>
+              <Label htmlFor="job-company" className="text-black">
+                公司
+              </Label>
               <Input
                 className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                 id="job-company"
@@ -139,7 +137,9 @@ export function JobFormCard({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="job-city" className="text-black">城市</Label>
+              <Label htmlFor="job-city" className="text-black">
+                城市
+              </Label>
               <Input
                 className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                 id="job-city"
@@ -149,7 +149,9 @@ export function JobFormCard({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="job-type" className="text-black">用工类型</Label>
+              <Label htmlFor="job-type" className="text-black">
+                用工类型
+              </Label>
               <Input
                 className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                 id="job-type"
@@ -159,7 +161,9 @@ export function JobFormCard({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="job-source-name" className="text-black">来源平台</Label>
+              <Label htmlFor="job-source-name" className="text-black">
+                来源平台
+              </Label>
               <Input
                 className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                 id="job-source-name"
@@ -169,7 +173,9 @@ export function JobFormCard({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="job-source-url" className="text-black">来源链接</Label>
+              <Label htmlFor="job-source-url" className="text-black">
+                来源链接
+              </Label>
               <Input
                 className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
                 id="job-source-url"
@@ -181,7 +187,9 @@ export function JobFormCard({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="job-jd-text" className="text-black">JD 原文</Label>
+            <Label htmlFor="job-jd-text" className="text-black">
+              JD 原文
+            </Label>
             <Textarea
               className="min-h-[220px] rounded-[1.75rem] border-black/10 bg-[#f5f5f7] text-black placeholder:text-black/40 focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
               id="job-jd-text"
@@ -192,9 +200,14 @@ export function JobFormCard({
           </div>
 
           {pageError ? (
-            <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]" variant="destructive">
+            <Alert
+              className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]"
+              variant="destructive"
+            >
               <AlertTitle className="text-black">操作失败</AlertTitle>
-              <AlertDescription className="text-black/72">{pageError}</AlertDescription>
+              <AlertDescription className="text-black/72">
+                {pageError}
+              </AlertDescription>
             </Alert>
           ) : null}
         </CardContent>
@@ -204,21 +217,17 @@ export function JobFormCard({
         <CardHeader className="space-y-3 px-6 py-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <Badge className="w-fit rounded-full border border-black/10 bg-white px-3 py-1 text-black hover:bg-white">
-                Structured Job Profile
-              </Badge>
-              <CardTitle className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-black">
-                岗位画像与准备度
+              <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
+                岗位画像
               </CardTitle>
+              <p className="mt-2 text-sm leading-7 text-black/62">
+                只保留匹配和后续动作会直接使用的关键信息。
+              </p>
             </div>
             {selectedJob ? (
-              <div className="flex flex-wrap gap-2">
-                <Badge className="rounded-full border border-black/10 bg-white px-3 py-1 text-black hover:bg-white">
-                  {getStageLabel(selectedJob.status_stage)}
-                </Badge>
-                <Badge className="rounded-full bg-[#F5F9FF] px-3 py-1 text-[#0071E3] hover:bg-[#F5F9FF]">
-                  解析 {selectedJob.parse_status}
-                </Badge>
+              <div className="text-sm text-black/62">
+                阶段 {getStageLabel(selectedJob.status_stage)} · 解析{" "}
+                {selectedJob.parse_status}
               </div>
             ) : null}
           </div>
@@ -254,7 +263,9 @@ export function JobFormCard({
                     : "未识别年限"}
                 </p>
                 <p className="text-sm leading-7 text-black/68">
-                  {structured?.experience_constraints.location || selectedJob.job_city || "地点未填"}
+                  {structured?.experience_constraints.location ||
+                    selectedJob.job_city ||
+                    "地点未填"}
                 </p>
               </div>
 
@@ -276,21 +287,27 @@ export function JobFormCard({
               <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
                 <p className="text-sm font-medium text-black">必备能力</p>
                 <p className="mt-2 text-sm leading-7 text-black/68">
-                  {structured?.must_have.join("、") || structured?.requirements.required_skills.join("、") || "暂无"}
+                  {structured?.must_have.join("、") ||
+                    structured?.requirements.required_skills.join("、") ||
+                    "暂无"}
                 </p>
               </div>
 
               <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
                 <p className="text-sm font-medium text-black">加分项</p>
                 <p className="mt-2 text-sm leading-7 text-black/68">
-                  {structured?.nice_to_have.join("、") || structured?.requirements.preferred_skills.join("、") || "暂无"}
+                  {structured?.nice_to_have.join("、") ||
+                    structured?.requirements.preferred_skills.join("、") ||
+                    "暂无"}
                 </p>
               </div>
 
               <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
                 <p className="text-sm font-medium text-black">领域关键词</p>
                 <p className="mt-2 text-sm leading-7 text-black/68">
-                  {structured?.domain_context.keywords.join("、") || structured?.requirements.required_keywords.join("、") || "暂无"}
+                  {structured?.domain_context.keywords.join("、") ||
+                    structured?.requirements.required_keywords.join("、") ||
+                    "暂无"}
                 </p>
               </div>
 
@@ -300,7 +317,9 @@ export function JobFormCard({
                   {structured?.responsibility_clusters.length ? (
                     structured.responsibility_clusters.map((cluster) => (
                       <div key={cluster.name}>
-                        <p className="text-sm font-medium text-black">{cluster.name}</p>
+                        <p className="text-sm font-medium text-black">
+                          {cluster.name}
+                        </p>
                         <p className="text-sm leading-7 text-black/68">
                           {cluster.items.join("；")}
                         </p>

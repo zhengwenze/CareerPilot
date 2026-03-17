@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ArrowUpRight, Sparkles, Trash2 } from "lucide-react";
 
 import { PageEmptyState } from "@/components/page-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { JobRecord, MatchReportRecord } from "@/lib/api/modules/jobs";
@@ -73,14 +72,9 @@ export function MatchReportPanel({
     <div className="space-y-5">
       <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
         <CardHeader className="space-y-4 px-6 py-6">
-          <div className="space-y-2">
-            <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
-              Next Actions
-            </Badge>
-            <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-              生成匹配、定制任务和面试蓝图
-            </CardTitle>
-          </div>
+          <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
+            匹配与后续动作
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 px-6 pb-6">
           {!isJobReadyForMatch ? (
@@ -140,7 +134,9 @@ export function MatchReportPanel({
                   type="button"
                   variant="outline"
                 >
-                  <Link href={`/dashboard/interviews?jobId=${selectedJob.id}${selectedReport ? `&reportId=${selectedReport.id}` : ""}`}>
+                  <Link
+                    href={`/dashboard/interviews?jobId=${selectedJob.id}${selectedReport ? `&reportId=${selectedReport.id}` : ""}`}
+                  >
                     开始模拟面试
                     <ArrowUpRight className="size-4" />
                   </Link>
@@ -186,7 +182,8 @@ export function MatchReportPanel({
                           : `状态 ${report.status}`}
                       </p>
                       <p className="mt-2 text-xs leading-6 text-black/52">
-                        v{report.resume_version}/v{report.job_version} · {formatDate(report.created_at)}
+                        v{report.resume_version}/v{report.job_version} ·{" "}
+                        {formatDate(report.created_at)}
                       </p>
                       {report.stale_status === "stale" ? (
                         <p className="mt-2 text-xs text-[#D93025]">已过期</p>
@@ -208,16 +205,11 @@ export function MatchReportPanel({
           <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
             <CardHeader className="space-y-4 px-6 py-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-2">
-                  <Badge className="w-fit rounded-full border border-black/10 bg-[#f5f5f7] px-3 py-1 text-black hover:bg-[#f5f5f7]">
-                    Match Snapshot
-                  </Badge>
-                  <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-                    {selectedReport.status === "success"
-                      ? `${getFitBandLabel(selectedReport.fit_band)} · 总分 ${selectedReport.overall_score}`
-                      : `报告${selectedReport.status}`}
-                  </CardTitle>
-                </div>
+                <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
+                  {selectedReport.status === "success"
+                    ? `${getFitBandLabel(selectedReport.fit_band)} · 总分 ${selectedReport.overall_score}`
+                    : `报告${selectedReport.status}`}
+                </CardTitle>
                 <Button
                   className="rounded-full"
                   disabled={isDeletingReport}
@@ -265,7 +257,8 @@ export function MatchReportPanel({
                     缺失项
                   </p>
                   <p className="mt-2 text-sm leading-7 text-black/68">
-                    {selectedReport.evidence_map_json.missing_items?.join("、") || "暂无"}
+                    {selectedReport.evidence_map_json.missing_items?.join("、") ||
+                      "暂无"}
                   </p>
                 </div>
 
@@ -274,14 +267,22 @@ export function MatchReportPanel({
                   <div className="mt-3 space-y-3">
                     {(selectedReport.gap_taxonomy_json.must_fix ?? []).map((item) => (
                       <div key={`${item.label}-${item.reason}`}>
-                        <p className="text-sm font-medium text-black">必须补：{item.label}</p>
-                        <p className="text-sm leading-7 text-black/68">{item.reason}</p>
+                        <p className="text-sm font-medium text-black">
+                          必须补：{item.label}
+                        </p>
+                        <p className="text-sm leading-7 text-black/68">
+                          {item.reason}
+                        </p>
                       </div>
                     ))}
                     {(selectedReport.gap_taxonomy_json.should_fix ?? []).map((item) => (
                       <div key={`${item.label}-${item.reason}`}>
-                        <p className="text-sm font-medium text-black">建议补：{item.label}</p>
-                        <p className="text-sm leading-7 text-black/68">{item.reason}</p>
+                        <p className="text-sm font-medium text-black">
+                          建议补：{item.label}
+                        </p>
+                        <p className="text-sm leading-7 text-black/68">
+                          {item.reason}
+                        </p>
                       </div>
                     ))}
                     {selectedReport.gap_taxonomy_json.must_fix?.length ||
@@ -301,7 +302,8 @@ export function MatchReportPanel({
                   {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).map((item, index) => (
                     <div key={`${String(item.title)}-${index}`}>
                       <p className="text-sm font-medium text-black">
-                        P{String(item.priority ?? index + 1)} · {String(item.title ?? "定制任务")}
+                        P{String(item.priority ?? index + 1)} ·{" "}
+                        {String(item.title ?? "定制任务")}
                       </p>
                       <p className="text-sm leading-7 text-black/68">
                         {String(item.instruction ?? item.description ?? "")}
@@ -310,7 +312,8 @@ export function MatchReportPanel({
                   ))}
                   {selectedReport.tailoring_plan_json.must_add_evidence?.length ? (
                     <p className="text-sm leading-7 text-black/68">
-                      必须补证据：{selectedReport.tailoring_plan_json.must_add_evidence.join("、")}
+                      必须补证据：
+                      {selectedReport.tailoring_plan_json.must_add_evidence.join("、")}
                     </p>
                   ) : null}
                   {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).length === 0 ? (
@@ -327,11 +330,16 @@ export function MatchReportPanel({
                       训练重点
                     </p>
                     <div className="mt-2 space-y-2">
-                      {(selectedReport.interview_blueprint_json.focus_areas ?? []).map((item, index) => (
-                        <p className="text-sm leading-7 text-black/68" key={`${String(item.topic)}-${index}`}>
-                          {String(item.topic)} · {String(item.reason ?? "")}
-                        </p>
-                      ))}
+                      {(selectedReport.interview_blueprint_json.focus_areas ?? []).map(
+                        (item, index) => (
+                          <p
+                            className="text-sm leading-7 text-black/68"
+                            key={`${String(item.topic)}-${index}`}
+                          >
+                            {String(item.topic)} · {String(item.reason ?? "")}
+                          </p>
+                        )
+                      )}
                     </div>
                   </div>
                   <div>
@@ -339,11 +347,16 @@ export function MatchReportPanel({
                       题包预览
                     </p>
                     <div className="mt-2 space-y-2">
-                      {(selectedReport.interview_blueprint_json.question_pack ?? []).slice(0, 3).map((item, index) => (
-                        <p className="text-sm leading-7 text-black/68" key={`${String(item.question)}-${index}`}>
-                          {String(item.question)}
-                        </p>
-                      ))}
+                      {(selectedReport.interview_blueprint_json.question_pack ?? [])
+                        .slice(0, 3)
+                        .map((item, index) => (
+                          <p
+                            className="text-sm leading-7 text-black/68"
+                            key={`${String(item.question)}-${index}`}
+                          >
+                            {String(item.question)}
+                          </p>
+                        ))}
                     </div>
                   </div>
                 </div>
