@@ -52,12 +52,14 @@
 #### 后端（FastAPI + SQLAlchemy）
 
 **认证模块**：
+
 - `POST /auth/register`：用户注册
 - `POST /auth/login`：用户登录（JWT access token）
 - `POST /auth/logout`：登出（Redis token blocklist）
 - `GET /auth/me`：当前用户查询
 
 **简历中心**：
+
 - `POST /resumes/upload`：上传 PDF 简历
 - `GET /resumes`：简历列表
 - `GET /resumes/{id}`：简历详情
@@ -69,6 +71,7 @@
 - 异步解析任务：自动抽取文本 → 结构化解析 → 回写数据库
 
 **岗位匹配**：
+
 - `POST /jobs`：创建岗位 JD
 - `GET /jobs`：岗位列表（支持 keyword / parse_status / status_stage / priority / stale 过滤）
 - `GET /jobs/{id}`：岗位详情
@@ -82,6 +85,7 @@
 - 异步匹配任务：岗位画像生成 → 简历匹配评分 → 生成可解释报告
 
 **简历优化**：
+
 - `POST /resume-optimization-sessions`：创建优化会话
 - `GET /resume-optimization-sessions/{id}`：获取优化会话
 - `PUT /resume-optimization-sessions/{id}`：更新优化草案
@@ -89,10 +93,12 @@
 - `POST /resume-optimization-sessions/{id}/apply`：应用优化到简历
 
 **个人资料**：
+
 - `GET /profile/me`：查询个人资料
 - `PUT /profile/me`：更新个人资料（求职方向、目标城市、目标岗位等）
 
 **系统健康检查**：
+
 - `GET /health`：服务状态
 - `GET /health/readiness`：就绪检查（DB + Redis）
 - `GET /health/version`：版本信息
@@ -899,5 +905,3 @@ CareerPilot 当前已经完成：
 > **围绕"简历中心 → 岗位匹配 → 简历优化"这条核心业务链路持续优化，让每一个环节都真正可用、好用、可复用。**
 
 当前项目已经从"一个工程骨架"进入"一个有产品价值的 AI 求职工作台"阶段。只要继续沿着已跑通的闭环深化，CareerPilot 将真正成为求职者可持续使用的 AI 求职工作台。
-
-可以。
