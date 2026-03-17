@@ -1,4 +1,4 @@
-import { ArrowRight, BriefcaseBusiness, FileText, Settings, Sparkles, Target } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, FileText, Settings, Sparkles, Target, WandSparkles } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardOverviewPage() {
@@ -14,6 +14,12 @@ export default function DashboardOverviewPage() {
       description: "维护 JD、生成匹配报告，并把岗位要求和简历能力放在同一张面板里。",
       href: "/dashboard/jobs",
       icon: Target,
+    },
+    {
+      title: "简历优化",
+      description: "基于岗位快照生成可编辑的改写草案，并把确认后的建议应用到结构化简历。",
+      href: "/dashboard/optimizer",
+      icon: WandSparkles,
     },
     {
       title: "个人信息",

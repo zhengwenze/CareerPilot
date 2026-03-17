@@ -6,6 +6,7 @@ import {
   Settings,
   Sparkles,
   Target,
+  WandSparkles,
 } from "lucide-react";
 
 export type NavMatchMode = "exact" | "prefix";
@@ -51,6 +52,12 @@ export const dashboardNavSections: NavSection[] = [
         title: "岗位匹配",
         href: "/dashboard/jobs",
         icon: Target,
+        match: "prefix",
+      },
+      {
+        title: "简历优化",
+        href: "/dashboard/optimizer",
+        icon: WandSparkles,
         match: "prefix",
       },
       {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowRight, FileText, Sparkles, Target } from "lucide-react";
 
 import { JobFormCard } from "@/components/jobs/job-form-card";
@@ -51,6 +52,9 @@ function isInFlight(status: string | null | undefined) {
 
 export default function DashboardJobsPage() {
   const { token } = useAuth();
+  const searchParams = useSearchParams();
+  const preferredJobIdFromQuery = searchParams.get("jobId");
+  const staleHint = searchParams.get("staleHint");
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [resumes, setResumes] = useState<ResumeRecord[]>([]);
   const [reports, setReports] = useState<MatchReportRecord[]>([]);
@@ -99,15 +103,25 @@ export default function DashboardJobsPage() {
         setJobs(nextJobs);
         setResumes(nextResumes);
 
-        const nextJobId = nextJobs[0]?.id ?? null;
+        const nextJobId =
+          preferredJobIdFromQuery && nextJobs.some((item) => item.id === preferredJobIdFromQuery)
+            ? preferredJobIdFromQuery
+            : nextJobs[0]?.id ?? null;
         setSelectedJobId(nextJobId);
-        setJobDraft(nextJobId ? toJobDraft(nextJobs[0]) : createEmptyJobDraft());
+        setJobDraft(
+          nextJobId
+            ? toJobDraft(nextJobs.find((item) => item.id === nextJobId)!)
+            : createEmptyJobDraft()
+        );
 
         const nextSelectedResumeId =
-          nextJobs[0]?.recommended_resume_id ??
+          nextJobs.find((item) => item.id === nextJobId)?.recommended_resume_id ??
           nextResumes.find((item) => item.parse_status === "success")?.id ??
           "";
         setSelectedResumeId(nextSelectedResumeId);
+        if (staleHint === "1") {
+          setBannerMessage("简历优化已应用，之前的匹配快照已过期，建议重新匹配最新简历版本。");
+        }
       } catch (error) {
         if (!cancelled) {
           setPageError(getErrorMessage(error));
@@ -124,7 +138,7 @@ export default function DashboardJobsPage() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [preferredJobIdFromQuery, staleHint, token]);
 
   useEffect(() => {
     if (!token || !selectedJobId) {

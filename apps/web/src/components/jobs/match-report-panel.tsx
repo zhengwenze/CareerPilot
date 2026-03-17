@@ -127,7 +127,12 @@ export function MatchReportPanel({
                   type="button"
                   variant="outline"
                 >
-                  <a href="#tailoring-plan">查看简历定制任务</a>
+                  <Link
+                    href={`/dashboard/optimizer?jobId=${selectedJob.id}${selectedReport ? `&reportId=${selectedReport.id}` : ""}`}
+                  >
+                    去简历优化
+                    <ArrowUpRight className="size-4" />
+                  </Link>
                 </Button>
                 <Button
                   asChild

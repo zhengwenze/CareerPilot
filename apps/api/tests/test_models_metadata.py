@@ -6,6 +6,7 @@ def test_metadata_includes_job_and_match_tables() -> None:
     assert "job_parse_jobs" in Base.metadata.tables
     assert "job_readiness_events" in Base.metadata.tables
     assert "match_reports" in Base.metadata.tables
+    assert "resume_optimization_sessions" in Base.metadata.tables
 
 
 def test_match_reports_foreign_keys_reference_expected_tables() -> None:
