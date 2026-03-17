@@ -1,4 +1,12 @@
-import { ArrowRight, BriefcaseBusiness, FileText, Settings, Sparkles, Target, WandSparkles } from "lucide-react";
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  FileText,
+  Settings,
+  Sparkles,
+  Target,
+  WandSparkles,
+} from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardOverviewPage() {
@@ -42,37 +50,15 @@ export default function DashboardOverviewPage() {
   ];
 
   return (
-    <div className="space-y-10">
-      <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
-        <div className="max-w-4xl">
-          <p className="text-sm font-medium tracking-[0.18em] text-black uppercase">
-            Overview
-          </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.06em] text-black sm:text-5xl lg:text-6xl">
-            把求职流程收成一条清楚、克制、可执行的工作流。
-          </h1>
-          <p className="mt-6 max-w-3xl text-base leading-8 text-black/72">
-            这里不再堆叠说明卡片，而是直接给出当前已经可用的模块入口。上传简历、维护岗位、完善个人偏好，都可以从顶部导航或下面的卡片直接进入。
-          </p>
-        </div>
-
-        <div className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] p-6">
-          <p className="text-xs font-medium tracking-[0.18em] text-black uppercase">
-            Workspace Focus
-          </p>
-          <div className="mt-5 space-y-4">
-            <div className="rounded-[1.5rem] bg-white px-5 py-4">
-              <p className="text-sm font-medium text-black">上传并解析简历</p>
-            </div>
-            <div className="rounded-[1.5rem] bg-white px-5 py-4">
-              <p className="text-sm font-medium text-black">录入目标岗位并生成匹配报告</p>
-            </div>
-            <div className="rounded-[1.5rem] bg-white px-5 py-4">
-              <p className="text-sm font-medium text-black">维护求职方向与偏好</p>
-            </div>
-          </div>
-        </div>
-      </section>
+    <div className="space-y-6">
+      <div className="max-w-3xl">
+        <h1 className="text-3xl font-semibold tracking-[-0.05em] text-black sm:text-4xl">
+          求职工作台
+        </h1>
+        <p className="mt-3 text-sm leading-7 text-black/68">
+          只保留可直接进入的功能模块，不再展示统计、导览和额外焦点卡。
+        </p>
+      </div>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sections.map((section) => {
