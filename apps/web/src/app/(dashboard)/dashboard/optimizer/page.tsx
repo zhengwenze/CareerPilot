@@ -12,7 +12,6 @@ import {
   PageLoadingState,
 } from "@/components/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,15 +55,21 @@ export default function DashboardOptimizerPage() {
   const reportId = searchParams.get("reportId");
   const initialSessionId = searchParams.get("sessionId");
 
-  const [session, setSession] = useState<ResumeOptimizationSessionRecord | null>(null);
-  const [draftSections, setDraftSections] = useState<Record<string, ResumeOptimizationSectionDraft>>({});
-  const [selectedTasks, setSelectedTasks] = useState<ResumeOptimizationTaskState[]>([]);
+  const [session, setSession] = useState<ResumeOptimizationSessionRecord | null>(
+    null
+  );
+  const [draftSections, setDraftSections] = useState<
+    Record<string, ResumeOptimizationSectionDraft>
+  >({});
+  const [selectedTasks, setSelectedTasks] = useState<
+    ResumeOptimizationTaskState[]
+  >([]);
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [pageError, setPageError] = useState("");
-  const [bannerMessage, setBannerMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
   useEffect(() => {
     if (!token) {
@@ -151,7 +156,7 @@ export default function DashboardOptimizerPage() {
     }
     setIsGenerating(true);
     setPageError("");
-    setBannerMessage("");
+    setStatusMessage("");
     try {
       const saved = await updateResumeOptimizationSession(token, session.id, {
         draft_sections: draftSections,
@@ -162,7 +167,7 @@ export default function DashboardOptimizerPage() {
       setSession(nextSession);
       setDraftSections(nextSession.draft_sections);
       setSelectedTasks(nextSession.selected_tasks);
-      setBannerMessage("已生成新的改写草案。");
+      setStatusMessage("已生成新的改写草案。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -176,14 +181,14 @@ export default function DashboardOptimizerPage() {
     }
     setIsSaving(true);
     setPageError("");
-    setBannerMessage("");
+    setStatusMessage("");
     try {
       const nextSession = await updateResumeOptimizationSession(token, session.id, {
         draft_sections: draftSections,
         selected_tasks: selectedTasks,
       });
       setSession(nextSession);
-      setBannerMessage("草案已保存。");
+      setStatusMessage("草案已保存。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -197,15 +202,15 @@ export default function DashboardOptimizerPage() {
     }
     setIsApplying(true);
     setPageError("");
-    setBannerMessage("");
+    setStatusMessage("");
     try {
       const result = await applyResumeOptimizationSession(token, session.id);
       const nextSession = await fetchResumeOptimizationSession(token, session.id);
       setSession(nextSession);
       setDraftSections(nextSession.draft_sections);
       setSelectedTasks(nextSession.selected_tasks);
-      setBannerMessage(
-        `已应用到当前简历，简历版本升级到 v${result.applied_resume_version}。返回岗位页后可重新匹配最新版本。`
+      setStatusMessage(
+        `已应用到当前简历，简历版本升级到 v${result.applied_resume_version}。`
       );
     } catch (error) {
       setPageError(getErrorMessage(error));
@@ -216,48 +221,10 @@ export default function DashboardOptimizerPage() {
 
   return (
     <div className="space-y-8">
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
-        <div className="max-w-3xl">
-          <p className="text-sm font-medium tracking-[0.18em] text-black uppercase">
-            Resume Optimizer
-          </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-black sm:text-5xl">
-            把匹配结果变成可应用的简历改写
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-black/72">
-            这里不会重新分析岗位，而是直接消费岗位快照里的定制任务，生成可编辑草案并应用到结构化简历。
-          </p>
-        </div>
-
-        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
-          <CardContent className="px-6 py-6">
-            <p className="text-xs font-medium tracking-[0.18em] text-black uppercase">
-              Optimizer Context
-            </p>
-            <p className="mt-4 text-2xl font-semibold tracking-[-0.04em] text-black">
-              {session.optimizer_context.job_title}
-            </p>
-            <p className="mt-3 text-sm leading-7 text-black/65">
-              {session.optimizer_context.company || "未填写公司"} · {getFitBandLabel(session.optimizer_context.fit_band)}
-            </p>
-            <p className="text-sm leading-7 text-black/65">
-              简历 v{session.source_resume_version} / 岗位 v{session.source_job_version}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
       {pageError ? (
         <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
           <AlertTitle className="text-black">操作失败</AlertTitle>
           <AlertDescription className="text-black/72">{pageError}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {bannerMessage ? (
-        <Alert className="rounded-[1.5rem] border-[#0071E3]/15 bg-[#F5F9FF]">
-          <AlertTitle className="text-black">状态更新</AlertTitle>
-          <AlertDescription className="text-black/72">{bannerMessage}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -397,14 +364,23 @@ export default function DashboardOptimizerPage() {
 
         <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
           <CardHeader className="space-y-3 px-6 py-6">
-            <Badge className="w-fit rounded-full border border-black/10 bg-white px-3 py-1 text-black hover:bg-white">
-              Apply
-            </Badge>
             <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
               应用与回流
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 px-6 pb-6">
+            <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
+              <p className="text-sm font-medium text-black">
+                {session.optimizer_context.job_title}
+              </p>
+              <p className="mt-2 text-sm leading-7 text-black/68">
+                {session.optimizer_context.company || "未填写公司"} ·{" "}
+                {getFitBandLabel(session.optimizer_context.fit_band)}
+              </p>
+              <p className="text-sm leading-7 text-black/68">
+                简历 v{session.source_resume_version} / 岗位 v{session.source_job_version}
+              </p>
+            </div>
             <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
               <p className="text-sm font-medium text-black">岗位摘要</p>
               <p className="mt-2 text-sm leading-7 text-black/68">
@@ -445,9 +421,9 @@ export default function DashboardOptimizerPage() {
                 {isApplying ? "应用中..." : "应用到当前简历"}
                 <CheckCircle2 className="size-4" />
               </Button>
-            </div>
-            <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-white px-4 py-4 text-sm text-black/58">
-              应用后会自动提升简历版本，并让原岗位快照变为“待重跑”。
+              {statusMessage ? (
+                <p className="text-sm leading-7 text-black/62">{statusMessage}</p>
+              ) : null}
             </div>
             <Button
               asChild
