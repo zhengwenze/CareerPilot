@@ -164,7 +164,7 @@ export default function DashboardOptimizerPage() {
   }
 
   async function handleGenerateSuggestions() {
-    if (!token) {
+    if (!token || !session) {
       return;
     }
     setIsGenerating(true);
@@ -189,7 +189,7 @@ export default function DashboardOptimizerPage() {
   }
 
   async function handleSaveDraft() {
-    if (!token) {
+    if (!token || !session) {
       return;
     }
     setIsSaving(true);
@@ -210,7 +210,7 @@ export default function DashboardOptimizerPage() {
   }
 
   async function handleApply() {
-    if (!token) {
+    if (!token || !session) {
       return;
     }
     setIsApplying(true);

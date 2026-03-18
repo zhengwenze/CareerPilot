@@ -229,6 +229,9 @@ export default function DashboardResumePage() {
     let cancelled = false;
 
     async function syncDetail() {
+      if (!selectedResumeId) {
+        return;
+      }
       try {
         const detail = await loadResumeDetailData(accessToken, selectedResumeId);
         if (!cancelled) {
@@ -260,6 +263,9 @@ export default function DashboardResumePage() {
     let cancelled = false;
     const timer = window.setInterval(() => {
       void (async () => {
+        if (!selectedResumeId) {
+          return;
+        }
         try {
           const result = await loadResumeListData(accessToken, selectedResumeId);
           if (cancelled) {

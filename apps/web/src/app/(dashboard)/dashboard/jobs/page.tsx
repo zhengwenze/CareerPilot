@@ -138,6 +138,9 @@ export default function DashboardJobsPage() {
     let cancelled = false;
 
     async function loadReports() {
+      if (!selectedJobId) {
+        return;
+      }
       try {
         const nextReports = await fetchJobMatchReports(accessToken, selectedJobId);
         if (cancelled) {
