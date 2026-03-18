@@ -1,18 +1,18 @@
-fix: 修复AuthProvider使用useEffectEvent导致的hydration失败问题
+feat: 匹配报告改为强制AI语义主路径，规则引擎仅作AI输入
 
-根因：useEffectEvent在部分Next 16 + React 19组合下会导致客户端hydration失败，页面可见但按钮事件不绑定（按钮像"死的"）
+核心改动：
+- match_ai.py: 统一到现有Minimax JSON client，定义strict JSON报告schema，强制校验完整报告结构
+- match_report.py: 将匹配报告生成改为AI强制主路径；规则引擎只作为AI输入，不再作为成功fallback
+- config.py: 把匹配AI默认配置切到minimax
+- .env.example: 同步默认环境模板，明确匹配报告依赖Minimax
+- README.md: 补充后端启动时匹配AI的配置说明
 
-修复方案：移除useEffectEvent，改用useEffect + async restore + cancel guard
-- auth-provider.tsx: 移除useEffectEvent，恢复会话逻辑改为普通useEffect + async
-- jobs/page.tsx: "去简历优化"改为先调后端创建会话再跳转
-- match-report-panel.tsx: 按钮可用性门禁和提示文案完善
+测试覆盖：
+- test_jobs_match_flow.py: 新增强制AI语义测试：AI成功、缺key失败、返回非法结构失败
+- test_resume_optimizer_flow.py: 修复下游优化闭环测试，使其适配新的强制AI匹配报告
 
-验证：cd apps/web && npm run lint/build通过
+前端改动：
+- jobs.ts: 增加单报告详情查询，并收敛scorecard_json类型
+- jobs/page.tsx: 完整重写岗位匹配页：极简输入、一键编排流程、默认最新报告展示、历史折叠、自动进简历优化
 
-复测步骤：
-1. 重启前端：cd apps/web && npm run dev（不要用旧进程热更新）
-2. 浏览器强刷（Mac: Cmd+Shift+R）
-3. 点击"新建目标岗位""创建 JD""更新匹配"应有即时UI变化
-4. 报告成功后点"去简历优化"应跳转到带sessionId的优化页
-
-风险：如仍"全部按钮无响应"，请提供浏览器Console首条红色报错
+验证：待执行pytest + lint

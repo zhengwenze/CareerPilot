@@ -15,12 +15,10 @@ from app.schemas.match_report import (
 from app.schemas.resume import ResumeStructuredData
 from app.services.job import get_job_or_404
 from app.services.match_ai import (
-    AIMatchCorrectionRequest,
-    AIMatchCorrectionResult,
+    AIMatchReportRequest,
     build_ai_match_correction_provider,
 )
 from app.services.match_engine import build_rule_match_result
-from app.services.match_support import derive_fit_band
 from app.services.resume import get_resume_for_user
 
 
@@ -114,16 +112,6 @@ def _sanitize_action_items(items: list[dict[str, object]]) -> list[dict[str, obj
     for index, item in enumerate(sanitized, start=1):
         item["priority"] = index
     return sanitized[:5]
-
-
-def _build_failed_ai_result(exc: Exception) -> AIMatchCorrectionResult:
-    return AIMatchCorrectionResult(
-        provider="unavailable",
-        model=None,
-        status="failed",
-        delta=0.0,
-        reasoning=str(exc).strip() or "AI correction failed",
-    )
 
 
 def _build_missing_user_inputs(
@@ -451,46 +439,83 @@ async def process_match_report(
             )
 
             ai_provider = build_ai_match_correction_provider(settings)
-            try:
-                ai_result = await ai_provider.correct(
-                    AIMatchCorrectionRequest(
-                        resume_snapshot=resume_snapshot.model_dump(),
-                        job_snapshot=job_snapshot.model_dump(),
-                        rule_score=rule_result.overall_score,
-                        dimension_scores=rule_result.dimension_scores,
-                        strengths=rule_result.strengths,
-                        gaps=rule_result.gaps,
-                        actions=rule_result.actions,
-                    )
+            ai_result = await ai_provider.correct(
+                AIMatchReportRequest(
+                    resume_snapshot=resume_snapshot.model_dump(),
+                    job_snapshot=job_snapshot.model_dump(),
+                    rule_result={
+                        "overall_score": rule_result.overall_score,
+                        "dimension_scores": rule_result.dimension_scores,
+                        "strengths": rule_result.strengths,
+                        "gaps": rule_result.gaps,
+                        "actions": rule_result.actions,
+                        "evidence": rule_result.evidence,
+                    },
                 )
-            except Exception as exc:
-                ai_result = _build_failed_ai_result(exc)
-
-            overall_score = max(
-                0.0, min(100.0, rule_result.overall_score + float(ai_result.delta))
             )
-            fit_band = derive_fit_band(overall_score)
-            dimension_scores = {
-                **rule_result.dimension_scores,
-                "ai_correction_delta": round(float(ai_result.delta), 2),
-            }
+            if ai_result.report_payload is None:
+                raise ValueError("Match AI did not return a structured report payload")
+
+            ai_payload = ai_result.report_payload
+            overall_score = max(0.0, min(100.0, float(ai_payload.overall_score)))
+            fit_band = ai_payload.fit_band
+            dimension_scores = dict(rule_result.dimension_scores)
             strengths = _sanitize_insight_items(
-                [*rule_result.strengths, *ai_result.strengths]
+                [item.model_dump() for item in ai_payload.strengths]
             )
-            gaps = _sanitize_insight_items([*rule_result.gaps, *ai_result.gaps])
-            actions = _sanitize_action_items([*rule_result.actions, *ai_result.actions])
-            missing_items = list(rule_result.evidence.get("missing_items", []))
-
-            missing_user_inputs = _build_missing_user_inputs(
-                job_snapshot=job_snapshot,
-                resume_snapshot=resume_snapshot,
-                missing_items=missing_items,
+            must_fix = _sanitize_insight_items(
+                [item.model_dump() for item in ai_payload.must_fix]
             )
-            resume_tailoring_tasks = _build_resume_tailoring_tasks(actions)
-            interview_focus_areas = _build_interview_focus_areas(
-                gaps=gaps,
-                strengths=strengths,
+            should_fix = _sanitize_insight_items(
+                [item.model_dump() for item in ai_payload.should_fix]
             )
+            gaps = _sanitize_insight_items(
+                [
+                    *(item.model_dump() for item in ai_payload.must_fix),
+                    *(item.model_dump() for item in ai_payload.should_fix),
+                ]
+            )
+            rewrite_tasks = (
+                ai_payload.tailoring_plan_json.rewrite_tasks
+                or ai_payload.action_pack_json.resume_tailoring_tasks
+            )
+            actions = _sanitize_action_items(
+                [
+                    {
+                        "priority": task.priority,
+                        "title": task.title,
+                        "description": task.instruction,
+                    }
+                    for task in rewrite_tasks
+                ]
+            )
+            resume_tailoring_tasks = [
+                {
+                    "priority": task.priority,
+                    "title": task.title,
+                    "instruction": task.instruction,
+                    "target_section": task.target_section,
+                }
+                for task in rewrite_tasks
+            ]
+            interview_focus_areas = [
+                item.model_dump()
+                for item in ai_payload.interview_blueprint_json.focus_areas
+            ]
+            missing_user_inputs = [
+                item.model_dump()
+                for item in ai_payload.action_pack_json.missing_user_inputs
+            ]
+            evidence_map = ai_payload.evidence_map_json.model_dump()
+            evidence_map["resume_version"] = report.resume_version
+            evidence_map["job_version"] = report.job_version
+            action_pack = ai_payload.action_pack_json.model_dump()
+            if not action_pack["resume_tailoring_tasks"]:
+                action_pack["resume_tailoring_tasks"] = resume_tailoring_tasks
+            tailoring_plan = ai_payload.tailoring_plan_json.model_dump()
+            if not tailoring_plan["rewrite_tasks"]:
+                tailoring_plan["rewrite_tasks"] = resume_tailoring_tasks
+            interview_blueprint = ai_payload.interview_blueprint_json.model_dump()
 
             stale_status = (
                 "stale"
@@ -501,51 +526,43 @@ async def process_match_report(
             scorecard = {
                 "overall_score": round(overall_score, 2),
                 "rule_score": round(rule_result.overall_score, 2),
-                "model_score": round(float(ai_result.delta), 2),
+                "ai_score": round(overall_score, 2),
                 "fit_band": fit_band,
-                "confidence": ai_result.confidence,
+                "confidence": ai_payload.confidence,
+                "summary": ai_payload.summary,
+                "reasoning": ai_payload.reasoning,
+                "generation_mode": "ai_mandatory",
                 "dimension_scores": dimension_scores,
             }
-            evidence_map = {
-                **rule_result.evidence,
-                "resume_version": report.resume_version,
-                "job_version": report.job_version,
-            }
             gap_taxonomy = {
-                "must_fix": [item for item in gaps if item["severity"] == "high"][:4],
-                "should_fix": [item for item in gaps if item["severity"] != "high"][:4],
+                "must_fix": must_fix[:4],
+                "should_fix": should_fix[:4],
                 "watchlist": missing_user_inputs,
             }
-            action_pack = {
-                "resume_tailoring_tasks": resume_tailoring_tasks,
-                "interview_focus_areas": interview_focus_areas,
-                "missing_user_inputs": missing_user_inputs,
-            }
-            tailoring_plan = _build_tailoring_plan(
-                job_snapshot=job_snapshot,
-                tasks=resume_tailoring_tasks,
-                missing_items=missing_items,
-                missing_user_inputs=missing_user_inputs,
-            )
-            interview_blueprint = _build_interview_blueprint(
-                job_snapshot=job_snapshot,
-                fit_band=fit_band,
-                focus_areas=interview_focus_areas,
-            )
 
             report.status = "success"
             report.fit_band = fit_band
             report.stale_status = stale_status
             report.overall_score = _to_decimal_score(overall_score)
             report.rule_score = _to_decimal_score(rule_result.overall_score)
-            report.model_score = _to_decimal_score(float(ai_result.delta))
+            report.model_score = _to_decimal_score(overall_score)
             report.dimension_scores_json = dimension_scores
             report.gap_json = {
                 "strengths": strengths,
                 "gaps": gaps,
                 "actions": actions,
             }
-            report.evidence_json = evidence_map
+            report.evidence_json = {
+                **rule_result.evidence,
+                "final_evidence_map": evidence_map,
+                "ai_generation": {
+                    "provider": ai_result.provider,
+                    "model": ai_result.model,
+                    "status": ai_result.status,
+                    "summary": ai_payload.summary,
+                    "reasoning": ai_payload.reasoning,
+                },
+            }
             report.scorecard_json = scorecard
             report.evidence_map_json = evidence_map
             report.gap_taxonomy_json = gap_taxonomy

@@ -138,7 +138,17 @@ export type MatchReportRecord = {
     notes: string[];
     ai_correction: Record<string, unknown>;
   };
-  scorecard_json: Record<string, unknown>;
+  scorecard_json: {
+    overall_score?: number;
+    rule_score?: number;
+    ai_score?: number;
+    fit_band?: string;
+    confidence?: number;
+    summary?: string;
+    reasoning?: string;
+    generation_mode?: string;
+    dimension_scores?: Record<string, number>;
+  } & Record<string, unknown>;
   evidence_map_json: {
     matched_resume_fields?: Record<string, string[]>;
     matched_jd_fields?: Record<string, string[]>;
@@ -304,6 +314,16 @@ export async function createJobMatchReport(
       resume_id: resumeId,
       force_refresh: true,
     }),
+  });
+}
+
+export async function fetchMatchReportDetail(
+  token: string,
+  reportId: string
+): Promise<MatchReportRecord> {
+  return apiRequest<MatchReportRecord>(`/match-reports/${reportId}`, {
+    method: "GET",
+    token,
   });
 }
 

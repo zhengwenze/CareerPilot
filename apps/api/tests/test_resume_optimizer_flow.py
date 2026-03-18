@@ -28,6 +28,114 @@ from app.services.resume_optimizer import (
 )
 
 
+def _mock_match_ai_payload() -> dict[str, object]:
+    return {
+        "overall_score": 80,
+        "fit_band": "strong",
+        "summary": "简历与岗位方向整体匹配，但仍需补强结果量化与协作细节。",
+        "reasoning": "技能方向和岗位职责基本一致，但部分高价值证据表达还不够充分。",
+        "confidence": 0.84,
+        "strengths": [
+            {
+                "label": "增长分析",
+                "reason": "简历中已有直接项目和实习经历支撑。",
+                "severity": "high",
+            }
+        ],
+        "must_fix": [
+            {
+                "label": "量化结果",
+                "reason": "需要补充指标变化和业务影响。",
+                "severity": "high",
+            }
+        ],
+        "should_fix": [
+            {
+                "label": "协作场景",
+                "reason": "可再补充跨团队推进细节。",
+                "severity": "medium",
+            }
+        ],
+        "evidence_map_json": {
+            "matched_resume_fields": {
+                "skills": ["Python", "SQL", "Tableau"],
+            },
+            "matched_jd_fields": {
+                "required_skills": ["Python", "SQL", "Tableau"],
+            },
+            "missing_items": ["量化结果"],
+            "notes": ["AI 已根据岗位目标生成最终报告。"],
+            "candidate_profile": {"skills": ["Python", "SQL", "Tableau"]},
+        },
+        "action_pack_json": {
+            "resume_tailoring_tasks": [
+                {
+                    "priority": 1,
+                    "title": "补充量化结果",
+                    "instruction": "在工作经历中补充指标变化和业务影响。",
+                    "target_section": "work_experience_or_projects",
+                }
+            ],
+            "interview_focus_areas": [
+                {
+                    "topic": "量化结果表达",
+                    "reason": "面试中需要清楚说明业务结果。",
+                    "priority": "high",
+                }
+            ],
+            "missing_user_inputs": [
+                {
+                    "field": "metrics",
+                    "question": "是否有增长分析相关的结果指标可补充？",
+                }
+            ],
+        },
+        "tailoring_plan_json": {
+            "target_summary": "增长数据分析师",
+            "rewrite_tasks": [
+                {
+                    "priority": 1,
+                    "title": "补充量化结果",
+                    "instruction": "在工作经历中补充指标变化和业务影响。",
+                    "target_section": "work_experience_or_projects",
+                }
+            ],
+            "must_add_evidence": ["量化结果"],
+            "missing_info_questions": [
+                {
+                    "field": "metrics",
+                    "question": "是否有增长分析相关的结果指标可补充？",
+                }
+            ],
+        },
+        "interview_blueprint_json": {
+            "target_role": "增长数据分析师",
+            "focus_areas": [
+                {
+                    "topic": "量化结果表达",
+                    "reason": "岗位需要结果导向表达。",
+                    "priority": "high",
+                }
+            ],
+            "question_pack": [
+                {
+                    "topic": "量化结果表达",
+                    "question": "请描述一次你推动增长分析结果落地的经历。",
+                    "intent": "验证结果表达和业务影响意识。",
+                }
+            ],
+            "follow_up_rules": ["若未提及指标，则追问具体结果。"],
+            "rubric": [
+                {
+                    "dimension": "量化结果表达",
+                    "weight": 30,
+                    "criteria": "是否说清背景、动作、指标和影响。",
+                }
+            ],
+        },
+    }
+
+
 def _resume_structured_data() -> ResumeStructuredData:
     return ResumeStructuredData(
         basic_info={
@@ -80,7 +188,16 @@ async def _create_ready_match_report(
     *,
     session_factory: async_sessionmaker[AsyncSession],
     user: User,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[UUID, UUID, UUID]:
+    async def fake_request_json_completion(**_: object) -> dict[str, object]:
+        return _mock_match_ai_payload()
+
+    monkeypatch.setattr(
+        "app.services.match_ai.request_json_completion",
+        fake_request_json_completion,
+    )
+
     async with session_factory() as session:
         resume = await _create_parsed_resume(session, user=user)
         job, parse_job = await create_job(
@@ -129,7 +246,12 @@ async def _create_ready_match_report(
     await process_match_report(
         report_id=report_id,
         session_factory=session_factory,
-        settings=Settings(match_ai_provider="disabled"),
+        settings=Settings(
+            match_ai_provider="minimax",
+            match_ai_base_url="https://api.minimaxi.com/anthropic",
+            match_ai_api_key="test-key",
+            match_ai_model="MiniMax-M2.5",
+        ),
     )
     return resume_id, job_id, report_id
 
@@ -138,10 +260,12 @@ async def _create_ready_match_report(
 async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
     session_factory: async_sessionmaker[AsyncSession],
     test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     resume_id, _job_id, report_id = await _create_ready_match_report(
         session_factory=session_factory,
         user=test_user,
+        monkeypatch=monkeypatch,
     )
 
     async with session_factory() as session:

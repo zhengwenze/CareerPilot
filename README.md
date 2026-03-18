@@ -487,6 +487,8 @@ uv run alembic upgrade head
 说明：
 
 - `.env` 负责数据库、Redis、JWT 等配置
+- 岗位匹配默认依赖 Minimax：至少需要设置 `MATCH_AI_API_KEY`
+- 默认匹配模型配置为 `MATCH_AI_PROVIDER=minimax`、`MATCH_AI_BASE_URL=https://api.minimaxi.com/anthropic`、`MATCH_AI_MODEL=MiniMax-M2.5`
 - 长期数据库真源是 `apps/api/alembic/versions/`，不是 `infra/sql/init.sql`
 
 #### 3）初始化前端

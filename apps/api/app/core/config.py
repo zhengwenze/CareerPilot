@@ -62,10 +62,10 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000"]
     )
-    match_ai_provider: str = "disabled"
-    match_ai_base_url: str | None = None
+    match_ai_provider: str = "minimax"
+    match_ai_base_url: str | None = "https://api.minimaxi.com/anthropic"
     match_ai_api_key: str | None = None
-    match_ai_model: str | None = None
+    match_ai_model: str | None = "MiniMax-M2.5"
     match_ai_timeout_seconds: int = 30
     resume_ai_provider: str = "minimax"
     resume_ai_base_url: str = "https://api.minimaxi.com/anthropic"
