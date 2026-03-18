@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import Annotated
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -66,12 +66,17 @@ class Settings(BaseSettings):
     match_ai_base_url: str | None = "https://api.minimaxi.com/anthropic"
     match_ai_api_key: str | None = None
     match_ai_model: str | None = "MiniMax-M2.5"
-    match_ai_timeout_seconds: int = 30
+    match_ai_timeout_seconds: int = 90
     resume_ai_provider: str = "minimax"
     resume_ai_base_url: str = "https://api.minimaxi.com/anthropic"
     resume_ai_api_key: str | None = None
     resume_ai_model: str = "MiniMax-M2.5"
     resume_ai_timeout_seconds: int = 30
+    interview_ai_provider: str = "minimax"
+    interview_ai_base_url: str = "https://api.minimaxi.com/anthropic"
+    interview_ai_api_key: str | None = None
+    interview_ai_model: str = "MiniMax-M2.5"
+    interview_ai_timeout_seconds: int = 60
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -104,6 +109,34 @@ class Settings(BaseSettings):
             return value
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         return anthropic_api_key or None
+
+    @field_validator("interview_ai_api_key", mode="before")
+    @classmethod
+    def resolve_interview_ai_api_key(cls, value: str | None) -> str | None:
+        if value is not None and value.strip():
+            return value
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        return anthropic_api_key or None
+
+    @model_validator(mode="after")
+    def resolve_match_ai_fallbacks(self) -> "Settings":
+        match_provider = (self.match_ai_provider or "").strip().lower()
+        if match_provider in {"", "disabled", "none", "off"}:
+            self.match_ai_provider = (self.resume_ai_provider or "minimax").strip()
+
+        if not (self.match_ai_base_url or "").strip():
+            self.match_ai_base_url = self.resume_ai_base_url
+
+        if not (self.match_ai_model or "").strip():
+            self.match_ai_model = self.resume_ai_model
+
+        if not (self.match_ai_api_key or "").strip():
+            fallback_key = (self.resume_ai_api_key or "").strip() or os.getenv(
+                "ANTHROPIC_API_KEY", ""
+            ).strip()
+            self.match_ai_api_key = fallback_key or None
+
+        return self
 
     @property
     def sync_database_url(self) -> str:

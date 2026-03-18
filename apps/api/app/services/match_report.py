@@ -114,6 +114,75 @@ def _sanitize_action_items(items: list[dict[str, object]]) -> list[dict[str, obj
     return sanitized[:5]
 
 
+def _compact_resume_snapshot(resume: ResumeStructuredData) -> dict[str, object]:
+    skills = [
+        *resume.skills.technical[:8],
+        *resume.skills.tools[:6],
+        *resume.skills.languages[:4],
+    ]
+    return {
+        "summary": resume.basic_info.summary,
+        "location": resume.basic_info.location,
+        "education": resume.education[:3],
+        "recent_roles": resume.work_experience[:4],
+        "projects": resume.projects[:4],
+        "skills": skills,
+        "certifications": resume.certifications[:4],
+    }
+
+
+def _compact_job_snapshot(job: JobStructuredData) -> dict[str, object]:
+    required_skills = [
+        *job.requirements.required_skills[:8],
+        *job.must_have[:4],
+    ]
+    preferred_skills = [
+        *job.requirements.preferred_skills[:6],
+        *job.nice_to_have[:4],
+    ]
+    keywords = [
+        *job.requirements.required_keywords[:8],
+        *job.domain_context.keywords[:8],
+    ]
+    return {
+        "title": job.basic.title,
+        "company": job.basic.company,
+        "job_city": job.basic.job_city,
+        "summary": job.raw_summary or job.domain_context.summary,
+        "required_skills": required_skills,
+        "preferred_skills": preferred_skills,
+        "keywords": keywords,
+        "experience": {
+            "min_years": job.requirements.experience_min_years
+            or job.experience_constraints.experience_min_years,
+            "education": job.requirements.education
+            or job.experience_constraints.education,
+            "employment_type": job.basic.employment_type
+            or job.experience_constraints.employment_type,
+        },
+        "responsibilities": job.responsibilities[:6],
+    }
+
+
+def _compact_rule_result(rule_result: object) -> dict[str, object]:
+    evidence = getattr(rule_result, "evidence", {}) or {}
+    matched_resume_fields = evidence.get("matched_resume_fields", {})
+    matched_jd_fields = evidence.get("matched_jd_fields", {})
+    return {
+        "overall_score": getattr(rule_result, "overall_score", 0.0),
+        "dimension_scores": getattr(rule_result, "dimension_scores", {}),
+        "strengths": getattr(rule_result, "strengths", [])[:3],
+        "gaps": getattr(rule_result, "gaps", [])[:3],
+        "actions": getattr(rule_result, "actions", [])[:3],
+        "evidence": {
+            "matched_resume_fields": matched_resume_fields,
+            "matched_jd_fields": matched_jd_fields,
+            "missing_items": evidence.get("missing_items", [])[:5],
+            "notes": evidence.get("notes", [])[:3],
+        },
+    }
+
+
 def _build_missing_user_inputs(
     *,
     job_snapshot: JobStructuredData,
@@ -441,16 +510,9 @@ async def process_match_report(
             ai_provider = build_ai_match_correction_provider(settings)
             ai_result = await ai_provider.correct(
                 AIMatchReportRequest(
-                    resume_snapshot=resume_snapshot.model_dump(),
-                    job_snapshot=job_snapshot.model_dump(),
-                    rule_result={
-                        "overall_score": rule_result.overall_score,
-                        "dimension_scores": rule_result.dimension_scores,
-                        "strengths": rule_result.strengths,
-                        "gaps": rule_result.gaps,
-                        "actions": rule_result.actions,
-                        "evidence": rule_result.evidence,
-                    },
+                    resume_snapshot=_compact_resume_snapshot(resume_snapshot),
+                    job_snapshot=_compact_job_snapshot(job_snapshot),
+                    rule_result=_compact_rule_result(rule_result),
                 )
             )
             if ai_result.report_payload is None:

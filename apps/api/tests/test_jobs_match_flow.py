@@ -10,6 +10,7 @@ from app.models import JobDescription, JobParseJob, MatchReport, Resume, User
 from app.schemas.job import JobCreateRequest
 from app.schemas.match_report import MatchReportCreateRequest
 from app.schemas.resume import ResumeStructuredData
+from app.services.match_ai import build_ai_match_correction_provider
 from app.services.job import create_job, process_job_parse_job
 from app.services.match_report import create_match_report, process_match_report
 
@@ -285,7 +286,10 @@ async def test_jobs_match_flow_reaches_success_and_persists_actionable_report(
 async def test_jobs_match_flow_fails_when_match_ai_key_is_missing(
     session_factory: async_sessionmaker[AsyncSession],
     test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
     async with session_factory() as session:
         resume = await _create_parsed_resume(session, user=test_user)
         job, parse_job = await create_job(
@@ -332,6 +336,7 @@ async def test_jobs_match_flow_fails_when_match_ai_key_is_missing(
             match_ai_base_url="https://api.minimaxi.com/anthropic",
             match_ai_api_key=None,
             match_ai_model="MiniMax-M2.5",
+            resume_ai_api_key=None,
         ),
     )
 
@@ -415,3 +420,378 @@ async def test_jobs_match_flow_fails_when_match_ai_payload_is_invalid(
         assert "structured payload validation failed" in (
             persisted_report.error_message or ""
         )
+
+
+@pytest.mark.asyncio
+async def test_jobs_match_flow_sends_compact_ai_payload(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_payload: dict[str, object] = {}
+
+    async def fake_request_json_completion(**kwargs: object) -> dict[str, object]:
+        payload = kwargs["payload"]
+        captured_payload["resume_snapshot"] = payload.resume_snapshot
+        captured_payload["job_snapshot"] = payload.job_snapshot
+        captured_payload["rule_result"] = payload.rule_result
+        return _mock_match_ai_payload()
+
+    monkeypatch.setattr(
+        "app.services.match_ai.request_json_completion",
+        fake_request_json_completion,
+    )
+
+    async with session_factory() as session:
+        resume = await _create_parsed_resume(session, user=test_user)
+        job, parse_job = await create_job(
+            session,
+            current_user=test_user,
+            payload=JobCreateRequest(
+                title="增长数据分析师",
+                company="CareerPilot",
+                job_city="上海",
+                employment_type="全职",
+                source_name="Boss直聘",
+                source_url="https://example.com/jobs/4",
+                priority=3,
+                jd_text=(
+                    "岗位职责\n"
+                    "- 负责增长分析与实验分析，搭建指标体系\n"
+                    "- 与业务团队协作推进数据项目\n"
+                    "任职要求\n"
+                    "- 本科及以上，2年以上经验\n"
+                    "- 熟练使用 Python、SQL、Tableau"
+                ),
+            ),
+        )
+        job_id = job.id
+        parse_job_id = parse_job.id
+        resume_id = resume.id
+
+    await process_job_parse_job(
+        job_id=job_id,
+        parse_job_id=parse_job_id,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        report = await create_match_report(
+            session,
+            current_user=test_user,
+            job_id=job_id,
+            payload=MatchReportCreateRequest(
+                resume_id=resume_id,
+                force_refresh=True,
+            ),
+        )
+        report_id = report.id
+
+    await process_match_report(
+        report_id=report_id,
+        session_factory=session_factory,
+        settings=Settings(
+            match_ai_provider="minimax",
+            match_ai_base_url="https://api.minimaxi.com/anthropic",
+            match_ai_api_key="test-key",
+            match_ai_model="MiniMax-M2.5",
+        ),
+    )
+
+    resume_snapshot = captured_payload["resume_snapshot"]
+    job_snapshot = captured_payload["job_snapshot"]
+    rule_result = captured_payload["rule_result"]
+
+    assert resume_snapshot == {
+        "summary": "负责数据分析与业务增长。",
+        "location": "上海",
+        "education": ["新疆大学 软件工程 本科 2023.09-2027.06"],
+        "recent_roles": ["CareerPilot 数据分析实习生 负责指标体系搭建与实验复盘"],
+        "projects": ["增长分析平台 搭建核心看板并推动实验分析闭环"],
+        "skills": ["Python", "SQL", "Tableau", "English"],
+        "certifications": ["百度之星金奖"],
+    }
+    assert "basic" not in job_snapshot
+    assert "must_have" not in job_snapshot
+    assert "nice_to_have" not in job_snapshot
+    assert set(job_snapshot.keys()) == {
+        "title",
+        "company",
+        "job_city",
+        "summary",
+        "required_skills",
+        "preferred_skills",
+        "keywords",
+        "experience",
+        "responsibilities",
+    }
+    assert set(rule_result.keys()) == {
+        "overall_score",
+        "dimension_scores",
+        "strengths",
+        "gaps",
+        "actions",
+        "evidence",
+    }
+    assert set(rule_result["evidence"].keys()) == {
+        "matched_resume_fields",
+        "matched_jd_fields",
+        "missing_items",
+        "notes",
+    }
+
+
+@pytest.mark.asyncio
+async def test_jobs_match_flow_normalizes_loose_ai_payload_to_strict_schema(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_request_json_completion(**_: object) -> dict[str, object]:
+        return {
+            "overall_score": 65,
+            "fit_band": "partial",
+            "summary": "岗位方向匹配，但核心证据仍偏弱。",
+            "reasoning": "技能关键词有重合，但数据库设计与项目量化证据不足。",
+            "confidence": 0.72,
+            "strengths": [
+                {
+                    "label": "Python 与 Java 基础",
+                    "reason": "简历里有相关技能。",
+                    "severity": "medium",
+                }
+            ],
+            "must_fix": [
+                {
+                    "label": "数据库设计经验",
+                    "reason": "岗位明确要求数据库设计能力。",
+                    "severity": "high",
+                }
+            ],
+            "should_fix": [
+                "强化数据库设计优化相关表述",
+                "补充项目中所使用的数据库设计与索引优化细节",
+                "在校生身份需突出项目强度以弥补经验不足",
+            ],
+            "evidence_map_json": {
+                "matched_resume_fields": {"skills": ["Python", "Java"]},
+                "matched_jd_fields": {"required_skills": ["Python", "SQL"]},
+                "missing_items": ["数据库设计经验", "量化结果"],
+                "notes": ["模型返回了压缩结构。"],
+            },
+            "candidate_profile": {
+                "skills": ["分布式系统", "API", "Python", "Java"],
+            },
+            "rewrite_tasks": [
+                "补充数据库设计与性能优化相关项目描述",
+            ],
+            "focus_areas": [
+                "数据库设计",
+                "项目量化表达",
+            ],
+            "question_pack": [
+                {
+                    "topic": "数据库设计",
+                    "question": "请说明一次你做数据库设计或优化的经历。",
+                    "intent": "验证真实项目深度。",
+                }
+            ],
+            "rubric": [
+                {
+                    "dimension": "数据库设计",
+                    "weight": 30,
+                    "criteria": "是否说清设计取舍与效果。",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "app.services.match_ai.request_json_completion",
+        fake_request_json_completion,
+    )
+
+    async with session_factory() as session:
+        resume = await _create_parsed_resume(session, user=test_user)
+        job, parse_job = await create_job(
+            session,
+            current_user=test_user,
+            payload=JobCreateRequest(
+                title="后端开发工程师",
+                company="CareerPilot",
+                job_city="上海",
+                employment_type="全职",
+                source_name="Boss直聘",
+                source_url="https://example.com/jobs/5",
+                priority=3,
+                jd_text=(
+                    "岗位职责\n"
+                    "- 负责后端服务开发和数据库设计\n"
+                    "- 优化接口性能并支持业务增长\n"
+                    "任职要求\n"
+                    "- 熟悉 Python、SQL、Java\n"
+                    "- 有数据库设计与性能优化经验"
+                ),
+            ),
+        )
+        job_id = job.id
+        parse_job_id = parse_job.id
+        resume_id = resume.id
+
+    await process_job_parse_job(
+        job_id=job_id,
+        parse_job_id=parse_job_id,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        report = await create_match_report(
+            session,
+            current_user=test_user,
+            job_id=job_id,
+            payload=MatchReportCreateRequest(
+                resume_id=resume_id,
+                force_refresh=True,
+            ),
+        )
+        report_id = report.id
+
+    await process_match_report(
+        report_id=report_id,
+        session_factory=session_factory,
+        settings=Settings(
+            match_ai_provider="minimax",
+            match_ai_base_url="https://api.minimaxi.com/anthropic",
+            match_ai_api_key="test-key",
+            match_ai_model="MiniMax-M2.5",
+        ),
+    )
+
+    async with session_factory() as session:
+        persisted_report = await session.get(MatchReport, report_id)
+        assert persisted_report is not None
+        assert persisted_report.status == "success"
+        assert persisted_report.gap_taxonomy_json["should_fix"][0]["label"] == (
+            "强化数据库设计优化相关表述"
+        )
+        assert persisted_report.evidence_map_json["candidate_profile"]["skills"] == [
+            "分布式系统",
+            "API",
+            "Python",
+            "Java",
+        ]
+        assert persisted_report.action_pack_json["resume_tailoring_tasks"][0]["title"] == (
+            "补充数据库设计与性能优化相关项目描述"
+        )
+        assert persisted_report.interview_blueprint_json["focus_areas"][0]["topic"] == (
+            "数据库设计"
+        )
+
+
+@pytest.mark.asyncio
+async def test_jobs_match_flow_retries_when_ai_returns_null_core_fields(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        [
+            {
+                "overall_score": None,
+                "fit_band": None,
+                "summary": None,
+                "reasoning": None,
+                "strengths": [],
+                "must_fix": [],
+                "should_fix": [],
+                "evidence_map_json": {},
+            },
+            _mock_match_ai_payload(),
+        ]
+    )
+
+    async def fake_request_json_completion(**_: object) -> dict[str, object]:
+        return next(responses)
+
+    monkeypatch.setattr(
+        "app.services.match_ai.request_json_completion",
+        fake_request_json_completion,
+    )
+
+    async with session_factory() as session:
+        resume = await _create_parsed_resume(session, user=test_user)
+        job, parse_job = await create_job(
+            session,
+            current_user=test_user,
+            payload=JobCreateRequest(
+                title="数据分析师",
+                company="CareerPilot",
+                job_city="上海",
+                employment_type="全职",
+                source_name="Boss直聘",
+                source_url="https://example.com/jobs/6",
+                priority=3,
+                jd_text="需要熟悉 Python、SQL、Tableau，并能负责增长分析与实验分析。",
+            ),
+        )
+        job_id = job.id
+        parse_job_id = parse_job.id
+        resume_id = resume.id
+
+    await process_job_parse_job(
+        job_id=job_id,
+        parse_job_id=parse_job_id,
+        session_factory=session_factory,
+    )
+
+    async with session_factory() as session:
+        report = await create_match_report(
+            session,
+            current_user=test_user,
+            job_id=job_id,
+            payload=MatchReportCreateRequest(
+                resume_id=resume_id,
+                force_refresh=True,
+            ),
+        )
+        report_id = report.id
+
+    await process_match_report(
+        report_id=report_id,
+        session_factory=session_factory,
+        settings=Settings(
+            match_ai_provider="minimax",
+            match_ai_base_url="https://api.minimaxi.com/anthropic",
+            match_ai_api_key="test-key",
+            match_ai_model="MiniMax-M2.5",
+        ),
+    )
+
+    async with session_factory() as session:
+        persisted_report = await session.get(MatchReport, report_id)
+        assert persisted_report is not None
+        assert persisted_report.status == "success"
+        assert persisted_report.fit_band == "strong"
+        assert persisted_report.scorecard_json.get("generation_mode") == "ai_mandatory"
+
+
+def test_match_ai_settings_fall_back_to_resume_ai_configuration() -> None:
+    settings = Settings(
+        match_ai_provider="disabled",
+        match_ai_base_url="",
+        match_ai_api_key=None,
+        match_ai_model="",
+        match_ai_timeout_seconds=30,
+        resume_ai_provider="minimax",
+        resume_ai_base_url="https://api.minimaxi.com/anthropic",
+        resume_ai_api_key="resume-key",
+        resume_ai_model="MiniMax-M2.5",
+    )
+
+    provider = build_ai_match_correction_provider(settings)
+
+    assert settings.match_ai_provider == "minimax"
+    assert settings.match_ai_base_url == "https://api.minimaxi.com/anthropic"
+    assert settings.match_ai_api_key == "resume-key"
+    assert settings.match_ai_model == "MiniMax-M2.5"
+    assert provider.__class__.__name__ == "ConfiguredAIMatchReportProvider"
+    assert getattr(provider, "timeout_seconds") == 90

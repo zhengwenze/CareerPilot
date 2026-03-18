@@ -256,6 +256,49 @@ async def _create_ready_match_report(
     return resume_id, job_id, report_id
 
 
+async def _override_optimizer_inputs(
+    session: AsyncSession,
+    *,
+    report_id: UUID,
+    rewrite_tasks: list[dict[str, object]],
+    must_add_evidence: list[str],
+    matched_jd_fields: dict[str, list[str]],
+    gap_labels: list[str],
+) -> None:
+    report = await session.get(MatchReport, report_id)
+    assert report is not None
+
+    report.tailoring_plan_json = {
+        **(report.tailoring_plan_json or {}),
+        "target_summary": "增长数据分析师",
+        "rewrite_tasks": rewrite_tasks,
+        "must_add_evidence": must_add_evidence,
+        "missing_info_questions": [
+            {
+                "field": "missing_evidence",
+                "question": "请补充与目标岗位直接相关的事实证据。",
+            }
+        ],
+    }
+    report.evidence_map_json = {
+        **(report.evidence_map_json or {}),
+        "matched_jd_fields": matched_jd_fields,
+    }
+    report.gap_json = {
+        **(report.gap_json or {}),
+        "gaps": [
+            {
+                "label": label,
+                "reason": f"需要补充 {label} 相关证据。",
+                "severity": "high",
+            }
+            for label in gap_labels
+        ],
+    }
+    session.add(report)
+    await session.commit()
+
+
 @pytest.mark.asyncio
 async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
     session_factory: async_sessionmaker[AsyncSession],
@@ -285,6 +328,8 @@ async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
         )
         assert generated.status == "ready"
         assert generated.draft_sections["summary"].suggested_text.strip() != ""
+        assert "【" not in generated.draft_sections["work_experience"].suggested_text
+        assert "【" not in generated.draft_sections["projects"].suggested_text
 
         apply_result = await apply_resume_optimization_session(
             session,
@@ -321,4 +366,162 @@ async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
         assert persisted_report.stale_status == "stale"
         assert persisted_session.status == "applied"
         assert persisted_session.applied_resume_version == 2
+        persisted_structured = ResumeStructuredData.model_validate(
+            persisted_resume.structured_json
+        )
+        assert all(
+            not item.startswith("原始证据：")
+            and not item.startswith("改写重点：")
+            and not item.startswith("建议草案：")
+            for item in [
+                *persisted_structured.work_experience,
+                *persisted_structured.projects,
+            ]
+        )
         assert len(list(readiness_events)) >= 1
+
+
+@pytest.mark.asyncio
+async def test_resume_optimizer_routes_cross_section_task_to_projects(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _resume_id, _job_id, report_id = await _create_ready_match_report(
+        session_factory=session_factory,
+        user=test_user,
+        monkeypatch=monkeypatch,
+    )
+
+    async with session_factory() as session:
+        await _override_optimizer_inputs(
+            session,
+            report_id=report_id,
+            rewrite_tasks=[
+                {
+                    "priority": 1,
+                    "title": "实验看板搭建",
+                    "instruction": "在项目经历中突出实验看板与业务分析场景。",
+                    "target_section": "work_experience_or_projects",
+                }
+            ],
+            must_add_evidence=["实验分析结果"],
+            matched_jd_fields={"responsibilities": ["实验看板", "业务分析"]},
+            gap_labels=["实验分析结果"],
+        )
+
+        session_record, _resume, _job, _report = await create_resume_optimization_session(
+            session,
+            current_user=test_user,
+            payload=ResumeOptimizationSessionCreateRequest(match_report_id=report_id),
+        )
+        generated = await generate_resume_optimization_suggestions(
+            session,
+            current_user=test_user,
+            session_id=session_record.id,
+        )
+
+        assert generated.selected_tasks[0].target_section == "work_experience_or_projects"
+        assert "原始证据：业务增长分析平台 从0到1搭建实验看板" in generated.draft_sections[
+            "projects"
+        ].suggested_text
+        assert "建议草案：" in generated.draft_sections["projects"].suggested_text
+        assert "【" not in generated.draft_sections["projects"].suggested_text
+
+
+@pytest.mark.asyncio
+async def test_resume_optimizer_outputs_missing_evidence_without_placeholders(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _resume_id, _job_id, report_id = await _create_ready_match_report(
+        session_factory=session_factory,
+        user=test_user,
+        monkeypatch=monkeypatch,
+    )
+
+    async with session_factory() as session:
+        await _override_optimizer_inputs(
+            session,
+            report_id=report_id,
+            rewrite_tasks=[
+                {
+                    "priority": 1,
+                    "title": "生命周期运营",
+                    "instruction": "突出留存策略制定与用户分层运营经验。",
+                    "target_section": "work_experience_or_projects",
+                }
+            ],
+            must_add_evidence=["留存结果"],
+            matched_jd_fields={"responsibilities": ["生命周期运营", "留存策略"]},
+            gap_labels=["留存策略"],
+        )
+
+        session_record, _resume, _job, _report = await create_resume_optimization_session(
+            session,
+            current_user=test_user,
+            payload=ResumeOptimizationSessionCreateRequest(match_report_id=report_id),
+        )
+        generated = await generate_resume_optimization_suggestions(
+            session,
+            current_user=test_user,
+            session_id=session_record.id,
+        )
+
+        assert "缺失证据清单：" in generated.draft_sections["work_experience"].suggested_text
+        assert "建议草案：" not in generated.draft_sections["work_experience"].suggested_text
+        assert "【" not in generated.draft_sections["work_experience"].suggested_text
+
+
+@pytest.mark.asyncio
+async def test_resume_optimizer_apply_respects_replace_mode(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume_id, _job_id, report_id = await _create_ready_match_report(
+        session_factory=session_factory,
+        user=test_user,
+        monkeypatch=monkeypatch,
+    )
+
+    async with session_factory() as session:
+        session_record, _resume, _job, _report = await create_resume_optimization_session(
+            session,
+            current_user=test_user,
+            payload=ResumeOptimizationSessionCreateRequest(match_report_id=report_id),
+        )
+        draft_sections = session_record.draft_sections_json or {}
+        draft_sections["work_experience"] = {
+            **draft_sections["work_experience"],
+            "selected": True,
+            "mode": "replace",
+            "suggested_text": (
+                "原始证据：CareerPilot 数据分析实习生 推进指标体系与增长分析\n"
+                "改写重点：补充量化结果\n"
+                "建议草案：CareerPilot 数据分析实习生，负责指标体系与增长分析工作，建议补充业务结果表达。"
+            ),
+        }
+        draft_sections["projects"] = {
+            **draft_sections["projects"],
+            "selected": False,
+        }
+        session_record.draft_sections_json = draft_sections
+        session.add(session_record)
+        await session.commit()
+
+        apply_result = await apply_resume_optimization_session(
+            session,
+            current_user=test_user,
+            session_id=session_record.id,
+        )
+        assert apply_result.applied_resume_version == 2
+
+    async with session_factory() as session:
+        persisted_resume = await session.get(Resume, resume_id)
+        assert persisted_resume is not None
+        structured_resume = ResumeStructuredData.model_validate(persisted_resume.structured_json)
+        assert structured_resume.work_experience == [
+            "CareerPilot 数据分析实习生，负责指标体系与增长分析工作，建议补充业务结果表达。"
+        ]
