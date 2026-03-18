@@ -58,6 +58,11 @@ async def request_json_completion(
             len(json_content),
         )
         parsed = json.loads(json_content)
+        if not isinstance(parsed, dict):
+            raise AIClientError(
+                category="invalid_response_format",
+                detail=f"AI response JSON root must be an object, got {type(parsed).__name__}",
+            )
         logger.info(
             "AI JSON completion parsed successfully provider=%s model=%s top_level_type=%s",
             config.provider,
@@ -192,11 +197,37 @@ def _serialize_payload(payload: object) -> str:
 
 
 def _extract_json_object(content: str) -> str:
-    start = content.find("{")
-    end = content.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("AI response did not contain a JSON object")
-    return content[start : end + 1]
+    candidate = content.strip()
+    if candidate.startswith("```"):
+        candidate = _strip_markdown_code_fence(candidate)
+
+    decoder = json.JSONDecoder()
+    starts = [index for index, ch in enumerate(candidate) if ch == "{"]
+    for start in starts:
+        try:
+            _, end = decoder.raw_decode(candidate[start:])
+            return candidate[start : start + end]
+        except JSONDecodeError:
+            continue
+
+    raise ValueError("AI response did not contain a valid JSON object")
+
+
+def _strip_markdown_code_fence(content: str) -> str:
+    lines = content.splitlines()
+    if len(lines) < 2:
+        return content
+    if not lines[0].lstrip().startswith("```"):
+        return content
+
+    end_index = None
+    for index in range(len(lines) - 1, 0, -1):
+        if lines[index].strip().startswith("```"):
+            end_index = index
+            break
+    if end_index is None or end_index <= 0:
+        return content
+    return "\n".join(lines[1:end_index]).strip()
 
 
 def _anthropic_response_text(response: object) -> str:
