@@ -1,33 +1,18 @@
-feat: 实现简历解析精细化动态状态显示
+fix: 修复AuthProvider使用useEffectEvent导致的hydration失败问题
 
-核心设计：不改顶层resume.parse_status四态，只增强parse_job维度状态
-- 后端在每个解析节点实时写入ai_message（如"读取文件中""AI请求中""AI校准中"）
-- 前端动态展示以latest_parse_job为准，轮询期间实时刷新
-- 失败时错误信息增加错误码后缀（如E_PARSE_TIMEOUT/E_PARSE_API/E_PARSE_UNEXPECTED）
+根因：useEffectEvent在部分Next 16 + React 19组合下会导致客户端hydration失败，页面可见但按钮事件不绑定（按钮像"死的"）
 
-后端改动（resume.py）：
-- 新增解析阶段常量与update_parse_job_progress
-- process_resume_parse_job中按阶段更新：读取文件、提取文本、规则解析、AI请求、AI校准
-- 成功文案改为"已完成校准"
-- 失败错误信息补充错误码
+修复方案：移除useEffectEvent，改用useEffect + async restore + cancel guard
+- auth-provider.tsx: 移除useEffectEvent，恢复会话逻辑改为普通useEffect + async
+- jobs/page.tsx: "去简历优化"改为先调后端创建会话再跳转
+- match-report-panel.tsx: 按钮可用性门禁和提示文案完善
 
-前端改动：
-- status-meta.ts: pending状态标签直接显示后端ai_message
-- resume-detail-panel.tsx: 顶部和任务记录区域支持显示各阶段状态与错误信息
-- page.tsx: 轮询间隔由5000ms调整为3000ms
+验证：cd apps/web && npm run lint/build通过
 
-其他优化：
-- ai_client.py: request_json_completion增加超时/连接错误重试
-- resume_ai.py: 新增中文专业标点规范化，调小max_tokens降低超时概率
-- test_*.py: 新增/更新测试覆盖新功能与错误场景
+复测步骤：
+1. 重启前端：cd apps/web && npm run dev（不要用旧进程热更新）
+2. 浏览器强刷（Mac: Cmd+Shift+R）
+3. 点击"新建目标岗位""创建 JD""更新匹配"应有即时UI变化
+4. 报告成功后点"去简历优化"应跳转到带sessionId的优化页
 
-验证：
-- 后端测试：12 passed
-- 前端lint：通过
-
-手动验证链路：
-1. 上传简历进入详情页，观察状态逐步变化
-2. 触发异常场景，确认可见具体错误（含错误码）
-3. 确认解析完成后轮询自动停止
-
-风险：parse_error顶层字段保持原有文案风格，精细错误主要在parse_job.error_message与ai_message
+风险：如仍"全部按钮无响应"，请提供浏览器Console首条红色报错

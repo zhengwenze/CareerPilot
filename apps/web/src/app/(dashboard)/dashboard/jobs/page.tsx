@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { JobFormCard } from "@/components/jobs/job-form-card";
 import { JobList } from "@/components/jobs/job-list";
@@ -30,6 +30,7 @@ import {
   type JobRecord,
   type MatchReportRecord,
 } from "@/lib/api/modules/jobs";
+import { createResumeOptimizationSession } from "@/lib/api/modules/optimizer";
 import { fetchResumeList, type ResumeRecord } from "@/lib/api/modules/resume";
 
 function getErrorMessage(error: unknown) {
@@ -48,6 +49,7 @@ function isInFlight(status: string | null | undefined) {
 
 export default function DashboardJobsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const preferredJobIdFromQuery = searchParams.get("jobId");
   const [jobs, setJobs] = useState<JobRecord[]>([]);
@@ -61,11 +63,14 @@ export default function DashboardJobsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isOpeningOptimizer, setIsOpeningOptimizer] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeletingReport, setIsDeletingReport] = useState(false);
   const [pageError, setPageError] = useState("");
 
   const selectedJob = jobs.find((item) => item.id === selectedJobId) ?? null;
+  const selectedReport =
+    reports.find((item) => item.id === selectedReportId) ?? reports[0] ?? null;
 
   useEffect(() => {
     if (!token) {
@@ -404,6 +409,36 @@ export default function DashboardJobsPage() {
     }
   }
 
+  async function handleOpenOptimizer() {
+    if (!token || !selectedJobId) {
+      return;
+    }
+
+    if (!selectedReport) {
+      setPageError("请先生成一份匹配报告，再进入简历优化。");
+      return;
+    }
+
+    if (selectedReport.status !== "success") {
+      setPageError(`当前报告状态为 ${selectedReport.status}，请完成后重试。`);
+      return;
+    }
+
+    setIsOpeningOptimizer(true);
+    setPageError("");
+
+    try {
+      const session = await createResumeOptimizationSession(token, selectedReport.id);
+      router.push(
+        `/dashboard/optimizer?sessionId=${session.id}&jobId=${selectedJobId}&reportId=${selectedReport.id}`
+      );
+    } catch (error) {
+      setPageError(getErrorMessage(error));
+    } finally {
+      setIsOpeningOptimizer(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       {pageError ? (
@@ -476,8 +511,10 @@ export default function DashboardJobsPage() {
         <MatchReportPanel
           isDeletingReport={isDeletingReport}
           isGenerating={isGenerating}
+          isOpeningOptimizer={isOpeningOptimizer}
           onDeleteReport={handleDeleteReport}
           onGenerate={handleGenerateReport}
+          onOpenOptimizer={handleOpenOptimizer}
           onSelectReport={setSelectedReportId}
           onSelectResume={setSelectedResumeId}
           reports={reports}

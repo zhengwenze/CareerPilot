@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useEffectEvent,
   useState,
 } from "react";
 
@@ -53,31 +52,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
 
-  const restoreSession = useEffectEvent(async (storedSession: AuthSession) => {
-    try {
-      const user = await fetchCurrentUser(storedSession.accessToken);
-      const nextSession = persistSession({
-        ...storedSession,
-        user,
-      });
-      setSession(nextSession);
-    } catch {
-      clearStoredSession();
-      setSession(null);
-    } finally {
-      setIsBootstrapping(false);
-    }
-  });
-
   useEffect(() => {
+    let cancelled = false;
     const storedSession = readStoredSession();
 
     if (!storedSession) {
       setIsBootstrapping(false);
       return;
     }
+    const initialSession = storedSession;
 
-    void restoreSession(storedSession);
+    async function restoreSession() {
+      try {
+        const user = await fetchCurrentUser(initialSession.accessToken);
+        if (cancelled) {
+          return;
+        }
+        const nextSession = persistSession({
+          ...initialSession,
+          user,
+        });
+        setSession(nextSession);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        clearStoredSession();
+        setSession(null);
+      } finally {
+        if (!cancelled) {
+          setIsBootstrapping(false);
+        }
+      }
+    }
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function login(payload: Credentials) {

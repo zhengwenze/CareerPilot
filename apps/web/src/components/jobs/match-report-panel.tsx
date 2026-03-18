@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowUpRight, Sparkles, Trash2 } from "lucide-react";
 
 import { PageEmptyState } from "@/components/page-state";
@@ -36,9 +35,11 @@ export function MatchReportPanel({
   reports,
   selectedReportId,
   isGenerating,
+  isOpeningOptimizer,
   isDeletingReport,
   onSelectResume,
   onGenerate,
+  onOpenOptimizer,
   onSelectReport,
   onDeleteReport,
 }: {
@@ -48,9 +49,11 @@ export function MatchReportPanel({
   reports: MatchReportRecord[];
   selectedReportId: string | null;
   isGenerating: boolean;
+  isOpeningOptimizer: boolean;
   isDeletingReport: boolean;
   onSelectResume: (resumeId: string) => void;
   onGenerate: () => void;
+  onOpenOptimizer: () => void;
   onSelectReport: (reportId: string) => void;
   onDeleteReport: () => void;
 }) {
@@ -58,6 +61,7 @@ export function MatchReportPanel({
   const selectedReport =
     reports.find((item) => item.id === selectedReportId) ?? reports[0] ?? null;
   const isJobReadyForMatch = selectedJob?.parse_status === "success";
+  const canOpenOptimizer = selectedReport?.status === "success";
 
   if (!selectedJob) {
     return (
@@ -116,32 +120,35 @@ export function MatchReportPanel({
                   <Sparkles className="size-4" />
                 </Button>
                 <Button
-                  asChild
                   className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
+                  disabled={!canOpenOptimizer || isOpeningOptimizer}
+                  onClick={onOpenOptimizer}
                   type="button"
                   variant="outline"
                 >
-                  <Link
-                    href={`/dashboard/optimizer?jobId=${selectedJob.id}${selectedReport ? `&reportId=${selectedReport.id}` : ""}`}
-                  >
-                    去简历优化
-                    <ArrowUpRight className="size-4" />
-                  </Link>
+                  {isOpeningOptimizer ? "进入中..." : "去简历优化"}
+                  <ArrowUpRight className="size-4" />
                 </Button>
                 <Button
-                  asChild
                   className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
+                  disabled
                   type="button"
                   variant="outline"
                 >
-                  <Link
-                    href={`/dashboard/interviews?jobId=${selectedJob.id}${selectedReport ? `&reportId=${selectedReport.id}` : ""}`}
-                  >
-                    模拟面试（暂未开放）
-                    <ArrowUpRight className="size-4" />
-                  </Link>
+                  模拟面试（暂未开放）
+                  <ArrowUpRight className="size-4" />
                 </Button>
               </div>
+              {!selectedReport ? (
+                <p className="text-xs text-black/52">
+                  先点击“更新匹配”生成报告，才能进入简历优化。
+                </p>
+              ) : null}
+              {selectedReport && selectedReport.status !== "success" ? (
+                <p className="text-xs text-black/52">
+                  报告状态为 {selectedReport.status}，完成后可进入简历优化。
+                </p>
+              ) : null}
             </>
           )}
         </CardContent>
