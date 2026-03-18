@@ -411,7 +411,9 @@ async def get_resume_detail(
     current_user: User,
     resume_id: UUID,
 ) -> ResumeResponse:
-    resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
+    resume = await get_resume_for_user(
+        session, current_user=current_user, resume_id=resume_id
+    )
     parse_job = await get_latest_parse_job(session, resume_id=resume.id)
     return serialize_resume(resume, parse_job=parse_job)
 

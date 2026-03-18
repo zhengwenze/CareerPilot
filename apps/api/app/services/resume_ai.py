@@ -68,12 +68,16 @@ class ResumeAICorrectionResult:
 
 
 class ResumeAICorrectionProvider:
-    async def correct(self, payload: ResumeAICorrectionRequest) -> ResumeAICorrectionResult:
+    async def correct(
+        self, payload: ResumeAICorrectionRequest
+    ) -> ResumeAICorrectionResult:
         raise NotImplementedError
 
 
 class DisabledResumeAICorrectionProvider(ResumeAICorrectionProvider):
-    async def correct(self, payload: ResumeAICorrectionRequest) -> ResumeAICorrectionResult:
+    async def correct(
+        self, payload: ResumeAICorrectionRequest
+    ) -> ResumeAICorrectionResult:
         return ResumeAICorrectionResult(
             provider="disabled",
             model=None,
@@ -98,7 +102,9 @@ class ConfiguredResumeAICorrectionProvider(ResumeAICorrectionProvider):
         self.model = model
         self.timeout_seconds = timeout_seconds
 
-    async def correct(self, payload: ResumeAICorrectionRequest) -> ResumeAICorrectionResult:
+    async def correct(
+        self, payload: ResumeAICorrectionRequest
+    ) -> ResumeAICorrectionResult:
         payload_json = await request_json_completion(
             config=AIProviderConfig(
                 provider=self.provider,
@@ -132,7 +138,9 @@ class ConfiguredResumeAICorrectionProvider(ResumeAICorrectionProvider):
         )
 
 
-def build_resume_ai_correction_provider(settings: Settings) -> ResumeAICorrectionProvider:
+def build_resume_ai_correction_provider(
+    settings: Settings,
+) -> ResumeAICorrectionProvider:
     provider = settings.resume_ai_provider.strip().lower()
     if provider in EMPTY_PROVIDER_VALUES:
         return DisabledResumeAICorrectionProvider()
@@ -363,7 +371,9 @@ def _filter_supported_items(
         if not cleaned:
             continue
         if use_overlap:
-            supported = _appears_in_raw_text(cleaned, normalized_raw_text) or _has_text_overlap(
+            supported = _appears_in_raw_text(
+                cleaned, normalized_raw_text
+            ) or _has_text_overlap(
                 cleaned,
                 raw_text,
             )
@@ -413,7 +423,9 @@ def _has_text_overlap(candidate: str, raw_text: str) -> bool:
     normalized_raw_text = _normalize_evidence(raw_text)
     tokens = [
         _normalize_evidence(token)
-        for token in re.findall(r"[A-Za-z0-9+#./-]{2,}|[\u4e00-\u9fff]{2,}", _clean_text(candidate))
+        for token in re.findall(
+            r"[A-Za-z0-9+#./-]{2,}|[\u4e00-\u9fff]{2,}", _clean_text(candidate)
+        )
     ]
     tokens = [token for token in tokens if token]
     if not tokens:
