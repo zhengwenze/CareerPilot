@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import json
 import logging
 import re
 import unicodedata
-from dataclasses import asdict, dataclass, field
-
-import httpx
+from dataclasses import dataclass, field
 
 from app.core.config import Settings
 from app.schemas.resume import ResumeStructuredData
+from app.services.ai_client import AIProviderConfig, request_json_completion
 from app.services.resume_parser import EMAIL_PATTERN, PHONE_PATTERN
 
 logger = logging.getLogger(__name__)
@@ -84,7 +82,7 @@ class DisabledResumeAICorrectionProvider(ResumeAICorrectionProvider):
         )
 
 
-class OpenAICompatibleResumeAICorrectionProvider(ResumeAICorrectionProvider):
+class ConfiguredResumeAICorrectionProvider(ResumeAICorrectionProvider):
     def __init__(
         self,
         *,
@@ -101,28 +99,17 @@ class OpenAICompatibleResumeAICorrectionProvider(ResumeAICorrectionProvider):
         self.timeout_seconds = timeout_seconds
 
     async def correct(self, payload: ResumeAICorrectionRequest) -> ResumeAICorrectionResult:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.post(
-                f"{self.base_url}/responses",
-                headers=headers,
-                json={
-                    "model": self.model,
-                    "stream": False,
-                    "instructions": JSON_RESPONSE_INSTRUCTIONS,
-                    "input": json.dumps(asdict(payload), ensure_ascii=False),
-                    "reasoning": {"effort": "low"},
-                    "text": {"verbosity": "low"},
-                },
-            )
-            response.raise_for_status()
-
-        parsed_response = response.json()
-        content = _response_output_text(parsed_response)
-        payload_json = json.loads(_extract_json_object(content))
+        payload_json = await request_json_completion(
+            config=AIProviderConfig(
+                provider=self.provider,
+                base_url=self.base_url,
+                api_key=self.api_key or None,
+                model=self.model,
+                timeout_seconds=self.timeout_seconds,
+            ),
+            instructions=JSON_RESPONSE_INSTRUCTIONS,
+            payload=payload,
+        )
         structured_payload = payload_json.get("structured_json", payload_json)
         structured_data = ResumeStructuredData.model_validate(structured_payload)
 
@@ -153,7 +140,7 @@ def build_resume_ai_correction_provider(settings: Settings) -> ResumeAICorrectio
     if not settings.resume_ai_base_url or not settings.resume_ai_model:
         return DisabledResumeAICorrectionProvider()
 
-    return OpenAICompatibleResumeAICorrectionProvider(
+    return ConfiguredResumeAICorrectionProvider(
         provider=provider,
         base_url=settings.resume_ai_base_url,
         api_key=settings.resume_ai_api_key,
@@ -435,36 +422,3 @@ def _has_text_overlap(candidate: str, raw_text: str) -> bool:
     if len(tokens) == 1:
         return matches == 1
     return matches >= min(2, len(tokens))
-
-
-def _extract_json_object(content: str) -> str:
-    start = content.find("{")
-    end = content.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("AI response did not contain a JSON object")
-    return content[start : end + 1]
-
-
-def _response_output_text(response: dict[str, object]) -> str:
-    output = response.get("output")
-    if not isinstance(output, list):
-        raise ValueError("AI response did not contain output items")
-
-    chunks: list[str] = []
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") != "message" or item.get("role") != "assistant":
-            continue
-        content = item.get("content")
-        if not isinstance(content, list):
-            continue
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            if part.get("type") == "output_text" and isinstance(part.get("text"), str):
-                chunks.append(part["text"])
-
-    if not chunks:
-        raise ValueError("AI response did not contain assistant text")
-    return "".join(chunks)

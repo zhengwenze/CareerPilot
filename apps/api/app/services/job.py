@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -24,7 +23,6 @@ from app.services.job_parser import build_structured_job
 from app.services.match_support import mark_reports_stale_for_job
 
 JOB_PARSE_TIMEOUT_SECONDS = 120
-logger = logging.getLogger(__name__)
 
 
 def utc_now_naive() -> datetime:
@@ -521,17 +519,10 @@ async def process_job_parse_job(
     parse_job_id: UUID,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    logger.info("Starting job parse job: job_id=%s parse_job_id=%s", job_id, parse_job_id)
-
     async with session_factory() as session:
         job = await session.get(JobDescription, job_id)
         parse_job = await session.get(JobParseJob, parse_job_id)
         if job is None or parse_job is None:
-            logger.warning(
-                "Job parse job skipped because record was missing: job_id=%s parse_job_id=%s",
-                job_id,
-                parse_job_id,
-            )
             return
 
         parse_job.status = "processing"
@@ -590,12 +581,6 @@ async def process_job_parse_job(
             parse_job.status = "failed"
             parse_job.error_message = "Job parse timed out"
         except Exception as exc:
-            logger.exception(
-                "Job parse failed with unexpected exception: job_id=%s parse_job_id=%s",
-                job_id,
-                parse_job_id,
-                exc_info=exc,
-            )
             job.parse_status = "failed"
             job.parse_error = str(exc)
             parse_job.status = "failed"

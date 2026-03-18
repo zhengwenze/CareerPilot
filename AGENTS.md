@@ -1,6 +1,18 @@
 # AGENTS.md
 
-本文件为 CareerPilot 仓库中的编码代理提供任务驱动的工作约束、导航入口、验证要求与交付规范。目标不是描述整个仓库，而是帮助代理更快找到正确入口、执行最小修改、完成最小必要验证。
+本文件为 CareerPilot 仓库中的编码代理提供任务驱动的工作约束、导航入口、验证要求与交付规范。目标是帮助代理更快找到正确入口、执行最小修改、完成最小必要验证。
+
+# 第一性原理
+
+请使用第一性原理思考。你不能总是假设我非常清楚自己想要什么和该怎么得到。请保持严谨，从原始需求和问题出发，如果动机和目标不清晰，必须停下来和我讨论。
+
+# 方案规范
+
+当需要你给出修改或重构方案时必须符合以下规范：
+不允许给出兼容性或补丁性的方案
+不允许过度设计，保持最短路径实现且不能违反第一条要求
+不允许自行给出我提供的需求以外的方案，例如一些兜底和降级方案，这可能导致业务逻辑偏移问题
+必须确保方案的逻辑正确，必须经过全链路的逻辑验证
 
 ## 1. Scope and Core Rules
 
@@ -68,7 +80,7 @@
 
 ### Secrets and environment safety
 
-- 不要在代码、测试、日志或提交说明中写入真实密钥。
+- 不要在代码、测试、日志或提交说明中硬编码真实密钥。
 - 不要修改 `.env.example` 中变量名，除非任务明确要求。
 - 若新增环境变量，必须同时更新示例文件与说明。
 
@@ -291,16 +303,16 @@ Success criteria：
 
 ### Verification by change type
 
-| 改动类型 | 最小验证命令 | 验证要点 |
-| --- | --- | --- |
+| 改动类型                                               | 最小验证命令                                                                                           | 验证要点                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
 | 仅改 `resume_parser.py` / `resume_ai.py` / `resume.py` | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 解析状态流转、AI fallback、结构化结果写回 |
-| Resume parse API 或 schema 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 上传、详情、重试、parse jobs 正常 |
-| Match report 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_match_reports.py tests/test_jobs.py` | 匹配报告生成与 AI 修正逻辑正常 |
-| Resume optimization 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume_optimizer.py` | 会话创建、草案生成、应用版本提升 |
-| Profile/Auth 改动 | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_profile.py tests/test_auth.py` | 登录、鉴权、资料读写正常 |
-| Frontend-only changes | `cd apps/web && npm run lint` | ESLint 通过 |
-| Resume page / polling 改动 | `cd apps/web && npm run lint` | 手工验证上传、轮询、成功/失败、停止轮询 |
-| API contract changes | 后端定向 pytest + `cd apps/web && npm run lint` | 接口与前端映射一致 |
+| Resume parse API 或 schema 改动                        | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 上传、详情、重试、parse jobs 正常         |
+| Match report 改动                                      | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_match_reports.py tests/test_jobs.py`   | 匹配报告生成与 AI 修正逻辑正常            |
+| Resume optimization 改动                               | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume_optimizer.py`                   | 会话创建、草案生成、应用版本提升          |
+| Profile/Auth 改动                                      | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_profile.py tests/test_auth.py`         | 登录、鉴权、资料读写正常                  |
+| Frontend-only changes                                  | `cd apps/web && npm run lint`                                                                          | ESLint 通过                               |
+| Resume page / polling 改动                             | `cd apps/web && npm run lint`                                                                          | 手工验证上传、轮询、成功/失败、停止轮询   |
+| API contract changes                                   | 后端定向 pytest + `cd apps/web && npm run lint`                                                        | 接口与前端映射一致                        |
 
 ### Testing requirements
 
@@ -336,32 +348,6 @@ Success criteria：
 3. 若未进入，判断失败点在调度前、调度时还是状态更新。
 4. 若已进入，判断失败点在依赖调用、业务处理还是结果写回。
 
-### Logging contract
-
-必须打日志的场景：
-
-- 收到请求，带 `request_id`、`user_id`、业务主键
-- 参数校验通过或失败
-- 创建或更新业务记录
-- 状态流转前后
-- 调用数据库、Redis、MinIO、AI 服务、第三方 API 前后
-- 后台任务开始、结束、失败
-
-日志最少包含：
-
-- `request_id`
-- `user_id`
-- 业务主键，如 `resume_id`、`job_id`、`task_id`、`session_id`
-- 当前状态值，如 `status`、`parse_status`
-
-绝对禁止输出：
-
-- 明文密码
-- 完整 token
-- 真实密钥
-- 身份证号、手机号、邮箱原文的大量明文
-- 大段简历全文、用户隐私内容或第三方敏感响应
-
 ## 8. Output Contract
 
 ### Done criteria
@@ -392,4 +378,4 @@ Success criteria：
 
 - 小改动可以简洁，但不能省略验证结果。
 - 工作流改动必须明确状态流转、失败策略与未覆盖风险。
-- 若验证未完成，不要模糊表达；明确哪些已验证、哪些未验证、为什么未验证。
+- 若验证未完成，明确给出哪些已验证、哪些未验证、为什么未验证。

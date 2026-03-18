@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,7 +28,10 @@ from app.services.resume_ai import (
     build_resume_ai_correction_provider,
     merge_resume_ai_correction,
 )
-from app.services.resume_parser import build_structured_resume, extract_text_from_pdf_bytes
+from app.services.resume_parser import (
+    build_structured_resume,
+    extract_text_from_pdf_bytes,
+)
 from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -38,7 +40,6 @@ AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
 AI_STATUS_FALLBACK_RULE = "fallback_rule"
 AI_STATUS_SKIPPED = "skipped"
-logger = logging.getLogger(__name__)
 
 
 def utc_now_naive() -> datetime:
@@ -83,11 +84,6 @@ async def validate_resume_upload(
     *,
     settings: Settings,
 ) -> tuple[str, str, bytes]:
-    logger.info(
-        "Validating resume upload: file_name=%s content_type=%s",
-        file.filename,
-        file.content_type,
-    )
     if not file.filename:
         raise ApiException(
             status_code=400,
@@ -119,12 +115,6 @@ async def validate_resume_upload(
         )
 
     content_type = file.content_type or "application/pdf"
-    logger.info(
-        "Validated resume upload: sanitized_file_name=%s size_bytes=%s content_type=%s",
-        file_name,
-        len(content),
-        content_type,
-    )
     return file_name, content_type, content
 
 
@@ -135,7 +125,9 @@ def serialize_resume(
     download_url: str | None = None,
 ) -> ResumeResponse:
     latest_parse_job = (
-        ResumeParseJobResponse.model_validate(parse_job) if parse_job is not None else None
+        ResumeParseJobResponse.model_validate(parse_job)
+        if parse_job is not None
+        else None
     )
     return ResumeResponse(
         id=resume.id,
@@ -149,9 +141,11 @@ def serialize_resume(
         parse_status=resume.parse_status,
         parse_error=resume.parse_error,
         raw_text=resume.raw_text,
-        structured_json=ResumeStructuredData.model_validate(resume.structured_json)
-        if resume.structured_json
-        else None,
+        structured_json=(
+            ResumeStructuredData.model_validate(resume.structured_json)
+            if resume.structured_json
+            else None
+        ),
         latest_version=resume.latest_version,
         created_at=resume.created_at,
         updated_at=resume.updated_at,
@@ -182,12 +176,8 @@ async def upload_resume(
     storage: ObjectStorage,
     settings: Settings,
 ) -> ResumeResponse:
-    file_name, content_type, content = await validate_resume_upload(file, settings=settings)
-    logger.info(
-        "Uploading resume to storage: user_id=%s file_name=%s size_bytes=%s",
-        current_user.id,
-        file_name,
-        len(content),
+    file_name, content_type, content = await validate_resume_upload(
+        file, settings=settings
     )
 
     resume_id = uuid4()
@@ -202,13 +192,6 @@ async def upload_resume(
         object_key=object_key,
         data=content,
         content_type=content_type,
-    )
-    logger.info(
-        "Uploaded resume to storage: user_id=%s resume_id=%s bucket=%s object_key=%s",
-        current_user.id,
-        resume_id,
-        stored_object.bucket_name,
-        stored_object.object_key,
     )
 
     resume = Resume(
@@ -246,16 +229,6 @@ async def upload_resume(
 
     await session.refresh(resume)
     await session.refresh(parse_job)
-    logger.info(
-        (
-            "Created resume and parse job records: resume_id=%s "
-            "parse_job_id=%s parse_status=%s job_status=%s"
-        ),
-        resume.id,
-        parse_job.id,
-        resume.parse_status,
-        parse_job.status,
-    )
     return serialize_resume(resume, parse_job=parse_job)
 
 
@@ -267,22 +240,12 @@ async def process_resume_parse_job(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     settings: Settings | None = None,
 ) -> None:
-    logger.info(
-        "Starting resume parse job: resume_id=%s parse_job_id=%s",
-        resume_id,
-        parse_job_id,
-    )
     session_maker = session_factory or get_session_factory()
     config = settings or get_settings()
     async with session_maker() as session:
         resume = await session.get(Resume, resume_id)
         parse_job = await session.get(ResumeParseJob, parse_job_id)
         if resume is None or parse_job is None:
-            logger.warning(
-                "Resume parse job skipped because record was missing: resume_id=%s parse_job_id=%s",
-                resume_id,
-                parse_job_id,
-            )
             return
 
         parse_job.status = "processing"
@@ -301,54 +264,15 @@ async def process_resume_parse_job(
         session.add(resume)
         session.add(parse_job)
         await session.commit()
-        logger.info(
-            "Marked resume parse job as processing: resume_id=%s parse_job_id=%s",
-            resume_id,
-            parse_job_id,
-        )
 
         try:
             async with asyncio.timeout(RESUME_PARSE_TIMEOUT_SECONDS):
-                logger.info(
-                    "Reading resume bytes from storage: resume_id=%s bucket=%s object_key=%s",
-                    resume_id,
-                    resume.storage_bucket,
-                    resume.storage_object_key,
-                )
                 file_bytes = await storage.get_object_bytes(
                     bucket_name=resume.storage_bucket,
                     object_key=resume.storage_object_key,
                 )
-                logger.info(
-                    "Loaded resume bytes from storage: resume_id=%s size_bytes=%s",
-                    resume_id,
-                    len(file_bytes),
-                )
                 raw_text = extract_text_from_pdf_bytes(file_bytes)
-                logger.info(
-                    (
-                        "Extracted raw resume text: resume_id=%s "
-                        "raw_text_length=%s raw_text_preview=%s"
-                    ),
-                    resume_id,
-                    len(raw_text),
-                    build_text_preview(raw_text),
-                )
                 structured = build_structured_resume(raw_text)
-                logger.info(
-                    (
-                        "Built structured resume data: resume_id=%s name=%s email=%s "
-                        "education_count=%s work_count=%s project_count=%s "
-                        "technical_skill_count=%s"
-                    ),
-                    resume_id,
-                    structured.basic_info.name,
-                    structured.basic_info.email,
-                    len(structured.education),
-                    len(structured.work_experience),
-                    len(structured.projects),
-                    len(structured.skills.technical),
-                )
                 final_structured = structured
                 ai_provider = build_resume_ai_correction_provider(config)
                 try:
@@ -358,7 +282,10 @@ async def process_resume_parse_job(
                             rule_structured_json=structured.model_dump(),
                         )
                     )
-                    if ai_result.status == "applied" and ai_result.structured_data is not None:
+                    if (
+                        ai_result.status == "applied"
+                        and ai_result.structured_data is not None
+                    ):
                         final_structured = merge_resume_ai_correction(
                             raw_text=raw_text,
                             rule_result=structured,
@@ -369,52 +296,17 @@ async def process_resume_parse_job(
                             status=AI_STATUS_APPLIED,
                             message="AI 校准成功",
                         )
-                        logger.info(
-                            (
-                                "Applied resume AI correction: resume_id=%s provider=%s model=%s "
-                                "confidence=%s corrections=%s"
-                            ),
-                            resume_id,
-                            ai_result.provider,
-                            ai_result.model,
-                            ai_result.confidence,
-                            len(ai_result.corrections),
-                        )
                     else:
                         set_parse_job_ai_result(
                             parse_job,
                             status=AI_STATUS_SKIPPED,
                             message="AI 校准未启用",
                         )
-                        logger.info(
-                            (
-                                "Skipped resume AI correction: resume_id=%s provider=%s "
-                                "model=%s base_url=%s status=%s"
-                            ),
-                            resume_id,
-                            ai_result.provider,
-                            ai_result.model,
-                            config.resume_ai_base_url,
-                            ai_result.status,
-                        )
                 except Exception as exc:
                     set_parse_job_ai_result(
                         parse_job,
                         status=AI_STATUS_FALLBACK_RULE,
                         message="AI 校准失败，已回退规则解析",
-                    )
-                    logger.exception(
-                        (
-                            "Resume AI correction failed: resume_id=%s "
-                            "provider=%s model=%s base_url=%s "
-                            "raw_text_length=%d exception=%s"
-                        ),
-                        resume_id,
-                        config.resume_ai_provider,
-                        config.resume_ai_model,
-                        config.resume_ai_base_url,
-                        len(raw_text),
-                        str(exc),
                     )
 
             resume.raw_text = raw_text
@@ -425,39 +317,18 @@ async def process_resume_parse_job(
             parse_job.status = "success"
             parse_job.error_message = None
         except TimeoutError:
-            logger.warning(
-                "Resume parse timed out: resume_id=%s parse_job_id=%s timeout_seconds=%s",
-                resume_id,
-                parse_job_id,
-                RESUME_PARSE_TIMEOUT_SECONDS,
-            )
             set_parse_job_ai_result(parse_job, status=None, message=None)
             resume.parse_status = "failed"
             resume.parse_error = "Resume parse timed out"
             parse_job.status = "failed"
             parse_job.error_message = "Resume parse timed out"
         except ApiException as exc:
-            logger.warning(
-                (
-                    "Resume parse failed with ApiException: resume_id=%s "
-                    "parse_job_id=%s message=%s details=%s"
-                ),
-                resume_id,
-                parse_job_id,
-                exc.message,
-                exc.details,
-            )
             set_parse_job_ai_result(parse_job, status=None, message=None)
             resume.parse_status = "failed"
             resume.parse_error = exc.message
             parse_job.status = "failed"
             parse_job.error_message = exc.message
         except Exception as exc:
-            logger.exception(
-                "Resume parse failed with unexpected exception: resume_id=%s parse_job_id=%s",
-                resume_id,
-                parse_job_id,
-            )
             set_parse_job_ai_result(parse_job, status=None, message=None)
             resume.parse_status = "failed"
             resume.parse_error = "Unexpected parse failure"
@@ -471,16 +342,6 @@ async def process_resume_parse_job(
             session.add(resume)
             session.add(parse_job)
             await session.commit()
-            logger.info(
-                (
-                    "Finished resume parse job: resume_id=%s parse_job_id=%s "
-                    "resume_status=%s job_status=%s"
-                ),
-                resume_id,
-                parse_job_id,
-                resume.parse_status,
-                parse_job.status,
-            )
 
 
 async def list_resumes(
@@ -499,21 +360,6 @@ async def list_resumes(
     for resume in resumes:
         parse_job = await get_latest_parse_job(session, resume_id=resume.id)
         items.append(serialize_resume(resume, parse_job=parse_job))
-    logger.info(
-        "Listed resumes: user_id=%s count=%s statuses=%s",
-        current_user.id,
-        len(items),
-        [
-            {
-                "resume_id": str(item.id),
-                "parse_status": item.parse_status,
-                "latest_parse_job_status": item.latest_parse_job.status
-                if item.latest_parse_job
-                else None,
-            }
-            for item in items
-        ],
-    )
     return items
 
 
@@ -534,13 +380,6 @@ async def list_resume_parse_jobs(
         .order_by(desc(ResumeParseJob.created_at))
     )
     jobs = result.scalars().all()
-    logger.info(
-        "Listed resume parse jobs: user_id=%s resume_id=%s count=%s statuses=%s",
-        current_user.id,
-        resume_id,
-        len(jobs),
-        [job.status for job in jobs],
-    )
     return [ResumeParseJobResponse.model_validate(job) for job in jobs]
 
 
@@ -574,20 +413,6 @@ async def get_resume_detail(
 ) -> ResumeResponse:
     resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
     parse_job = await get_latest_parse_job(session, resume_id=resume.id)
-    logger.info(
-        (
-            "Loaded resume detail: user_id=%s resume_id=%s parse_status=%s "
-            "parse_error=%s has_raw_text=%s has_structured_json=%s "
-            "latest_parse_job_status=%s"
-        ),
-        current_user.id,
-        resume_id,
-        resume.parse_status,
-        resume.parse_error,
-        bool(resume.raw_text),
-        bool(resume.structured_json),
-        parse_job.status if parse_job is not None else None,
-    )
     return serialize_resume(resume, parse_job=parse_job)
 
 
@@ -597,7 +422,9 @@ async def create_resume_parse_job(
     current_user: User,
     resume_id: UUID,
 ) -> tuple[Resume, ResumeParseJob]:
-    resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
+    resume = await get_resume_for_user(
+        session, current_user=current_user, resume_id=resume_id
+    )
     resume.parse_status = "pending"
     resume.parse_error = None
     resume.updated_by = current_user.id
@@ -614,12 +441,6 @@ async def create_resume_parse_job(
     await session.commit()
     await session.refresh(resume)
     await session.refresh(parse_job)
-    logger.info(
-        "Created manual retry parse job: user_id=%s resume_id=%s parse_job_id=%s",
-        current_user.id,
-        resume_id,
-        parse_job.id,
-    )
     return resume, parse_job
 
 
@@ -631,7 +452,9 @@ async def generate_resume_download_url(
     storage: ObjectStorage,
     settings: Settings,
 ) -> ResumeDownloadUrlResponse:
-    resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
+    resume = await get_resume_for_user(
+        session, current_user=current_user, resume_id=resume_id
+    )
     download_url = await storage.get_download_url(
         bucket_name=resume.storage_bucket,
         object_key=resume.storage_object_key,
@@ -650,7 +473,9 @@ async def delete_resume(
     resume_id: UUID,
     storage: ObjectStorage,
 ) -> ResumeDeleteResponse:
-    resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
+    resume = await get_resume_for_user(
+        session, current_user=current_user, resume_id=resume_id
+    )
 
     await storage.delete_object(
         bucket_name=resume.storage_bucket,
@@ -659,12 +484,6 @@ async def delete_resume(
 
     await session.delete(resume)
     await session.commit()
-    logger.info(
-        "Deleted resume record and object: user_id=%s resume_id=%s object_key=%s",
-        current_user.id,
-        resume_id,
-        resume.storage_object_key,
-    )
 
     return ResumeDeleteResponse(message="Resume deleted successfully")
 
@@ -676,7 +495,9 @@ async def update_resume_structured_data(
     resume_id: UUID,
     payload: ResumeStructuredUpdateRequest,
 ) -> ResumeResponse:
-    resume = await get_resume_for_user(session, current_user=current_user, resume_id=resume_id)
+    resume = await get_resume_for_user(
+        session, current_user=current_user, resume_id=resume_id
+    )
     resume.structured_json = payload.structured_json.model_dump()
     resume.latest_version += 1
     resume.updated_by = current_user.id
@@ -694,15 +515,4 @@ async def update_resume_structured_data(
     await session.commit()
     await session.refresh(resume)
     parse_job = await get_latest_parse_job(session, resume_id=resume.id)
-    logger.info(
-        (
-            "Updated structured resume data: user_id=%s resume_id=%s "
-            "version=%s parse_status=%s name=%s"
-        ),
-        current_user.id,
-        resume_id,
-        resume.latest_version,
-        resume.parse_status,
-        payload.structured_json.basic_info.name,
-    )
     return serialize_resume(resume, parse_job=parse_job)

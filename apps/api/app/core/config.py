@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Annotated
 from urllib.parse import SplitResult, urlsplit, urlunsplit
@@ -66,10 +67,10 @@ class Settings(BaseSettings):
     match_ai_api_key: str | None = None
     match_ai_model: str | None = None
     match_ai_timeout_seconds: int = 30
-    resume_ai_provider: str = "disabled"
-    resume_ai_base_url: str = "http://127.0.0.1:18100/v1"
+    resume_ai_provider: str = "minimax"
+    resume_ai_base_url: str = "https://api.minimaxi.com/anthropic"
     resume_ai_api_key: str | None = None
-    resume_ai_model: str = "gpt-5.4"
+    resume_ai_model: str = "MiniMax-M2.5"
     resume_ai_timeout_seconds: int = 30
 
     model_config = SettingsConfigDict(
@@ -95,6 +96,14 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_storage_endpoint(cls, value: str) -> str:
         return _normalize_localhost_endpoint(value)
+
+    @field_validator("resume_ai_api_key", mode="before")
+    @classmethod
+    def resolve_resume_ai_api_key(cls, value: str | None) -> str | None:
+        if value is not None and value.strip():
+            return value
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        return anthropic_api_key or None
 
     @property
     def sync_database_url(self) -> str:

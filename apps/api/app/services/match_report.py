@@ -1,12 +1,8 @@
 from __future__ import annotations
-
-import logging
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
-
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.core.config import Settings
 from app.core.errors import ApiException, ErrorCode
 from app.models import JobDescription, JobReadinessEvent, MatchReport, Resume, User
@@ -26,8 +22,6 @@ from app.services.match_ai import (
 from app.services.match_engine import build_rule_match_result
 from app.services.match_support import derive_fit_band
 from app.services.resume import get_resume_for_user
-
-logger = logging.getLogger(__name__)
 
 
 def serialize_match_report(report: MatchReport) -> MatchReportResponse:
@@ -60,7 +54,9 @@ def serialize_match_report(report: MatchReport) -> MatchReportResponse:
 
 
 def _to_decimal_score(value: float) -> Decimal:
-    return Decimal(str(round(value, 2))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return Decimal(str(round(value, 2))).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
 
 
 def _sanitize_insight_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -161,7 +157,9 @@ def _build_missing_user_inputs(
     return prompts[:4]
 
 
-def _build_resume_tailoring_tasks(actions: list[dict[str, object]]) -> list[dict[str, object]]:
+def _build_resume_tailoring_tasks(
+    actions: list[dict[str, object]],
+) -> list[dict[str, object]]:
     tasks: list[dict[str, object]] = []
     for action in actions[:4]:
         tasks.append(
@@ -418,12 +416,9 @@ async def process_match_report(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
 ) -> None:
-    logger.info("Starting match report task: report_id=%s", report_id)
-
     async with session_factory() as session:
         report = await session.get(MatchReport, report_id)
         if report is None:
-            logger.warning("Match report task skipped because report was missing: report_id=%s", report_id)
             return
         report.status = "processing"
         report.error_message = None
@@ -445,7 +440,9 @@ async def process_match_report(
             return
 
         try:
-            resume_snapshot = ResumeStructuredData.model_validate(resume.structured_json)
+            resume_snapshot = ResumeStructuredData.model_validate(
+                resume.structured_json
+            )
             job_snapshot = JobStructuredData.model_validate(job.structured_json)
             rule_result = build_rule_match_result(
                 resume=resume_snapshot,
@@ -469,13 +466,17 @@ async def process_match_report(
             except Exception as exc:
                 ai_result = _build_failed_ai_result(exc)
 
-            overall_score = max(0.0, min(100.0, rule_result.overall_score + float(ai_result.delta)))
+            overall_score = max(
+                0.0, min(100.0, rule_result.overall_score + float(ai_result.delta))
+            )
             fit_band = derive_fit_band(overall_score)
             dimension_scores = {
                 **rule_result.dimension_scores,
                 "ai_correction_delta": round(float(ai_result.delta), 2),
             }
-            strengths = _sanitize_insight_items([*rule_result.strengths, *ai_result.strengths])
+            strengths = _sanitize_insight_items(
+                [*rule_result.strengths, *ai_result.strengths]
+            )
             gaps = _sanitize_insight_items([*rule_result.gaps, *ai_result.gaps])
             actions = _sanitize_action_items([*rule_result.actions, *ai_result.actions])
             missing_items = list(rule_result.evidence.get("missing_items", []))
@@ -493,7 +494,8 @@ async def process_match_report(
 
             stale_status = (
                 "stale"
-                if resume.latest_version > report.resume_version or job.latest_version > report.job_version
+                if resume.latest_version > report.resume_version
+                or job.latest_version > report.job_version
                 else "fresh"
             )
             scorecard = {
@@ -574,7 +576,6 @@ async def process_match_report(
             )
             await session.commit()
         except Exception as exc:
-            logger.exception("Match report generation failed: report_id=%s", report_id, exc_info=exc)
             report.status = "failed"
             report.error_message = str(exc)
             session.add(report)
@@ -605,7 +606,9 @@ async def delete_match_report(
     current_user: User,
     report_id: UUID,
 ) -> MatchReportDeleteResponse:
-    report = await get_match_report_or_404(session, current_user=current_user, report_id=report_id)
+    report = await get_match_report_or_404(
+        session, current_user=current_user, report_id=report_id
+    )
     job = await session.get(JobDescription, report.jd_id)
     await session.delete(report)
     if job is not None and job.latest_match_report_id == report.id:

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import logging
-from typing import Any
-from uuid import UUID
-
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any
+from uuid import UUID
 
 from app.core.errors import ApiException, ErrorCode
 from app.models import (
@@ -27,8 +25,6 @@ from app.schemas.resume_optimization import (
     ResumeOptimizationSessionUpdateRequest,
 )
 from app.services.match_support import mark_reports_stale_for_resume
-
-logger = logging.getLogger(__name__)
 
 
 def _serialize_selected_tasks(raw_value: dict[str, Any]) -> list[ResumeOptimizationTaskState]:
@@ -353,15 +349,6 @@ async def create_resume_optimization_session(
     session.add(session_record)
     await session.commit()
     await session.refresh(session_record)
-    logger.info(
-        "Created resume optimization session: user_id=%s session_id=%s resume_id=%s job_id=%s report_id=%s resume_version=%s",
-        current_user.id,
-        session_record.id,
-        resume.id,
-        job.id,
-        report.id,
-        report.resume_version,
-    )
     return session_record, resume, job, report
 
 
@@ -409,14 +396,6 @@ async def generate_resume_optimization_suggestions(
     session.add(session_record)
     await session.commit()
     await session.refresh(session_record)
-    logger.info(
-        "Generated rule-based optimizer suggestions: user_id=%s session_id=%s resume_id=%s job_id=%s report_id=%s",
-        current_user.id,
-        session_record.id,
-        resume.id,
-        job.id,
-        report.id,
-    )
     return serialize_resume_optimization_session(session_record, job=job, report=report)
 
 
@@ -524,15 +503,6 @@ async def apply_resume_optimization_session(
     )
     await session.commit()
     await session.refresh(session_record)
-    logger.info(
-        "Applied resume optimization session: user_id=%s session_id=%s resume_id=%s job_id=%s report_id=%s applied_resume_version=%s",
-        current_user.id,
-        session_record.id,
-        resume.id,
-        job.id,
-        report.id,
-        resume.latest_version,
-    )
     return ResumeOptimizationApplyResponse(
         session_id=session_record.id,
         resume_id=resume.id,
