@@ -29,6 +29,19 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function getAIMessageTone(status: string | null | undefined) {
+  if (status === "pending") {
+    return "text-[#0071E3]";
+  }
+  if (status === "fallback_rule") {
+    return "text-[#B26A00]";
+  }
+  if (status === "skipped") {
+    return "text-black/58";
+  }
+  return "text-black/62";
+}
+
 export function ResumeDetailPanel({
   resume,
   parseJobs,
@@ -70,6 +83,13 @@ export function ResumeDetailPanel({
     resume.latest_parse_job?.ai_status,
     resume.latest_parse_job?.ai_message
   );
+  const latestAIMessage =
+    resume.latest_parse_job?.ai_message?.trim() || "";
+  const showLatestAIMessage =
+    Boolean(latestAIMessage) &&
+    ["pending", "fallback_rule", "skipped"].includes(
+      resume.latest_parse_job?.ai_status ?? ""
+    );
 
   return (
     <div className="space-y-5">
@@ -112,10 +132,14 @@ export function ResumeDetailPanel({
                   {resume.latest_version}
                 </p>
               </div>
-              {resume.latest_parse_job?.ai_status === "fallback_rule" &&
-              resume.latest_parse_job.ai_message ? (
-                <p className="text-sm text-[#B26A00]">
-                  {resume.latest_parse_job.ai_message}
+              {showLatestAIMessage ? (
+                <p
+                  className={cn(
+                    "text-sm",
+                    getAIMessageTone(resume.latest_parse_job?.ai_status)
+                  )}
+                >
+                  {latestAIMessage}
                 </p>
               ) : null}
             </div>
@@ -243,8 +267,18 @@ export function ResumeDetailPanel({
                         创建于 {formatDate(job.created_at)}
                         {job.finished_at ? `，结束于 ${formatDate(job.finished_at)}` : ""}
                       </p>
-                      {job.ai_status === "fallback_rule" && job.ai_message ? (
-                        <p className="mt-2 text-sm text-[#B26A00]">{job.ai_message}</p>
+                      {job.ai_message &&
+                      ["pending", "fallback_rule", "skipped"].includes(
+                        job.ai_status ?? ""
+                      ) ? (
+                        <p
+                          className={cn(
+                            "mt-2 text-sm",
+                            getAIMessageTone(job.ai_status)
+                          )}
+                        >
+                          {job.ai_message}
+                        </p>
                       ) : null}
                       {job.error_message ? (
                         <p className="mt-2 text-sm text-[#D93025]">

@@ -42,6 +42,12 @@ AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
 AI_STATUS_FALLBACK_RULE = "fallback_rule"
 AI_STATUS_SKIPPED = "skipped"
+PARSE_PROGRESS_PREPARING = "排队完成，准备解析"
+PARSE_PROGRESS_READING_FILE = "读取文件中"
+PARSE_PROGRESS_EXTRACTING_TEXT = "提取文本中"
+PARSE_PROGRESS_RULE_PARSING = "规则解析中"
+PARSE_PROGRESS_AI_REQUESTING = "AI 请求中"
+PARSE_PROGRESS_AI_MERGING = "AI 校准中"
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +107,40 @@ def build_unexpected_parse_error_message(exc: Exception) -> str:
 
 def build_storage_object_key(*, user_id: UUID, resume_id: UUID, file_name: str) -> str:
     return f"resumes/{user_id}/{resume_id}/{file_name}"
+
+
+async def update_parse_job_progress(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    parse_job_id: UUID,
+    owner_user_id: UUID,
+    message: str,
+) -> None:
+    try:
+        async with session_factory() as session:
+            parse_job = await session.get(ResumeParseJob, parse_job_id)
+            if parse_job is None:
+                logger.warning(
+                    "Resume parse progress update skipped because parse job was missing: "
+                    "parse_job_id=%s",
+                    parse_job_id,
+                )
+                return
+            set_parse_job_ai_result(
+                parse_job,
+                status=AI_STATUS_PENDING,
+                message=message,
+            )
+            parse_job.updated_by = owner_user_id
+            session.add(parse_job)
+            await session.commit()
+    except Exception:
+        logger.warning(
+            "Resume parse progress update failed: parse_job_id=%s message=%s",
+            parse_job_id,
+            message,
+            exc_info=True,
+        )
 
 
 async def validate_resume_upload(
@@ -277,7 +317,7 @@ async def process_resume_parse_job(
         set_parse_job_ai_result(
             parse_job,
             status=AI_STATUS_PENDING,
-            message="AI 校准进行中",
+            message=PARSE_PROGRESS_PREPARING,
         )
         parse_job.error_message = None
         parse_job.started_at = utc_now_naive()
@@ -304,15 +344,41 @@ async def process_resume_parse_job(
 
     try:
         async with asyncio.timeout(RESUME_PARSE_TIMEOUT_SECONDS):
+            await update_parse_job_progress(
+                session_factory=session_maker,
+                parse_job_id=parse_job_id,
+                owner_user_id=owner_user_id,
+                message=PARSE_PROGRESS_READING_FILE,
+            )
             file_bytes = await storage.get_object_bytes(
                 bucket_name=storage_bucket,
                 object_key=storage_object_key,
             )
+
+            await update_parse_job_progress(
+                session_factory=session_maker,
+                parse_job_id=parse_job_id,
+                owner_user_id=owner_user_id,
+                message=PARSE_PROGRESS_EXTRACTING_TEXT,
+            )
             raw_text = extract_text_from_pdf_bytes(file_bytes)
+
+            await update_parse_job_progress(
+                session_factory=session_maker,
+                parse_job_id=parse_job_id,
+                owner_user_id=owner_user_id,
+                message=PARSE_PROGRESS_RULE_PARSING,
+            )
             structured = build_structured_resume(raw_text)
             final_structured = structured
             ai_provider = build_resume_ai_correction_provider(config)
             try:
+                await update_parse_job_progress(
+                    session_factory=session_maker,
+                    parse_job_id=parse_job_id,
+                    owner_user_id=owner_user_id,
+                    message=PARSE_PROGRESS_AI_REQUESTING,
+                )
                 ai_result = await ai_provider.correct(
                     ResumeAICorrectionRequest(
                         raw_text=raw_text,
@@ -320,13 +386,19 @@ async def process_resume_parse_job(
                     )
                 )
                 if ai_result.status == "applied" and ai_result.structured_data is not None:
+                    await update_parse_job_progress(
+                        session_factory=session_maker,
+                        parse_job_id=parse_job_id,
+                        owner_user_id=owner_user_id,
+                        message=PARSE_PROGRESS_AI_MERGING,
+                    )
                     final_structured = merge_resume_ai_correction(
                         raw_text=raw_text,
                         rule_result=structured,
                         ai_result=ai_result.structured_data,
                     )
                     ai_status = AI_STATUS_APPLIED
-                    ai_message = "AI 校准成功"
+                    ai_message = "已完成校准"
                 else:
                     ai_status = AI_STATUS_SKIPPED
                     ai_message = "AI 校准未启用"
@@ -348,17 +420,19 @@ async def process_resume_parse_job(
         ai_status = None
         ai_message = None
         resume_parse_error = "Resume parse timed out"
-        parse_job_error_message = "Resume parse timed out"
+        parse_job_error_message = "简历解析超时（E_PARSE_TIMEOUT）"
     except ApiException as exc:
         ai_status = None
         ai_message = None
         resume_parse_error = exc.message
-        parse_job_error_message = exc.message
+        parse_job_error_message = f"{exc.message}（E_PARSE_API）"
     except Exception as exc:
         ai_status = None
         ai_message = None
         resume_parse_error = "Unexpected parse failure"
-        parse_job_error_message = build_unexpected_parse_error_message(exc)
+        parse_job_error_message = (
+            f"{build_unexpected_parse_error_message(exc)}（E_PARSE_UNEXPECTED）"
+        )
 
     async with session_maker() as session:
         resume = await session.get(Resume, resume_id)

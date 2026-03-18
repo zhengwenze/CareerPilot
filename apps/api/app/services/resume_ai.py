@@ -25,6 +25,16 @@ LIST_LIMITS = {
     "tools": 20,
     "languages": 10,
 }
+PROFESSIONAL_PUNCTUATION_MAP = str.maketrans(
+    {
+        ",": "，",
+        ";": "；",
+        ":": "：",
+        "?": "？",
+        "!": "！",
+    }
+)
+TERMINAL_SENTENCE_FIELDS = {"work_experience", "projects", "certifications"}
 JSON_RESPONSE_INSTRUCTIONS = """
 You are a resume structure correction engine.
 You receive raw PDF text plus a rule-based structured resume.
@@ -198,6 +208,7 @@ class ConfiguredResumeAICorrectionProvider(ResumeAICorrectionProvider):
             ),
             instructions=JSON_RESPONSE_INSTRUCTIONS,
             payload=payload,
+            max_tokens=2200,
         )
         logger.info(
             "Resume AI correction response received provider=%s model=%s top_level_keys=%s",
@@ -305,7 +316,10 @@ def _normalize_basic_info(payload: dict[str, object]) -> dict[str, str]:
         "email": _normalize_scalar_text(payload.get("email")),
         "phone": _normalize_scalar_text(payload.get("phone")),
         "location": _normalize_scalar_text(payload.get("location")),
-        "summary": _normalize_scalar_text(payload.get("summary")),
+        "summary": _normalize_professional_punctuation(
+            _normalize_scalar_text(payload.get("summary")),
+            ensure_terminal_sentence=True,
+        ),
     }
 
 
@@ -339,7 +353,8 @@ def _normalize_list_field(value: object, *, field_name: str) -> list[str]:
         cleaned = _clean_text(flattened)
         if cleaned:
             normalized_items.append(cleaned)
-    return _dedupe_clean_items(normalized_items, limit=LIST_LIMITS.get(field_name, 50))
+    deduped = _dedupe_clean_items(normalized_items, limit=LIST_LIMITS.get(field_name, 50))
+    return _normalize_professional_items(deduped, field_name=field_name)
 
 
 def _flatten_list_item(value: object, *, field_name: str) -> str:
@@ -443,10 +458,13 @@ def merge_resume_ai_correction(
             ai_value=ai_result.basic_info.location,
             use_overlap=False,
         ),
-        "summary": _choose_summary(
-            raw_text=raw_text,
-            rule_value=rule_result.basic_info.summary,
-            ai_value=ai_result.basic_info.summary,
+        "summary": _normalize_professional_punctuation(
+            _choose_summary(
+                raw_text=raw_text,
+                rule_value=rule_result.basic_info.summary,
+                ai_value=ai_result.basic_info.summary,
+            ),
+            ensure_terminal_sentence=True,
         ),
     }
 
@@ -477,6 +495,16 @@ def merge_resume_ai_correction(
         rule_items=rule_result.certifications,
         ai_items=ai_result.certifications,
         limit=LIST_LIMITS["certifications"],
+    )
+    education = _normalize_professional_items(education, field_name="education")
+    work_experience = _normalize_professional_items(
+        work_experience,
+        field_name="work_experience",
+    )
+    projects = _normalize_professional_items(projects, field_name="projects")
+    certifications = _normalize_professional_items(
+        certifications,
+        field_name="certifications",
     )
 
     skills = {
@@ -658,6 +686,65 @@ def _clean_text(value: str | None) -> str:
     normalized = unicodedata.normalize("NFKC", value)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
+
+
+def _normalize_professional_items(items: list[str], *, field_name: str) -> list[str]:
+    normalized: list[str] = []
+    for item in items:
+        polished = _normalize_professional_punctuation(
+            item,
+            ensure_terminal_sentence=field_name in TERMINAL_SENTENCE_FIELDS,
+        )
+        if polished:
+            normalized.append(polished)
+    return _dedupe_items_preserve_style(
+        normalized,
+        limit=LIST_LIMITS.get(field_name, 50),
+    )
+
+
+def _dedupe_items_preserve_style(items: list[str], *, limit: int) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        cleaned = re.sub(r"\s+", " ", item).strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.casefold()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        result.append(cleaned)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _normalize_professional_punctuation(
+    value: str,
+    *,
+    ensure_terminal_sentence: bool = False,
+) -> str:
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return ""
+
+    if re.search(r"[\u4e00-\u9fff]", cleaned):
+        cleaned = cleaned.translate(PROFESSIONAL_PUNCTUATION_MAP)
+        cleaned = re.sub(r"(?<!\d)\.(?!\d)", "。", cleaned)
+        cleaned = re.sub(r"\s*([，。；：！？、])\s*", r"\1", cleaned)
+        cleaned = re.sub(r"([，。；：！？、])\1+", r"\1", cleaned)
+
+    cleaned = re.sub(r"^[，。；：、\s]+", "", cleaned)
+    cleaned = re.sub(r"[，；：、\s]+$", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return ""
+
+    if ensure_terminal_sentence and re.search(r"[\u4e00-\u9fff]", cleaned):
+        if not re.search(r"[。！？]$", cleaned):
+            cleaned = f"{cleaned}。"
+    return cleaned
 
 
 def _normalize_evidence(value: str) -> str:

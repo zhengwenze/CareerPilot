@@ -1,0 +1,33 @@
+feat: 实现简历解析精细化动态状态显示
+
+核心设计：不改顶层resume.parse_status四态，只增强parse_job维度状态
+- 后端在每个解析节点实时写入ai_message（如"读取文件中""AI请求中""AI校准中"）
+- 前端动态展示以latest_parse_job为准，轮询期间实时刷新
+- 失败时错误信息增加错误码后缀（如E_PARSE_TIMEOUT/E_PARSE_API/E_PARSE_UNEXPECTED）
+
+后端改动（resume.py）：
+- 新增解析阶段常量与update_parse_job_progress
+- process_resume_parse_job中按阶段更新：读取文件、提取文本、规则解析、AI请求、AI校准
+- 成功文案改为"已完成校准"
+- 失败错误信息补充错误码
+
+前端改动：
+- status-meta.ts: pending状态标签直接显示后端ai_message
+- resume-detail-panel.tsx: 顶部和任务记录区域支持显示各阶段状态与错误信息
+- page.tsx: 轮询间隔由5000ms调整为3000ms
+
+其他优化：
+- ai_client.py: request_json_completion增加超时/连接错误重试
+- resume_ai.py: 新增中文专业标点规范化，调小max_tokens降低超时概率
+- test_*.py: 新增/更新测试覆盖新功能与错误场景
+
+验证：
+- 后端测试：12 passed
+- 前端lint：通过
+
+手动验证链路：
+1. 上传简历进入详情页，观察状态逐步变化
+2. 触发异常场景，确认可见具体错误（含错误码）
+3. 确认解析完成后轮询自动停止
+
+风险：parse_error顶层字段保持原有文案风格，精细错误主要在parse_job.error_message与ai_message

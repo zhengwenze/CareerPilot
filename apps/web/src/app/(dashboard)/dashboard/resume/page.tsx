@@ -290,7 +290,7 @@ export default function DashboardResumePage() {
           }
         }
       })();
-    }, 5000);
+    }, 3000);
 
     return () => {
       cancelled = true;

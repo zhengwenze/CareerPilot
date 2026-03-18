@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import asdict, dataclass, is_dataclass
@@ -8,6 +9,9 @@ from json import JSONDecodeError
 import anthropic
 
 logger = logging.getLogger(__name__)
+RETRYABLE_AI_ERROR_CATEGORIES = {"timeout", "connection_error"}
+MAX_AI_REQUEST_RETRIES = 1
+AI_RETRY_BACKOFF_SECONDS = 0.8
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,21 +38,51 @@ async def request_json_completion(
     max_tokens: int = 4000,
 ) -> dict[str, object]:
     try:
+        total_attempts = 1 + MAX_AI_REQUEST_RETRIES
         logger.info(
             "AI JSON completion started provider=%s model=%s "
-            "base_url=%s timeout_seconds=%s payload_chars=%s",
+            "base_url=%s timeout_seconds=%s payload_chars=%s attempts=%s",
             config.provider,
             config.model,
             config.base_url,
             config.timeout_seconds,
             len(_serialize_payload(payload)),
+            total_attempts,
         )
-        content = await _request_anthropic_text(
-            config=config,
-            instructions=instructions,
-            payload=payload,
-            max_tokens=max_tokens,
-        )
+        content = ""
+        for attempt in range(1, total_attempts + 1):
+            try:
+                content = await _request_anthropic_text(
+                    config=config,
+                    instructions=instructions,
+                    payload=payload,
+                    max_tokens=max_tokens,
+                )
+                if attempt > 1:
+                    logger.info(
+                        "AI JSON completion recovered after retry provider=%s model=%s attempt=%s",
+                        config.provider,
+                        config.model,
+                        attempt,
+                    )
+                break
+            except AIClientError as exc:
+                is_retryable = exc.category in RETRYABLE_AI_ERROR_CATEGORIES
+                has_next_attempt = attempt < total_attempts
+                if not is_retryable or not has_next_attempt:
+                    raise
+                backoff_seconds = AI_RETRY_BACKOFF_SECONDS * attempt
+                logger.warning(
+                    "AI JSON completion transient failure provider=%s model=%s "
+                    "category=%s attempt=%s/%s retry_in=%.2fs",
+                    config.provider,
+                    config.model,
+                    exc.category,
+                    attempt,
+                    total_attempts,
+                    backoff_seconds,
+                )
+                await asyncio.sleep(backoff_seconds)
         json_content = _extract_json_object(content)
         logger.info(
             "AI JSON object extracted provider=%s model=%s content_chars=%s json_chars=%s",

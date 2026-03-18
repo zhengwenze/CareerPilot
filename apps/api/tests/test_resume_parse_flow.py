@@ -94,11 +94,11 @@ async def test_process_resume_parse_job_persists_success_with_applied_ai(
     assert persisted_resume.parse_error is None
     assert persisted_resume.structured_json is not None
     assert persisted_resume.structured_json["projects"] == [
-        "黑马点评 高可用秒杀系统 完成高可用秒杀系统从0到1的架构设计与实现"
+        "黑马点评 高可用秒杀系统 完成高可用秒杀系统从0到1的架构设计与实现。"
     ]
     assert persisted_job.status == "success"
     assert persisted_job.ai_status == "applied"
-    assert persisted_job.ai_message == "AI 校准成功"
+    assert persisted_job.ai_message == "已完成校准"
 
 
 @pytest.mark.asyncio
