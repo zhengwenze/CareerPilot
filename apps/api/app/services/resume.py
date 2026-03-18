@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from app.schemas.resume import (
     ResumeStructuredData,
     ResumeStructuredUpdateRequest,
 )
+from app.services.ai_client import AIClientError
 from app.services.match_support import mark_reports_stale_for_resume
 from app.services.resume_ai import (
     ResumeAICorrectionRequest,
@@ -40,6 +42,8 @@ AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
 AI_STATUS_FALLBACK_RULE = "fallback_rule"
 AI_STATUS_SKIPPED = "skipped"
+
+logger = logging.getLogger(__name__)
 
 
 def utc_now_naive() -> datetime:
@@ -73,6 +77,26 @@ def set_parse_job_ai_result(
 ) -> None:
     parse_job.ai_status = status
     parse_job.ai_message = message
+
+
+def build_ai_fallback_message(exc: Exception) -> str:
+    if isinstance(exc, AIClientError):
+        category_messages = {
+            "auth_error": "AI 校准失败，已回退规则解析（401 认证失败）",
+            "permission_error": "AI 校准失败，已回退规则解析（403 权限不足）",
+            "timeout": "AI 校准失败，已回退规则解析（请求超时）",
+            "json_decode_error": "AI 校准失败，已回退规则解析（JSON 解析失败）",
+            "invalid_response_format": "AI 校准失败，已回退规则解析（模型返回格式非法）",
+        }
+        return category_messages.get(
+            exc.category,
+            f"AI 校准失败，已回退规则解析（{exc.category}）",
+        )
+    return "AI 校准失败，已回退规则解析（unexpected_error）"
+
+
+def build_unexpected_parse_error_message(exc: Exception) -> str:
+    return str(exc).strip() or exc.__class__.__name__
 
 
 def build_storage_object_key(*, user_id: UUID, resume_id: UUID, file_name: str) -> str:
@@ -265,83 +289,113 @@ async def process_resume_parse_job(
         session.add(parse_job)
         await session.commit()
 
-        try:
-            async with asyncio.timeout(RESUME_PARSE_TIMEOUT_SECONDS):
-                file_bytes = await storage.get_object_bytes(
-                    bucket_name=resume.storage_bucket,
-                    object_key=resume.storage_object_key,
-                )
-                raw_text = extract_text_from_pdf_bytes(file_bytes)
-                structured = build_structured_resume(raw_text)
-                final_structured = structured
-                ai_provider = build_resume_ai_correction_provider(config)
-                try:
-                    ai_result = await ai_provider.correct(
-                        ResumeAICorrectionRequest(
-                            raw_text=raw_text,
-                            rule_structured_json=structured.model_dump(),
-                        )
-                    )
-                    if (
-                        ai_result.status == "applied"
-                        and ai_result.structured_data is not None
-                    ):
-                        final_structured = merge_resume_ai_correction(
-                            raw_text=raw_text,
-                            rule_result=structured,
-                            ai_result=ai_result.structured_data,
-                        )
-                        set_parse_job_ai_result(
-                            parse_job,
-                            status=AI_STATUS_APPLIED,
-                            message="AI 校准成功",
-                        )
-                    else:
-                        set_parse_job_ai_result(
-                            parse_job,
-                            status=AI_STATUS_SKIPPED,
-                            message="AI 校准未启用",
-                        )
-                except Exception as exc:
-                    set_parse_job_ai_result(
-                        parse_job,
-                        status=AI_STATUS_FALLBACK_RULE,
-                        message="AI 校准失败，已回退规则解析",
-                    )
+        storage_bucket = resume.storage_bucket
+        storage_object_key = resume.storage_object_key
+        owner_user_id = resume.user_id
 
+    raw_text: str | None = None
+    final_structured: ResumeStructuredData | None = None
+    resume_parse_status = "failed"
+    resume_parse_error: str | None = "Unexpected parse failure"
+    parse_job_status = "failed"
+    parse_job_error_message: str | None = "Unexpected parse failure"
+    ai_status: str | None = None
+    ai_message: str | None = None
+
+    try:
+        async with asyncio.timeout(RESUME_PARSE_TIMEOUT_SECONDS):
+            file_bytes = await storage.get_object_bytes(
+                bucket_name=storage_bucket,
+                object_key=storage_object_key,
+            )
+            raw_text = extract_text_from_pdf_bytes(file_bytes)
+            structured = build_structured_resume(raw_text)
+            final_structured = structured
+            ai_provider = build_resume_ai_correction_provider(config)
+            try:
+                ai_result = await ai_provider.correct(
+                    ResumeAICorrectionRequest(
+                        raw_text=raw_text,
+                        rule_structured_json=structured.model_dump(),
+                    )
+                )
+                if ai_result.status == "applied" and ai_result.structured_data is not None:
+                    final_structured = merge_resume_ai_correction(
+                        raw_text=raw_text,
+                        rule_result=structured,
+                        ai_result=ai_result.structured_data,
+                    )
+                    ai_status = AI_STATUS_APPLIED
+                    ai_message = "AI 校准成功"
+                else:
+                    ai_status = AI_STATUS_SKIPPED
+                    ai_message = "AI 校准未启用"
+            except Exception as exc:
+                logger.exception(
+                    "Resume AI correction failed for resume_id=%s parse_job_id=%s: %s",
+                    resume_id,
+                    parse_job_id,
+                    exc,
+                )
+                ai_status = AI_STATUS_FALLBACK_RULE
+                ai_message = build_ai_fallback_message(exc)
+
+        resume_parse_status = "success"
+        resume_parse_error = None
+        parse_job_status = "success"
+        parse_job_error_message = None
+    except TimeoutError:
+        ai_status = None
+        ai_message = None
+        resume_parse_error = "Resume parse timed out"
+        parse_job_error_message = "Resume parse timed out"
+    except ApiException as exc:
+        ai_status = None
+        ai_message = None
+        resume_parse_error = exc.message
+        parse_job_error_message = exc.message
+    except Exception as exc:
+        ai_status = None
+        ai_message = None
+        resume_parse_error = "Unexpected parse failure"
+        parse_job_error_message = build_unexpected_parse_error_message(exc)
+
+    async with session_maker() as session:
+        resume = await session.get(Resume, resume_id)
+        parse_job = await session.get(ResumeParseJob, parse_job_id)
+        if resume is None or parse_job is None:
+            logger.warning(
+                "Resume parse finalization skipped because records were missing: "
+                "resume_id=%s parse_job_id=%s",
+                resume_id,
+                parse_job_id,
+            )
+            return
+
+        if final_structured is not None and raw_text is not None:
             resume.raw_text = raw_text
             resume.structured_json = final_structured.model_dump()
-            resume.parse_status = "success"
-            resume.parse_error = None
+
+        resume.parse_status = resume_parse_status
+        resume.parse_error = resume_parse_error
+        if resume_parse_status == "success":
             resume.latest_version = max(resume.latest_version, 1)
-            parse_job.status = "success"
-            parse_job.error_message = None
-        except TimeoutError:
-            set_parse_job_ai_result(parse_job, status=None, message=None)
-            resume.parse_status = "failed"
-            resume.parse_error = "Resume parse timed out"
-            parse_job.status = "failed"
-            parse_job.error_message = "Resume parse timed out"
-        except ApiException as exc:
-            set_parse_job_ai_result(parse_job, status=None, message=None)
-            resume.parse_status = "failed"
-            resume.parse_error = exc.message
-            parse_job.status = "failed"
-            parse_job.error_message = exc.message
-        except Exception as exc:
-            set_parse_job_ai_result(parse_job, status=None, message=None)
-            resume.parse_status = "failed"
-            resume.parse_error = "Unexpected parse failure"
-            parse_job.status = "failed"
-            parse_job.error_message = str(exc)
-        finally:
-            finished_at = utc_now_naive()
-            resume.updated_by = resume.user_id
-            parse_job.updated_by = resume.user_id
-            parse_job.finished_at = finished_at
-            session.add(resume)
-            session.add(parse_job)
-            await session.commit()
+
+        parse_job.status = parse_job_status
+        parse_job.error_message = parse_job_error_message
+        set_parse_job_ai_result(
+            parse_job,
+            status=ai_status,
+            message=ai_message,
+        )
+
+        finished_at = utc_now_naive()
+        resume.updated_by = owner_user_id
+        parse_job.updated_by = owner_user_id
+        parse_job.finished_at = finished_at
+        session.add(resume)
+        session.add(parse_job)
+        await session.commit()
 
 
 async def list_resumes(

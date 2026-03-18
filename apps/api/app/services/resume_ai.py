@@ -5,9 +5,11 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
+from pydantic import ValidationError
+
 from app.core.config import Settings
 from app.schemas.resume import ResumeStructuredData
-from app.services.ai_client import AIProviderConfig, request_json_completion
+from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
 from app.services.resume_parser import EMAIL_PATTERN, PHONE_PATTERN
 
 logger = logging.getLogger(__name__)
@@ -32,22 +34,94 @@ and normalize output without inventing facts.
 Rules:
 1. Do not add fields outside this schema:
    basic_info{name,email,phone,location,summary},
-   education[], work_experience[], projects[],
-   skills{technical[],tools[],languages[]},
-   certifications[].
+   education[string], work_experience[string], projects[string],
+   skills{technical[string],tools[string],languages[string]},
+   certifications[string].
 2. Never fabricate schools, companies, dates, projects, certifications, or skills.
 3. Prefer evidence from the raw_text over the rule output when they conflict.
 4. Return strict JSON only. No markdown. No explanation outside JSON.
 5. Keep list items concise and preserve original evidence wording when possible.
+6. education, work_experience, projects, and certifications must be arrays of strings only.
+7. Do not return objects, arrays, or nested JSON inside those arrays.
+8. If you identify subfields like school, project name, date, issuer, or type,
+   combine them into a single string item.
 
 Return JSON with keys:
 {
-  "structured_json": <schema above>,
-  "corrections": [{"field": "...", "reason": "..."}],
-  "confidence": 0.0-1.0,
+  "structured_json": {
+    "basic_info": {
+      "name": "string",
+      "email": "string",
+      "phone": "string",
+      "location": "string",
+      "summary": "string"
+    },
+    "education": ["string"],
+    "work_experience": ["string"],
+    "projects": ["string"],
+    "skills": {
+      "technical": ["string"],
+      "tools": ["string"],
+      "languages": ["string"]
+    },
+    "certifications": ["string"]
+  },
+  "corrections": [{"field": "string", "reason": "string"}],
+  "confidence": 0.0,
   "reasoning": "short summary"
 }
+
+Invalid:
+{"structured_json": {"education": [{"school": "新疆大学", "degree": "本科"}]}}
+
+Valid:
+{"structured_json": {"education": ["新疆大学 软件工程 本科 2023.09-2027.06 211 双一流"]}}
 """.strip()
+
+LIST_FIELD_PRIORITIES = {
+    "education": (
+        "school",
+        "degree",
+        "major",
+        "start_date",
+        "end_date",
+        "dates",
+        "gpa",
+        "notes",
+    ),
+    "work_experience": (
+        "company",
+        "role",
+        "title",
+        "department",
+        "start_date",
+        "end_date",
+        "dates",
+        "summary",
+        "highlights",
+        "responsibilities",
+        "achievements",
+    ),
+    "projects": (
+        "name",
+        "role",
+        "start_date",
+        "end_date",
+        "dates",
+        "tech_stack",
+        "summary",
+        "description",
+        "highlights",
+        "outcome",
+    ),
+    "certifications": (
+        "name",
+        "issuer",
+        "date",
+        "type",
+        "notes",
+    ),
+}
 
 
 @dataclass(slots=True)
@@ -105,6 +179,15 @@ class ConfiguredResumeAICorrectionProvider(ResumeAICorrectionProvider):
     async def correct(
         self, payload: ResumeAICorrectionRequest
     ) -> ResumeAICorrectionResult:
+        logger.info(
+            "Resume AI correction started provider=%s model=%s "
+            "raw_text_chars=%s rule_sections=%s has_api_key=%s",
+            self.provider,
+            self.model,
+            len(payload.raw_text),
+            ",".join(sorted(payload.rule_structured_json.keys())),
+            bool(self.api_key),
+        )
         payload_json = await request_json_completion(
             config=AIProviderConfig(
                 provider=self.provider,
@@ -116,8 +199,38 @@ class ConfiguredResumeAICorrectionProvider(ResumeAICorrectionProvider):
             instructions=JSON_RESPONSE_INSTRUCTIONS,
             payload=payload,
         )
-        structured_payload = payload_json.get("structured_json", payload_json)
-        structured_data = ResumeStructuredData.model_validate(structured_payload)
+        logger.info(
+            "Resume AI correction response received provider=%s model=%s top_level_keys=%s",
+            self.provider,
+            self.model,
+            ",".join(sorted(payload_json.keys())),
+        )
+        structured_payload = _normalize_ai_structured_payload(
+            payload_json.get("structured_json", payload_json)
+        )
+        try:
+            structured_data = ResumeStructuredData.model_validate(structured_payload)
+        except ValidationError as exc:
+            logger.exception(
+                "Resume AI correction structured payload validation failed provider=%s model=%s",
+                self.provider,
+                self.model,
+            )
+            raise AIClientError(
+                category="invalid_response_format",
+                detail=f"Resume AI structured payload validation failed: {exc}",
+            ) from exc
+        logger.info(
+            "Resume AI correction structured payload validated "
+            "provider=%s model=%s education=%s work_experience=%s "
+            "projects=%s certifications=%s",
+            self.provider,
+            self.model,
+            len(structured_data.education),
+            len(structured_data.work_experience),
+            len(structured_data.projects),
+            len(structured_data.certifications),
+        )
 
         corrections = payload_json.get("corrections")
         if not isinstance(corrections, list):
@@ -155,6 +268,144 @@ def build_resume_ai_correction_provider(
         model=settings.resume_ai_model,
         timeout_seconds=settings.resume_ai_timeout_seconds,
     )
+
+
+def _normalize_ai_structured_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise AIClientError(
+            category="invalid_response_format",
+            detail="Resume AI structured payload must be a JSON object",
+        )
+
+    basic_info_payload = payload.get("basic_info")
+    skills_payload = payload.get("skills")
+
+    normalized = {
+        "basic_info": _normalize_basic_info(
+            basic_info_payload if isinstance(basic_info_payload, dict) else {}
+        ),
+        "education": _normalize_list_field(payload.get("education"), field_name="education"),
+        "work_experience": _normalize_list_field(
+            payload.get("work_experience"),
+            field_name="work_experience",
+        ),
+        "projects": _normalize_list_field(payload.get("projects"), field_name="projects"),
+        "skills": _normalize_skills(skills_payload if isinstance(skills_payload, dict) else {}),
+        "certifications": _normalize_list_field(
+            payload.get("certifications"),
+            field_name="certifications",
+        ),
+    }
+    return normalized
+
+
+def _normalize_basic_info(payload: dict[str, object]) -> dict[str, str]:
+    return {
+        "name": _normalize_scalar_text(payload.get("name")),
+        "email": _normalize_scalar_text(payload.get("email")),
+        "phone": _normalize_scalar_text(payload.get("phone")),
+        "location": _normalize_scalar_text(payload.get("location")),
+        "summary": _normalize_scalar_text(payload.get("summary")),
+    }
+
+
+def _normalize_skills(payload: dict[str, object]) -> dict[str, list[str]]:
+    return {
+        "technical": _normalize_list_field(payload.get("technical"), field_name="skills"),
+        "tools": _normalize_list_field(payload.get("tools"), field_name="skills"),
+        "languages": _normalize_list_field(payload.get("languages"), field_name="skills"),
+    }
+
+
+def _normalize_scalar_text(value: object) -> str:
+    if isinstance(value, str):
+        return _clean_text(value)
+    if value is None:
+        return ""
+    return _clean_text(str(value))
+
+
+def _normalize_list_field(value: object, *, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = [value]
+
+    normalized_items: list[str] = []
+    for item in raw_items:
+        flattened = _flatten_list_item(item, field_name=field_name)
+        cleaned = _clean_text(flattened)
+        if cleaned:
+            normalized_items.append(cleaned)
+    return _dedupe_clean_items(normalized_items, limit=LIST_LIMITS.get(field_name, 50))
+
+
+def _flatten_list_item(value: object, *, field_name: str) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return _flatten_object_item(value, field_name=field_name)
+    if isinstance(value, list):
+        return " ".join(
+            part
+            for part in (_flatten_list_item(item, field_name=field_name) for item in value)
+            if _clean_text(part)
+        )
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _flatten_object_item(value: dict[str, object], *, field_name: str) -> str:
+    ordered_parts: list[str] = []
+    seen_parts: set[str] = set()
+
+    for key in LIST_FIELD_PRIORITIES.get(field_name, ()):
+        if key not in value:
+            continue
+        for part in _extract_text_parts(value[key]):
+            _append_part(ordered_parts, seen_parts, part)
+
+    for key, item in value.items():
+        if key in LIST_FIELD_PRIORITIES.get(field_name, ()):
+            continue
+        for part in _extract_text_parts(item):
+            _append_part(ordered_parts, seen_parts, part)
+
+    return " ".join(ordered_parts)
+
+
+def _extract_text_parts(value: object) -> list[str]:
+    if isinstance(value, str):
+        cleaned = _clean_text(value)
+        return [cleaned] if cleaned else []
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for item in value.values():
+            parts.extend(_extract_text_parts(item))
+        return parts
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            parts.extend(_extract_text_parts(item))
+        return parts
+    if value is None:
+        return []
+    cleaned = _clean_text(str(value))
+    return [cleaned] if cleaned else []
+
+
+def _append_part(parts: list[str], seen_parts: set[str], value: str) -> None:
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return
+    lowered = cleaned.casefold()
+    if lowered in seen_parts:
+        return
+    seen_parts.add(lowered)
+    parts.append(cleaned)
 
 
 def merge_resume_ai_correction(

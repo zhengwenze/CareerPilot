@@ -137,7 +137,7 @@ export function MatchReportPanel({
                   <Link
                     href={`/dashboard/interviews?jobId=${selectedJob.id}${selectedReport ? `&reportId=${selectedReport.id}` : ""}`}
                   >
-                    开始模拟面试
+                    模拟面试（暂未开放）
                     <ArrowUpRight className="size-4" />
                   </Link>
                 </Button>

@@ -65,9 +65,10 @@ export const dashboardNavSections: NavSection[] = [
         href: "/dashboard/applications",
         icon: BriefcaseBusiness,
         match: "prefix",
+        disabled: true,
       },
       {
-        title: "模拟面试",
+        title: "模拟面试（暂未开放）",
         href: "/dashboard/interviews",
         icon: Sparkles,
         match: "prefix",

@@ -255,36 +255,6 @@ export function JobFormCard({
               </div>
 
               <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-                <p className="text-sm font-medium text-black">经验约束</p>
-                <p className="mt-2 text-sm leading-7 text-black/68">
-                  {structured?.experience_constraints.education || "未识别学历"} ·{" "}
-                  {structured?.experience_constraints.experience_min_years
-                    ? `${structured.experience_constraints.experience_min_years} 年以上`
-                    : "未识别年限"}
-                </p>
-                <p className="text-sm leading-7 text-black/68">
-                  {structured?.experience_constraints.location ||
-                    selectedJob.job_city ||
-                    "地点未填"}
-                </p>
-              </div>
-
-              <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-                <p className="text-sm font-medium text-black">最新动作</p>
-                <p className="mt-2 text-sm leading-7 text-black/68">
-                  推荐简历 {selectedJob.recommended_resume_id ? "已锁定" : "待选择"}
-                </p>
-                <p className="text-sm leading-7 text-black/68">
-                  最新报告 {selectedJob.latest_match_report?.fit_band ?? "待生成"}
-                </p>
-                <p className="text-sm leading-7 text-black/68">
-                  {selectedJob.latest_match_report?.stale_status === "stale"
-                    ? "当前报告已过期"
-                    : "当前报告为最新"}
-                </p>
-              </div>
-
-              <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
                 <p className="text-sm font-medium text-black">必备能力</p>
                 <p className="mt-2 text-sm leading-7 text-black/68">
                   {structured?.must_have.join("、") ||
@@ -294,16 +264,14 @@ export function JobFormCard({
               </div>
 
               <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-                <p className="text-sm font-medium text-black">加分项</p>
+                <p className="text-sm font-medium text-black">关键职责</p>
                 <p className="mt-2 text-sm leading-7 text-black/68">
-                  {structured?.nice_to_have.join("、") ||
-                    structured?.requirements.preferred_skills.join("、") ||
-                    "暂无"}
+                  {structured?.responsibilities.join("；") || "暂无"}
                 </p>
               </div>
 
               <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-                <p className="text-sm font-medium text-black">领域关键词</p>
+                <p className="text-sm font-medium text-black">关键词</p>
                 <p className="mt-2 text-sm leading-7 text-black/68">
                   {structured?.domain_context.keywords.join("、") ||
                     structured?.requirements.required_keywords.join("、") ||
@@ -312,32 +280,21 @@ export function JobFormCard({
               </div>
 
               <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4 lg:col-span-2">
-                <p className="text-sm font-medium text-black">职责语义簇</p>
-                <div className="mt-3 space-y-3">
-                  {structured?.responsibility_clusters.length ? (
-                    structured.responsibility_clusters.map((cluster) => (
-                      <div key={cluster.name}>
-                        <p className="text-sm font-medium text-black">
-                          {cluster.name}
-                        </p>
-                        <p className="text-sm leading-7 text-black/68">
-                          {cluster.items.join("；")}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-black/58">暂无职责聚类。</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-                <p className="text-sm font-medium text-black">准备度时间线</p>
+                <p className="text-sm font-medium text-black">最近状态</p>
+                <p className="mt-2 text-sm leading-7 text-black/68">
+                  推荐简历 {selectedJob.recommended_resume_id ? "已锁定" : "待选择"} ·
+                  最新报告 {selectedJob.latest_match_report?.fit_band ?? "待生成"}
+                </p>
+                <p className="mt-2 text-sm leading-7 text-black/68">
+                  {selectedJob.latest_match_report?.stale_status === "stale"
+                    ? "当前报告已过期，建议重新匹配"
+                    : "当前报告为最新"}
+                </p>
                 <div className="mt-3 space-y-3">
                   {selectedJob.recent_readiness_events.length === 0 ? (
                     <p className="text-sm text-black/58">还没有事件记录。</p>
                   ) : (
-                    selectedJob.recent_readiness_events.map((event) => (
+                    selectedJob.recent_readiness_events.slice(0, 3).map((event) => (
                       <div key={event.id}>
                         <p className="text-sm font-medium text-black">
                           {event.status_from ? `${event.status_from} -> ` : ""}

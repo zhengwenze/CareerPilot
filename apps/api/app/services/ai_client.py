@@ -1,10 +1,13 @@
-import json
 from __future__ import annotations
-from dataclasses import asdict, dataclass, is_dataclass
-import httpx
 
-EMPTY_PROVIDER_VALUES = {"", "disabled", "none", "off"}
-ANTHROPIC_COMPATIBLE_PROVIDERS = {"minimax", "anthropic"}
+import json
+import logging
+from dataclasses import asdict, dataclass, is_dataclass
+from json import JSONDecodeError
+
+import anthropic
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +19,13 @@ class AIProviderConfig:
     timeout_seconds: int
 
 
+class AIClientError(Exception):
+    def __init__(self, *, category: str, detail: str) -> None:
+        super().__init__(detail)
+        self.category = category
+        self.detail = detail
+
+
 async def request_json_completion(
     *,
     config: AIProviderConfig,
@@ -23,52 +33,65 @@ async def request_json_completion(
     payload: object,
     max_tokens: int = 4000,
 ) -> dict[str, object]:
-    if config.provider in ANTHROPIC_COMPATIBLE_PROVIDERS:
+    try:
+        logger.info(
+            "AI JSON completion started provider=%s model=%s "
+            "base_url=%s timeout_seconds=%s payload_chars=%s",
+            config.provider,
+            config.model,
+            config.base_url,
+            config.timeout_seconds,
+            len(_serialize_payload(payload)),
+        )
         content = await _request_anthropic_text(
             config=config,
             instructions=instructions,
             payload=payload,
             max_tokens=max_tokens,
         )
-    else:
-        content = await _request_openai_text(
-            config=config,
-            instructions=instructions,
-            payload=payload,
+        json_content = _extract_json_object(content)
+        logger.info(
+            "AI JSON object extracted provider=%s model=%s content_chars=%s json_chars=%s",
+            config.provider,
+            config.model,
+            len(content),
+            len(json_content),
         )
-    return json.loads(_extract_json_object(content))
-
-
-async def _request_openai_text(
-    *,
-    config: AIProviderConfig,
-    instructions: str,
-    payload: object,
-) -> str:
-    headers = {"Content-Type": "application/json"}
-    if config.api_key:
-        headers["Authorization"] = f"Bearer {config.api_key}"
-
-    async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
-        response = await client.post(
-            f"{config.base_url.rstrip('/')}/responses",
-            headers=headers,
-            json={
-                "model": config.model,
-                "stream": False,
-                "instructions": instructions,
-                "input": _serialize_payload(payload),
-                "reasoning": {"effort": "low"},
-                "text": {"verbosity": "low"},
-            },
+        parsed = json.loads(json_content)
+        logger.info(
+            "AI JSON completion parsed successfully provider=%s model=%s top_level_type=%s",
+            config.provider,
+            config.model,
+            type(parsed).__name__,
         )
-        _raise_for_status_with_context(
-            response,
-            provider=config.provider,
-            model=config.model,
+        return parsed
+    except AIClientError:
+        logger.exception(
+            "AI JSON completion failed provider=%s model=%s",
+            config.provider,
+            config.model,
         )
-
-    return _openai_response_text(response.json())
+        raise
+    except JSONDecodeError as exc:
+        logger.exception(
+            "AI JSON decoding failed provider=%s model=%s",
+            config.provider,
+            config.model,
+        )
+        raise AIClientError(
+            category="json_decode_error",
+            detail=f"AI response contained invalid JSON: {exc.msg}",
+        ) from exc
+    except ValueError as exc:
+        logger.exception(
+            "AI response format validation failed provider=%s model=%s",
+            config.provider,
+            config.model,
+        )
+        raise AIClientError(
+            category="invalid_response_format",
+            detail=str(exc),
+        ) from exc
 
 
 async def _request_anthropic_text(
@@ -78,64 +101,94 @@ async def _request_anthropic_text(
     payload: object,
     max_tokens: int,
 ) -> str:
-    headers = {
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-    }
-    headers.update(_anthropic_auth_headers(config))
+    logger.info(
+        "AI Anthropic request building provider=%s model=%s "
+        "base_url=%s has_api_key=%s timeout_seconds=%s max_tokens=%s",
+        config.provider,
+        config.model,
+        config.base_url or "https://api.minimaxi.com/anthropic",
+        bool(config.api_key),
+        config.timeout_seconds,
+        max_tokens,
+    )
+    client = anthropic.AsyncAnthropic(
+        api_key=config.api_key,
+        base_url=config.base_url or "https://api.minimaxi.com/anthropic",
+        timeout=config.timeout_seconds,
+    )
 
-    async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
-        response = await client.post(
-            _anthropic_messages_endpoint(config.base_url),
-            headers=headers,
-            json={
-                "model": config.model,
-                "max_tokens": max_tokens,
-                "system": instructions,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": _serialize_payload(payload),
-                            }
-                        ],
-                    }
-                ],
-            },
+    try:
+        logger.info(
+            "AI Anthropic request sending provider=%s model=%s",
+            config.provider,
+            config.model,
         )
-
-        _raise_for_status_with_context(
-            response,
-            provider=config.provider,
+        response = await client.messages.create(
             model=config.model,
+            max_tokens=max_tokens,
+            system=instructions,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": _serialize_payload(payload),
+                        }
+                    ],
+                }
+            ],
         )
+        logger.info(
+            "AI Anthropic response received provider=%s model=%s stop_reason=%s content_items=%s",
+            config.provider,
+            config.model,
+            getattr(response, "stop_reason", None),
+            len(getattr(response, "content", []) or []),
+        )
+    except anthropic.AuthenticationError as exc:
+        raise AIClientError(
+            category="auth_error",
+            detail=f"AI authentication failed (401): {exc}",
+        ) from exc
+    except anthropic.PermissionDeniedError as exc:
+        raise AIClientError(
+            category="permission_error",
+            detail=f"AI permission denied (403): {exc}",
+        ) from exc
+    except anthropic.APITimeoutError as exc:
+        raise AIClientError(
+            category="timeout",
+            detail=f"AI request timed out: {exc}",
+        ) from exc
+    except anthropic.APIStatusError as exc:
+        raise AIClientError(
+            category=f"http_{exc.status_code}",
+            detail=f"AI request failed with HTTP {exc.status_code}: {exc}",
+        ) from exc
+    except anthropic.APIConnectionError as exc:
+        raise AIClientError(
+            category="connection_error",
+            detail=f"AI connection failed: {exc}",
+        ) from exc
+    except anthropic.APIResponseValidationError as exc:
+        raise AIClientError(
+            category="invalid_response_format",
+            detail=f"AI response schema validation failed: {exc}",
+        ) from exc
+    except anthropic.AnthropicError as exc:
+        raise AIClientError(
+            category="provider_error",
+            detail=f"AI provider error: {exc}",
+        ) from exc
 
-    return _anthropic_response_text(response.json())
+    return _anthropic_response_text(response)
 
 
 def _serialize_payload(payload: object) -> str:
     if is_dataclass(payload):
         payload = asdict(payload)
     return json.dumps(payload, ensure_ascii=False)
-
-
-def _anthropic_auth_headers(config: AIProviderConfig) -> dict[str, str]:
-    if not config.api_key:
-        return {}
-    if config.provider == "minimax":
-        return {"Authorization": f"Bearer {config.api_key}"}
-    return {"x-api-key": config.api_key}
-
-
-def _raise_for_status_with_context(
-    response: httpx.Response,
-    *,
-    provider: str,
-    model: str,
-) -> None:
-    response.raise_for_status()
 
 
 def _extract_json_object(content: str) -> str:
@@ -146,52 +199,26 @@ def _extract_json_object(content: str) -> str:
     return content[start : end + 1]
 
 
-def _anthropic_messages_endpoint(base_url: str) -> str:
-    normalized = base_url.rstrip("/")
-    if normalized.endswith("/v1/messages"):
-        return normalized
-    if normalized.endswith("/v1"):
-        return f"{normalized}/messages"
-    return f"{normalized}/v1/messages"
-
-
-def _anthropic_response_text(response: dict[str, object]) -> str:
-    content = response.get("content")
+def _anthropic_response_text(response: object) -> str:
+    content = getattr(response, "content", None)
     if not isinstance(content, list):
         raise ValueError("AI response did not contain content items")
 
     chunks: list[str] = []
-    for part in content:
-        if not isinstance(part, dict):
-            continue
-        if part.get("type") == "text" and isinstance(part.get("text"), str):
-            chunks.append(part["text"])
+    for block in content:
+        if getattr(block, "type", None) == "text":
+            text = getattr(block, "text", None)
+            if isinstance(text, str):
+                chunks.append(text)
 
     if not chunks:
         raise ValueError("AI response did not contain assistant text")
-    return "".join(chunks)
 
+    logger.info(
+        "AI Anthropic text extracted content_items=%s text_chunks=%s text_chars=%s",
+        len(content),
+        len(chunks),
+        len("".join(chunks)),
+    )
 
-def _openai_response_text(response: dict[str, object]) -> str:
-    output = response.get("output")
-    if not isinstance(output, list):
-        raise ValueError("AI response did not contain output items")
-
-    chunks: list[str] = []
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") != "message" or item.get("role") != "assistant":
-            continue
-        content = item.get("content")
-        if not isinstance(content, list):
-            continue
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            if part.get("type") == "output_text" and isinstance(part.get("text"), str):
-                chunks.append(part["text"])
-
-    if not chunks:
-        raise ValueError("AI response did not contain assistant text")
     return "".join(chunks)

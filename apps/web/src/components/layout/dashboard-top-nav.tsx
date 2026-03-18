@@ -89,7 +89,7 @@ export function DashboardTopNav() {
             variant="outline"
             className="h-10 rounded-full border-black/10 bg-white px-5 text-black hover:bg-[#f5f5f7]"
           >
-            <Link href="/">返回门户</Link>
+            <Link href="/">返回概览</Link>
           </Button>
 
           <Button

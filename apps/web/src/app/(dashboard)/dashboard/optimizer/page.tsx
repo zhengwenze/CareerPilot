@@ -132,10 +132,23 @@ export default function DashboardOptimizerPage() {
 
   if (!reportId && !initialSessionId) {
     return (
-      <PageEmptyState
-        title="缺少岗位上下文"
-        description="请先从岗位工作台进入简历优化，这里不会脱离岗位快照单独开工。"
-      />
+      <div className="space-y-4">
+        <PageEmptyState
+          title="缺少岗位上下文"
+          description="请先从岗位工作台进入简历优化，这里不会脱离岗位快照单独开工。"
+        />
+        <Button
+          asChild
+          className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
+          type="button"
+          variant="outline"
+        >
+          <Link href="/dashboard/jobs">
+            返回岗位工作台
+            <ArrowUpRight className="size-4" />
+          </Link>
+        </Button>
+      </div>
     );
   }
 
