@@ -48,6 +48,28 @@ function getFitBandLabel(value: string) {
   return labels[value] ?? value;
 }
 
+function getMissingInfoQuestions(
+  tailoringPlanSnapshot: Record<string, unknown>
+): Array<{ field: string; question: string }> {
+  const items = tailoringPlanSnapshot.missing_info_questions;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const field = "field" in item && typeof item.field === "string" ? item.field : "";
+    const question =
+      "question" in item && typeof item.question === "string" ? item.question : "";
+    if (!question) {
+      return [];
+    }
+    return [{ field, question }];
+  });
+}
+
 export default function DashboardOptimizerPage() {
   const { token } = useAuth();
   const router = useRouter();
@@ -162,6 +184,10 @@ export default function DashboardOptimizerPage() {
       />
     );
   }
+
+  const missingInfoQuestions = getMissingInfoQuestions(
+    session.tailoring_plan_snapshot
+  );
 
   async function handleGenerateSuggestions() {
     if (!token || !session) {
@@ -304,6 +330,25 @@ export default function DashboardOptimizerPage() {
         </Card>
 
         <div className="space-y-5">
+          {missingInfoQuestions.length > 0 ? (
+            <Card className="rounded-[2rem] border border-black/10 bg-[#FFF7E6] py-0 shadow-none">
+              <CardHeader className="px-6 py-6">
+                <CardTitle className="text-xl font-semibold text-black">
+                  先补这些事实
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 px-6 pb-6">
+                {missingInfoQuestions.map((item, index) => (
+                  <div
+                    className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
+                    key={`${item.field}-${index}`}
+                  >
+                    <p className="text-sm leading-7 text-black">{item.question}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
           {Object.values(draftSections).map((section) => (
             <Card
               className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]"
