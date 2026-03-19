@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import (
+from app.routers.deps import (
     get_current_token_payload,
     get_current_user,
     get_token_blocklist,
