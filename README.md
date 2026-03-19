@@ -258,12 +258,17 @@ CareerPilot 的产品能力可概括为五大模块
 career-pilot/
 ├── apps/
 │   ├── api/                    # FastAPI 后端
-│   └── web/                    # Next.js 前端
+│   ├── web/                    # Next.js 前端
+│   └── miniprogram/            # 微信小程序
+├── scripts/
+│   └── codex2gpt/              # 本地 Codex 代理服务
+├── docs/                       # 项目文档（开发记录、设计方案等）
 ├── docker-compose.middleware.yml
-├── infra/
-│   └── sql/
-│       └── init.sql            # 仅本地引导参考，不再作为长期正式建表真源
-└── docs / 文档体系              # 产品、开发、模块说明、计划书等
+├── .gitignore
+├── .python-version
+├── AGENTS.md                   # AI 代理开发规范
+├── LICENSE
+└── README.md
 ```
 
 ### 4.2 技术栈
