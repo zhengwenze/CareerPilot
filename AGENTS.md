@@ -25,9 +25,11 @@
 ### Repository snapshot
 
 - Monorepo root: `.`
-- Backend: `apps/api`，FastAPI + SQLAlchemy + PostgreSQL
-- Frontend: `apps/web`，Next.js 16 + React 19 + TypeScript
-- 中间件服务: PostgreSQL `5432`、Redis `6380`、MinIO `9000/9001`
+- Backend: `apps/backend`，FastAPI + SQLAlchemy + PostgreSQL
+- Frontend: `apps/frontend`，Next.js 16 + React 19 + TypeScript
+- MiniProgram: `apps/miniprogram`，微信小程序
+- 中间件服务: PostgreSQL `5432`、Redis `6380` (映射 6379)、MinIO `9000/9001`
+- Docker 编排: `docker-compose.middleware.yml` (位于根目录)
 
 ### Hard rules
 
@@ -90,46 +92,50 @@
 
 ### Resume upload / parse / retry / structured save
 
-- 上传入口：`apps/api/app/api/routes/resumes.py`
-- 业务编排：`apps/api/app/services/resume.py`
-- 规则解析：`apps/api/app/services/resume_parser.py`
-- AI 校正：`apps/api/app/services/resume_ai.py`
-- 数据模型：`apps/api/app/models/resume.py`、`apps/api/app/models/resume_parse_job.py`
-- API schema：`apps/api/app/schemas/resume.py`
-- 前端页面：`apps/web/src/app/(dashboard)/dashboard/resume/page.tsx`
-- 前端 API 映射：`apps/web/src/lib/api/modules/resume.ts`
-- 前端详情组件：`apps/web/src/components/resume/`
-- 后端测试：`apps/api/tests/test_resume.py`、`apps/api/tests/test_resume_parser.py`
+- 上传入口：`apps/backend/app/api/routes/resumes.py`
+- 业务编排：`apps/backend/app/services/resume.py`
+- 规则解析：`apps/backend/app/services/resume_parser.py`
+- AI 校正：`apps/backend/app/services/resume_ai.py`
+- 数据模型：`apps/backend/app/models/resume.py`、`apps/backend/app/models/resume_parse_job.py`
+- API schema：`apps/backend/app/schemas/resume.py`
+- 前端页面：`apps/frontend/src/app/(dashboard)/dashboard/resume/page.tsx`
+- 前端 API 映射：`apps/frontend/src/lib/api/modules/resume.ts`
+- 前端详情组件：`apps/frontend/src/components/resume/`
+- 后端测试：`apps/backend/tests/test_resume.py`、`apps/backend/tests/test_resume_parser.py`
+
+### MiniProgram
+
+- 小程序入口：`apps/miniprogram/pages/index/`
 
 ### Match report
 
-- API 入口：`apps/api/app/api/routes/match_reports.py`
-- 业务编排：`apps/api/app/services/match_report.py`
-- 规则匹配：`apps/api/app/services/match_engine.py`
-- AI 修正：`apps/api/app/services/match_ai.py`
-- 数据模型：`apps/api/app/models/match_report.py`、`apps/api/app/models/job_description.py`
-- 测试：`apps/api/tests/test_match_reports.py`、`apps/api/tests/test_jobs.py`
+- API 入口：`apps/backend/app/api/routes/match_reports.py`
+- 业务编排：`apps/backend/app/services/match_report.py`
+- 规则匹配：`apps/backend/app/services/match_engine.py`
+- AI 修正：`apps/backend/app/services/match_ai.py`
+- 数据模型：`apps/backend/app/models/match_report.py`、`apps/backend/app/models/job_description.py`
+- 测试：`apps/backend/tests/test_match_reports.py`、`apps/backend/tests/test_jobs.py`
 
 ### Resume optimization
 
-- API 入口：`apps/api/app/api/routes/resume_optimization.py`
-- 业务逻辑：`apps/api/app/services/resume_optimizer.py`
-- 数据模型：`apps/api/app/models/resume_optimization_session.py`
-- 前端页面：`apps/web/src/app/(dashboard)/dashboard/optimizer/page.tsx`
-- 测试：`apps/api/tests/test_resume_optimizer.py`
+- API 入口：`apps/backend/app/api/routes/resume_optimization.py`
+- 业务逻辑：`apps/backend/app/services/resume_optimizer.py`
+- 数据模型：`apps/backend/app/models/resume_optimization_session.py`
+- 前端页面：`apps/frontend/src/app/(dashboard)/dashboard/optimizer/page.tsx`
+- 测试：`apps/backend/tests/test_resume_optimizer.py`
 
 ### Profile and auth
 
-- Profile API：`apps/api/app/api/routes/profile.py`
-- Auth API：`apps/api/app/api/routes/auth.py`
-- 服务层：`apps/api/app/services/profile.py`、`apps/api/app/services/auth.py`
-- 测试：`apps/api/tests/test_profile.py`、`apps/api/tests/test_auth.py`
+- Profile API：`apps/backend/app/api/routes/profile.py`
+- Auth API：`apps/backend/app/api/routes/auth.py`
+- 服务层：`apps/backend/app/services/profile.py`、`apps/backend/app/services/auth.py`
+- 测试：`apps/backend/tests/test_profile.py`、`apps/backend/tests/test_auth.py`
 
 ### Config, storage, and fixtures
 
-- 运行时配置：`apps/api/app/core/config.py`
-- Object storage：`apps/api/app/services/storage.py`
-- 测试夹具：`apps/api/tests/conftest.py`
+- 运行时配置：`apps/backend/app/core/config.py`
+- Object storage：`apps/backend/app/services/storage.py`
+- 测试夹具：`apps/backend/tests/conftest.py`
 - 本地大模型代理：`scripts/codex2gpt/`
 
 ### Environment commands
@@ -145,14 +151,17 @@ docker compose -f docker-compose.middleware.yml up -d
 docker compose -f docker-compose.middleware.yml down
 
 # 启动后端
-cd apps/api
+cd apps/backend
 uv sync --group dev
 uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 # 启动前端
-cd apps/web
+cd apps/frontend
 npm run dev
+
+# 启动所有服务 (包含中间件)
+./docker/start.sh
 ```
 
 ## 3. Default Work Loop
@@ -305,14 +314,14 @@ Success criteria：
 
 | 改动类型                                               | 最小验证命令                                                                                           | 验证要点                                  |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| 仅改 `resume_parser.py` / `resume_ai.py` / `resume.py` | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 解析状态流转、AI fallback、结构化结果写回 |
-| Resume parse API 或 schema 改动                        | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 上传、详情、重试、parse jobs 正常         |
-| Match report 改动                                      | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_match_reports.py tests/test_jobs.py`   | 匹配报告生成与 AI 修正逻辑正常            |
-| Resume optimization 改动                               | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume_optimizer.py`                   | 会话创建、草案生成、应用版本提升          |
-| Profile/Auth 改动                                      | `cd apps/api && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_profile.py tests/test_auth.py`         | 登录、鉴权、资料读写正常                  |
-| Frontend-only changes                                  | `cd apps/web && npm run lint`                                                                          | ESLint 通过                               |
-| Resume page / polling 改动                             | `cd apps/web && npm run lint`                                                                          | 手工验证上传、轮询、成功/失败、停止轮询   |
-| API contract changes                                   | 后端定向 pytest + `cd apps/web && npm run lint`                                                        | 接口与前端映射一致                        |
+| 仅改 `resume_parser.py` / `resume_ai.py` / `resume.py` | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 解析状态流转、AI fallback、结构化结果写回 |
+| Resume parse API 或 schema 改动                        | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 上传、详情、重试、parse jobs 正常         |
+| Match report 改动                                      | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_match_reports.py tests/test_jobs.py`   | 匹配报告生成与 AI 修正逻辑正常            |
+| Resume optimization 改动                               | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume_optimizer.py`                   | 会话创建、草案生成、应用版本提升          |
+| Profile/Auth 改动                                      | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_profile.py tests/test_auth.py`         | 登录、鉴权、资料读写正常                  |
+| Frontend-only changes                                  | `cd apps/frontend && npm run lint`                                                                          | ESLint 通过                               |
+| Resume page / polling 改动                             | `cd apps/frontend && npm run lint`                                                                          | 手工验证上传、轮询、成功/失败、停止轮询   |
+| API contract changes                                   | 后端定向 pytest + `cd apps/frontend && npm run lint`                                                        | 接口与前端映射一致                        |
 
 ### Testing requirements
 
