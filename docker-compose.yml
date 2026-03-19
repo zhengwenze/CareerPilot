@@ -12,7 +12,7 @@ services:
     volumes:
       - career-pilot-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U career -d career_pilot"]
+      test: [ "CMD-SHELL", "pg_isready -U career -d career_pilot" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -21,13 +21,13 @@ services:
     image: redis:7.4-alpine
     container_name: career-pilot-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [ "redis-server", "--appendonly", "yes" ]
     ports:
       - "6380:6379"
     volumes:
       - career-pilot-redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -46,7 +46,7 @@ services:
     volumes:
       - career-pilot-minio-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -77,6 +77,7 @@ services:
         condition: service_healthy
     volumes:
       - career-pilot-backend-data:/app/data
+      - ./apps/backend/.env:/app/.env:ro
 
   frontend:
     build:

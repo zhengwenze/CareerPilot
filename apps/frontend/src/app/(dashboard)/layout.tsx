@@ -6,14 +6,16 @@ import { DashboardTopNav } from "@/components/layout/dashboard-top-nav";
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-white text-black">
-        <DashboardTopNav />
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="min-h-screen bg-muted/30">
+          <DashboardTopNav />
 
-        <main className="px-6 py-8 lg:px-10 lg:py-10">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-10">
-            {children}
-          </div>
-        </main>
+          <main className="py-6 sm:py-8 lg:py-12">
+            <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
     </ProtectedRoute>
   );

@@ -3,3 +3,6 @@ uv.lock
 
 # Python version file
 .python-version
+
+# Environment variables (contains sensitive data)
+.env

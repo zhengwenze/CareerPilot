@@ -17,6 +17,7 @@ docker compose -f docker-compose.yml up -d
 ```
 
 所有服务将以后台模式启动：
+
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6380`
 - MinIO: `localhost:9000` (API), `localhost:9001` (控制台)

@@ -11,11 +11,6 @@ import {
   PageLoadingState,
 } from "@/components/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import {
   createEmptyJobDraft,
@@ -132,6 +127,102 @@ function getPreferredResumeId(job: JobRecord | null, resumes: ResumeRecord[]) {
   );
 }
 
+function PaperPanel({
+  title,
+  eyebrow,
+  accentClassName = "bg-[#2f55d4]",
+  rightSlot,
+  children,
+}: {
+  title: string;
+  eyebrow?: string;
+  accentClassName?: string;
+  rightSlot?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+      <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            {eyebrow ? (
+              <div className="mb-3 flex items-center gap-3">
+                <span className={`size-2.5 ${accentClassName}`} />
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+                  {eyebrow}
+                </p>
+              </div>
+            ) : null}
+            <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+              {title}
+            </h2>
+          </div>
+          {rightSlot}
+        </div>
+      </div>
+      <div className="px-5 py-5 sm:px-6">{children}</div>
+    </section>
+  );
+}
+
+function PaperInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`h-12 w-full border-2 border-black bg-[#f9f7f0] px-4 text-sm text-black outline-none shadow-[3px_3px_0_0_#000] placeholder:text-black/40 ${props.className ?? ""}`}
+    />
+  );
+}
+
+function PaperTextarea(
+  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+) {
+  return (
+    <textarea
+      {...props}
+      className={`min-h-[260px] w-full border-2 border-black bg-[#f9f7f0] px-4 py-3 text-sm leading-7 text-black outline-none shadow-[3px_3px_0_0_#000] placeholder:text-black/40 ${props.className ?? ""}`}
+    />
+  );
+}
+
+function PaperSelect(
+  props: React.SelectHTMLAttributes<HTMLSelectElement>,
+) {
+  return (
+    <select
+      {...props}
+      className={`h-12 w-full border-2 border-black bg-[#f9f7f0] px-4 text-sm text-black outline-none shadow-[3px_3px_0_0_#000] ${props.className ?? ""}`}
+    />
+  );
+}
+
+function PaperButton({
+  children,
+  variant = "primary",
+  className = "",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "danger" | "success";
+}) {
+  const variantClassName =
+    variant === "primary"
+      ? "bg-[#2f55d4] text-white"
+      : variant === "danger"
+        ? "bg-[#fff1f1] text-[#b42318]"
+        : variant === "success"
+          ? "bg-[#10bf7a] text-white"
+          : "bg-[#f9f7f0] text-black";
+
+  return (
+    <button
+      {...props}
+      className={`border-2 border-black px-5 py-3 text-sm font-semibold shadow-[4px_4px_0_0_#000] transition-transform hover:-translate-x-px hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 ${variantClassName} ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function DashboardJobsPage() {
   const { token } = useAuth();
   const router = useRouter();
@@ -238,7 +329,7 @@ export default function DashboardJobsPage() {
         setSelectedReportId((current) =>
           current && nextReports.some((item) => item.id === current)
             ? current
-            : nextReports[0]?.id ?? null
+            : nextReports[0]?.id ?? null,
         );
       } catch (error) {
         if (!cancelled) {
@@ -258,10 +349,17 @@ export default function DashboardJobsPage() {
     if (!token || !selectedJobId) {
       return;
     }
-    if (workflowStatus !== "idle" && workflowStatus !== "ready" && workflowStatus !== "failed") {
+    if (
+      workflowStatus !== "idle" &&
+      workflowStatus !== "ready" &&
+      workflowStatus !== "failed"
+    ) {
       return;
     }
-    if (selectedJob?.parse_status !== "pending" && selectedJob?.parse_status !== "processing") {
+    if (
+      selectedJob?.parse_status !== "pending" &&
+      selectedJob?.parse_status !== "processing"
+    ) {
       return;
     }
 
@@ -275,10 +373,10 @@ export default function DashboardJobsPage() {
             return;
           }
           setJobs((current) =>
-            current.map((item) => (item.id === nextJob.id ? nextJob : item))
+            current.map((item) => (item.id === nextJob.id ? nextJob : item)),
           );
         } catch {
-          // Ignore background refresh failures; the explicit workflow handles surfaced errors.
+          // Ignore background refresh failures.
         }
       })();
     }, 4000);
@@ -313,7 +411,10 @@ export default function DashboardJobsPage() {
     );
   }
 
-  async function refreshPageState(preferredJobId?: string | null, preferredReportId?: string | null) {
+  async function refreshPageState(
+    preferredJobId?: string | null,
+    preferredReportId?: string | null,
+  ) {
     if (!token) {
       return;
     }
@@ -334,14 +435,12 @@ export default function DashboardJobsPage() {
     setResumes(nextResumes);
     setSelectedJobId(nextSelectedJobId);
     setJobDraft(nextJob ? toJobDraft(nextJob) : createEmptyJobDraft());
-    setSelectedResumeId((current) =>
-      current || getPreferredResumeId(nextJob, nextResumes)
-    );
+    setSelectedResumeId((current) => current || getPreferredResumeId(nextJob, nextResumes));
     setReports(nextReports);
     setSelectedReportId(
       preferredReportId && nextReports.some((item) => item.id === preferredReportId)
         ? preferredReportId
-        : nextReports[0]?.id ?? null
+        : nextReports[0]?.id ?? null,
     );
   }
 
@@ -477,7 +576,7 @@ export default function DashboardJobsPage() {
       const createdReport = await createJobMatchReport(
         token,
         workingJob.id,
-        effectiveResumeId
+        effectiveResumeId,
       );
       setSelectedResumeId(effectiveResumeId);
       setSelectedReportId(createdReport.id);
@@ -584,7 +683,7 @@ export default function DashboardJobsPage() {
     try {
       const session = await createResumeOptimizationSession(token, selectedReport.id);
       router.push(
-        `/dashboard/optimizer?sessionId=${session.id}&jobId=${selectedJobId}&reportId=${selectedReport.id}`
+        `/dashboard/optimizer?sessionId=${session.id}&jobId=${selectedJobId}&reportId=${selectedReport.id}`,
       );
     } catch (error) {
       setPageError(getErrorMessage(error));
@@ -594,472 +693,544 @@ export default function DashboardJobsPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-[-0.05em] text-black">
-          岗位匹配
-        </h1>
-        <p className="max-w-2xl text-sm leading-7 text-black/65">
-          只做一件事：把 JD 转成岗位目标，并用 Minimax 生成一份可执行的匹配报告。
-        </p>
-      </div>
+    <div className="space-y-6">
+      <header className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+        <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex items-center border-2 border-black bg-[#f9f7f0] px-5 py-3 shadow-[4px_4px_0_0_#000]">
+              <span className="mr-4 text-2xl leading-none text-[#f13798]">*</span>
+              <span className="text-[1.55rem] font-black uppercase tracking-[-0.06em] text-black sm:text-[1.8rem]">
+                Job Matching
+              </span>
+            </div>
+
+            <div className="mt-6 inline-block border-2 border-black bg-[#f13798] px-4 py-2 shadow-[5px_5px_0_0_#000]">
+              <h1 className="text-3xl font-semibold tracking-[-0.08em] text-white sm:text-4xl">
+                岗位匹配
+              </h1>
+            </div>
+
+            <p className="mt-5 max-w-3xl text-base leading-8 text-[#38445a] sm:text-[1.05rem]">
+              把 JD 转成岗位目标，并基于已解析简历生成一份可执行的匹配报告。
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div className="border-2 border-black bg-[#10bf7a] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+              {jobs.length} 个岗位
+            </div>
+            <div className="border-2 border-black bg-[#ff7a10] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+              {reports.length} 份报告
+            </div>
+          </div>
+        </div>
+      </header>
 
       {pageError ? (
-        <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
-          <AlertTitle className="text-black">操作失败</AlertTitle>
-          <AlertDescription className="text-black/72">{pageError}</AlertDescription>
+        <Alert className="border-2 border-black bg-[#fff1f1] text-black shadow-[6px_6px_0_0_#000]">
+          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+            操作失败
+          </AlertTitle>
+          <AlertDescription className="text-sm leading-7 text-black/72">
+            {pageError}
+          </AlertDescription>
         </Alert>
       ) : null}
 
       {workflowStatus !== "idle" && workflowStatus !== "ready" ? (
-        <Alert className="rounded-[1.5rem] border-[#0071E3]/15 bg-[#F5F9FF]">
-          <AlertTitle className="text-black">{getWorkflowLabel(workflowStatus)}</AlertTitle>
-          <AlertDescription className="text-black/72">
+        <Alert className="border-2 border-black bg-[#eef4ff] text-black shadow-[6px_6px_0_0_#000]">
+          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+            {getWorkflowLabel(workflowStatus)}
+          </AlertTitle>
+          <AlertDescription className="text-sm leading-7 text-black/72">
             当前流程会自动完成保存、结构化和 Minimax 报告生成，请不要重复点击。
           </AlertDescription>
         </Alert>
       ) : null}
 
       {statusMessage ? (
-        <Alert className="rounded-[1.5rem] border-[#34c759]/20 bg-[#EEF9F1]">
-          <AlertTitle className="text-black">当前状态</AlertTitle>
-          <AlertDescription className="text-black/72">{statusMessage}</AlertDescription>
+        <Alert className="border-2 border-black bg-[#eef9f1] text-black shadow-[6px_6px_0_0_#000]">
+          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+            当前状态
+          </AlertTitle>
+          <AlertDescription className="text-sm leading-7 text-black/72">
+            {statusMessage}
+          </AlertDescription>
         </Alert>
       ) : null}
 
-      <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
-        <CardHeader className="space-y-4 px-6 py-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-                输入岗位目标
-              </CardTitle>
-              <p className="mt-2 text-sm leading-7 text-black/62">
-                只保留最少输入。其他信息按需展开。
-              </p>
-            </div>
+      <section className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="space-y-6">
+          <PaperPanel
+            title="输入岗位目标"
+            eyebrow="Job Input"
+            accentClassName="bg-[#f13798]"
+            rightSlot={
+              <div className="flex flex-wrap gap-3">
+                {jobs.length > 0 ? (
+                  <div className="min-w-[180px]">
+                    <PaperSelect
+                      onChange={(event) => {
+                        const nextJobId = event.target.value;
+                        if (!nextJobId) {
+                          resetToNewJob();
+                          return;
+                        }
+                        const nextJob = jobs.find((item) => item.id === nextJobId) ?? null;
+                        setSelectedJobId(nextJobId);
+                        setJobDraft(nextJob ? toJobDraft(nextJob) : createEmptyJobDraft());
+                        setSelectedResumeId(getPreferredResumeId(nextJob, resumes));
+                        setPageError("");
+                        setStatusMessage("");
+                        setWorkflowStatus("idle");
+                      }}
+                      value={selectedJobId ?? ""}
+                    >
+                      <option value="">新建岗位</option>
+                      {jobs.map((job) => (
+                        <option key={job.id} value={job.id}>
+                          {job.title}
+                        </option>
+                      ))}
+                    </PaperSelect>
+                  </div>
+                ) : null}
 
-            <div className="flex flex-wrap gap-2">
-              {jobs.length > 0 ? (
-                <select
-                  className="h-11 rounded-full border border-black/10 bg-[#f5f5f7] px-4 text-sm text-black outline-none"
-                  onChange={(event) => {
-                    const nextJobId = event.target.value;
-                    if (!nextJobId) {
-                      resetToNewJob();
-                      return;
-                    }
-                    const nextJob = jobs.find((item) => item.id === nextJobId) ?? null;
-                    setSelectedJobId(nextJobId);
-                    setJobDraft(nextJob ? toJobDraft(nextJob) : createEmptyJobDraft());
-                    setSelectedResumeId(getPreferredResumeId(nextJob, resumes));
-                    setPageError("");
-                    setStatusMessage("");
-                    setWorkflowStatus("idle");
-                  }}
-                  value={selectedJobId ?? ""}
-                >
-                  <option value="">新建岗位</option>
-                  {jobs.map((job) => (
-                    <option key={job.id} value={job.id}>
-                      {job.title}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              <Button
-                className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
-                onClick={resetToNewJob}
-                type="button"
-                variant="outline"
-              >
-                新建岗位
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5 px-6 pb-6">
-          <div className="grid gap-2">
-            <Label htmlFor="job-title" className="text-black">
-              岗位标题
-            </Label>
-            <Input
-              className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black"
-              id="job-title"
-              onChange={(event) => updateDraft("title", event.target.value)}
-              placeholder="例如：增长数据分析师"
-              value={jobDraft.title}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="job-jd-text" className="text-black">
-              JD 原文
-            </Label>
-            <Textarea
-              className="min-h-[260px] rounded-[1.75rem] border-black/10 bg-[#f5f5f7] text-black"
-              id="job-jd-text"
-              onChange={(event) => updateDraft("jd_text", event.target.value)}
-              placeholder="直接粘贴完整职位描述。点击一次后，系统会自动完成结构化与 Minimax 匹配。"
-              value={jobDraft.jd_text}
-            />
-          </div>
-
-          <button
-            className="text-sm font-medium text-[#0071E3]"
-            onClick={() => setShowMoreInfo((current) => !current)}
-            type="button"
+                <PaperButton onClick={resetToNewJob} type="button" variant="secondary">
+                  新建岗位
+                </PaperButton>
+              </div>
+            }
           >
-            {showMoreInfo ? "收起更多信息" : "编辑更多信息"}
-          </button>
-
-          {showMoreInfo ? (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-5">
               <div className="grid gap-2">
-                <Label htmlFor="job-company" className="text-black">
-                  公司
-                </Label>
-                <Input
-                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black"
-                  id="job-company"
-                  onChange={(event) => updateDraft("company", event.target.value)}
-                  value={jobDraft.company}
+                <label className="text-sm font-medium text-black" htmlFor="job-title">
+                  岗位标题
+                </label>
+                <PaperInput
+                  id="job-title"
+                  onChange={(event) => updateDraft("title", event.target.value)}
+                  placeholder="例如：增长数据分析师"
+                  value={jobDraft.title}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="job-city" className="text-black">
-                  城市
-                </Label>
-                <Input
-                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black"
-                  id="job-city"
-                  onChange={(event) => updateDraft("job_city", event.target.value)}
-                  value={jobDraft.job_city}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="job-type" className="text-black">
-                  用工类型
-                </Label>
-                <Input
-                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black"
-                  id="job-type"
-                  onChange={(event) =>
-                    updateDraft("employment_type", event.target.value)
-                  }
-                  value={jobDraft.employment_type}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="job-source-name" className="text-black">
-                  来源平台
-                </Label>
-                <Input
-                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black"
-                  id="job-source-name"
-                  onChange={(event) => updateDraft("source_name", event.target.value)}
-                  value={jobDraft.source_name}
-                />
-              </div>
-              <div className="grid gap-2 md:col-span-2">
-                <Label htmlFor="job-source-url" className="text-black">
-                  来源链接
-                </Label>
-                <Input
-                  className="h-12 rounded-2xl border-black/10 bg-[#f5f5f7] px-4 text-black"
-                  id="job-source-url"
-                  onChange={(event) => updateDraft("source_url", event.target.value)}
-                  value={jobDraft.source_url}
-                />
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
-        <CardHeader className="space-y-4 px-6 py-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-                生成匹配报告
-              </CardTitle>
-              <p className="mt-2 text-sm leading-7 text-black/62">
-                系统会自动使用最近一份解析成功的简历，并调用 Minimax 生成最终报告。
-              </p>
-            </div>
-
-            <Button
-              className="rounded-full bg-[#0071E3] px-6 text-white hover:bg-[#0077ED]"
-              disabled={
-                workflowStatus !== "idle" &&
-                workflowStatus !== "ready" &&
-                workflowStatus !== "failed"
-              }
-              onClick={handleGenerateReport}
-              type="button"
-            >
-              {workflowStatus === "saving_job" ||
-              workflowStatus === "parsing_job" ||
-              workflowStatus === "creating_report" ||
-              workflowStatus === "waiting_report"
-                ? getWorkflowLabel(workflowStatus)
-                : "生成匹配报告"}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5 px-6 pb-6">
-          {availableResumes.length === 0 ? (
-            <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-[#f5f5f7] px-4 py-4 text-sm text-black/58">
-              当前没有可用简历。请先到
-              {" "}
-              <Link className="text-[#0071E3]" href="/dashboard/resume">
-                简历中心
-              </Link>
-              {" "}
-              完成至少一份解析。
-            </div>
-          ) : (
-            <>
-              <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                <p className="text-sm font-medium text-black">默认使用的简历</p>
-                <p className="mt-2 text-sm leading-7 text-black/68">
-                  {availableResumes.find((item) => item.id === selectedResumeId)?.file_name ||
-                    availableResumes[0]?.file_name}
-                </p>
-                <button
-                  className="mt-3 text-sm font-medium text-[#0071E3]"
-                  onClick={() => setShowResumePicker((current) => !current)}
-                  type="button"
-                >
-                  {showResumePicker ? "收起简历选择" : "切换简历"}
-                </button>
               </div>
 
-              {showResumePicker ? (
-                <div className="grid gap-2">
-                  <Label htmlFor="resume-select" className="text-black">
-                    参与匹配的简历
-                  </Label>
-                  <select
-                    className="h-12 rounded-2xl border border-black/10 bg-[#f5f5f7] px-4 text-sm text-black outline-none"
-                    id="resume-select"
-                    onChange={(event) => setSelectedResumeId(event.target.value)}
-                    value={selectedResumeId || availableResumes[0]?.id || ""}
-                  >
-                    {availableResumes.map((resume) => (
-                      <option key={resume.id} value={resume.id}>
-                        {resume.file_name}
-                      </option>
-                    ))}
-                  </select>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-black" htmlFor="job-jd-text">
+                  JD 原文
+                </label>
+                <PaperTextarea
+                  id="job-jd-text"
+                  onChange={(event) => updateDraft("jd_text", event.target.value)}
+                  placeholder="直接粘贴完整职位描述。点击一次后，系统会自动完成结构化与 Minimax 匹配。"
+                  value={jobDraft.jd_text}
+                />
+              </div>
+
+              <button
+                className="text-sm font-semibold text-[#2f55d4]"
+                onClick={() => setShowMoreInfo((current) => !current)}
+                type="button"
+              >
+                {showMoreInfo ? "收起更多信息" : "编辑更多信息"}
+              </button>
+
+              {showMoreInfo ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-black" htmlFor="job-company">
+                      公司
+                    </label>
+                    <PaperInput
+                      id="job-company"
+                      onChange={(event) => updateDraft("company", event.target.value)}
+                      value={jobDraft.company}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-black" htmlFor="job-city">
+                      城市
+                    </label>
+                    <PaperInput
+                      id="job-city"
+                      onChange={(event) => updateDraft("job_city", event.target.value)}
+                      value={jobDraft.job_city}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-black" htmlFor="job-type">
+                      用工类型
+                    </label>
+                    <PaperInput
+                      id="job-type"
+                      onChange={(event) =>
+                        updateDraft("employment_type", event.target.value)
+                      }
+                      value={jobDraft.employment_type}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label
+                      className="text-sm font-medium text-black"
+                      htmlFor="job-source-name"
+                    >
+                      来源平台
+                    </label>
+                    <PaperInput
+                      id="job-source-name"
+                      onChange={(event) => updateDraft("source_name", event.target.value)}
+                      value={jobDraft.source_name}
+                    />
+                  </div>
+
+                  <div className="grid gap-2 md:col-span-2">
+                    <label
+                      className="text-sm font-medium text-black"
+                      htmlFor="job-source-url"
+                    >
+                      来源链接
+                    </label>
+                    <PaperInput
+                      id="job-source-url"
+                      onChange={(event) => updateDraft("source_url", event.target.value)}
+                      value={jobDraft.source_url}
+                    />
+                  </div>
                 </div>
               ) : null}
-
-              <div className="flex flex-wrap gap-4 text-sm text-black/62">
-                {selectedJob ? (
-                  <button
-                    className="text-left text-[#0071E3]"
-                    onClick={handleRetryParse}
-                    type="button"
-                  >
-                    重跑 JD 解析
-                  </button>
-                ) : null}
-                {selectedJob ? (
-                  <button
-                    className="text-left text-[#0071E3]"
-                    onClick={() => setShowHistory((current) => !current)}
-                    type="button"
-                  >
-                    {showHistory ? "收起历史报告" : "查看历史报告"}
-                  </button>
-                ) : null}
-                {selectedJob ? (
-                  <button
-                    className="text-left text-[#D93025]"
-                    disabled={isDeletingJob}
-                    onClick={handleDeleteJob}
-                    type="button"
-                  >
-                    {isDeletingJob ? "删除中..." : "删除 JD"}
-                  </button>
-                ) : null}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {showHistory && reports.length > 0 ? (
-        <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-none">
-          <CardHeader className="px-6 py-6">
-            <CardTitle className="text-xl font-semibold text-black">历史报告</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-6 pb-6">
-            {reports.map((report) => (
-              <div
-                className="flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4"
-                key={report.id}
-              >
-                <button
-                  className="min-w-0 flex-1 text-left"
-                  onClick={() => setSelectedReportId(report.id)}
-                  type="button"
-                >
-                  <p className="text-sm font-medium text-black">
-                    {report.status === "success"
-                      ? `${getFitBandLabel(report.fit_band)} · ${report.overall_score}`
-                      : `状态 ${report.status}`}
-                  </p>
-                  <p className="mt-1 text-xs leading-6 text-black/52">
-                    v{report.resume_version}/v{report.job_version} ·{" "}
-                    {formatDate(report.created_at)}
-                    {report.stale_status === "stale" ? " · 已过期" : ""}
-                  </p>
-                </button>
-                <button
-                  className="text-sm text-[#D93025]"
-                  disabled={isDeletingReportId === report.id}
-                  onClick={() => void handleDeleteReport(report.id)}
-                  type="button"
-                >
-                  {isDeletingReportId === report.id ? "删除中..." : "删除"}
-                </button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!selectedReport ? (
-        <PageEmptyState
-          description="输入岗位标题和 JD 后，点击一次即可生成完整的匹配报告。"
-          title="还没有匹配报告"
-        />
-      ) : (
-        <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
-          <CardHeader className="space-y-4 px-6 py-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-                  {selectedReport.status === "success"
-                    ? `${getFitBandLabel(selectedReport.fit_band)} · 总分 ${selectedReport.overall_score}`
-                    : `报告状态：${selectedReport.status}`}
-                </CardTitle>
-                <p className="mt-2 text-sm leading-7 text-black/62">
-                  {String(selectedReport.scorecard_json.summary || selectedReport.error_message || "")}
-                </p>
-              </div>
-
-              <Button
-                className="rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
-                disabled={selectedReport.status !== "success" || isOpeningOptimizer}
-                onClick={handleOpenOptimizer}
-                type="button"
-              >
-                {isOpeningOptimizer ? "进入中..." : "去简历优化"}
-              </Button>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-5 px-6 pb-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
-                  总体判断
-                </p>
-                <p className="mt-2 text-sm leading-7 text-black/72">
+          </PaperPanel>
+
+          <PaperPanel
+            title="生成匹配报告"
+            eyebrow="Matching Workflow"
+            accentClassName="bg-[#2f55d4]"
+            rightSlot={
+              <PaperButton
+                disabled={
+                  workflowStatus !== "idle" &&
+                  workflowStatus !== "ready" &&
+                  workflowStatus !== "failed"
+                }
+                onClick={handleGenerateReport}
+                type="button"
+                variant="primary"
+              >
+                {workflowStatus === "saving_job" ||
+                workflowStatus === "parsing_job" ||
+                workflowStatus === "creating_report" ||
+                workflowStatus === "waiting_report"
+                  ? getWorkflowLabel(workflowStatus)
+                  : "生成匹配报告"}
+              </PaperButton>
+            }
+          >
+            <div className="space-y-5">
+              {availableResumes.length === 0 ? (
+                <div className="border-2 border-dashed border-black bg-[#f9f7f0] px-4 py-4 text-sm leading-7 text-black/62 shadow-[3px_3px_0_0_#000]">
+                  当前没有可用简历。请先到{" "}
+                  <Link className="font-semibold text-[#2f55d4]" href="/dashboard/resume">
+                    简历中心
+                  </Link>{" "}
+                  完成至少一份解析。
+                </div>
+              ) : (
+                <>
+                  <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
+                    <p className="text-sm font-semibold text-black">默认使用的简历</p>
+                    <p className="mt-2 text-sm leading-7 text-black/68">
+                      {availableResumes.find((item) => item.id === selectedResumeId)?.file_name ||
+                        availableResumes[0]?.file_name}
+                    </p>
+                    <button
+                      className="mt-3 text-sm font-semibold text-[#2f55d4]"
+                      onClick={() => setShowResumePicker((current) => !current)}
+                      type="button"
+                    >
+                      {showResumePicker ? "收起简历选择" : "切换简历"}
+                    </button>
+                  </div>
+
+                  {showResumePicker ? (
+                    <div className="grid gap-2">
+                      <label
+                        className="text-sm font-medium text-black"
+                        htmlFor="resume-select"
+                      >
+                        参与匹配的简历
+                      </label>
+                      <PaperSelect
+                        id="resume-select"
+                        onChange={(event) => setSelectedResumeId(event.target.value)}
+                        value={selectedResumeId || availableResumes[0]?.id || ""}
+                      >
+                        {availableResumes.map((resume) => (
+                          <option key={resume.id} value={resume.id}>
+                            {resume.file_name}
+                          </option>
+                        ))}
+                      </PaperSelect>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-3">
+                    {selectedJob ? (
+                      <PaperButton
+                        onClick={handleRetryParse}
+                        type="button"
+                        variant="secondary"
+                      >
+                        重跑 JD 解析
+                      </PaperButton>
+                    ) : null}
+
+                    {selectedJob ? (
+                      <PaperButton
+                        onClick={() => setShowHistory((current) => !current)}
+                        type="button"
+                        variant="secondary"
+                      >
+                        {showHistory ? "收起历史报告" : "查看历史报告"}
+                      </PaperButton>
+                    ) : null}
+
+                    {selectedJob ? (
+                      <PaperButton
+                        disabled={isDeletingJob}
+                        onClick={handleDeleteJob}
+                        type="button"
+                        variant="danger"
+                      >
+                        {isDeletingJob ? "删除中..." : "删除 JD"}
+                      </PaperButton>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </div>
+          </PaperPanel>
+
+          {showHistory && reports.length > 0 ? (
+            <PaperPanel
+              title="历史报告"
+              eyebrow="Report Archive"
+              accentClassName="bg-[#10bf7a]"
+            >
+              <div className="space-y-3">
+                {reports.map((report) => {
+                  const isActive = report.id === selectedReportId;
+                  return (
+                    <div
+                      className={`flex flex-wrap items-center justify-between gap-3 border-2 border-black px-4 py-4 shadow-[4px_4px_0_0_#000] ${
+                        isActive ? "bg-[#2f55d4] text-white" : "bg-[#f9f7f0] text-black"
+                      }`}
+                      key={report.id}
+                    >
+                      <button
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => setSelectedReportId(report.id)}
+                        type="button"
+                      >
+                        <p className="text-sm font-semibold">
+                          {report.status === "success"
+                            ? `${getFitBandLabel(report.fit_band)} · ${report.overall_score}`
+                            : `状态 ${report.status}`}
+                        </p>
+                        <p
+                          className={`mt-1 text-xs leading-6 ${
+                            isActive ? "text-white/80" : "text-black/52"
+                          }`}
+                        >
+                          v{report.resume_version}/v{report.job_version} ·{" "}
+                          {formatDate(report.created_at)}
+                          {report.stale_status === "stale" ? " · 已过期" : ""}
+                        </p>
+                      </button>
+
+                      <PaperButton
+                        disabled={isDeletingReportId === report.id}
+                        onClick={() => void handleDeleteReport(report.id)}
+                        type="button"
+                        variant={isActive ? "secondary" : "danger"}
+                        className={isActive ? "bg-white text-black" : ""}
+                      >
+                        {isDeletingReportId === report.id ? "删除中..." : "删除"}
+                      </PaperButton>
+                    </div>
+                  );
+                })}
+              </div>
+            </PaperPanel>
+          ) : null}
+        </div>
+
+        <div className="space-y-6">
+          {!selectedReport ? (
+            <PageEmptyState
+              description="输入岗位标题和 JD 后，点击一次即可生成完整的匹配报告。"
+              title="还没有匹配报告"
+            />
+          ) : (
+            <>
+              <PaperPanel
+                title={
+                  selectedReport.status === "success"
+                    ? `${getFitBandLabel(selectedReport.fit_band)} · 总分 ${selectedReport.overall_score}`
+                    : `报告状态：${selectedReport.status}`
+                }
+                eyebrow="Match Report"
+                accentClassName="bg-[#ff7a10]"
+                rightSlot={
+                  <PaperButton
+                    disabled={selectedReport.status !== "success" || isOpeningOptimizer}
+                    onClick={handleOpenOptimizer}
+                    type="button"
+                    variant="primary"
+                  >
+                    {isOpeningOptimizer ? "进入中..." : "去简历优化"}
+                  </PaperButton>
+                }
+              >
+                <p className="text-sm leading-7 text-black/68">
                   {String(
-                    selectedReport.scorecard_json.reasoning ||
-                      selectedReport.scorecard_json.summary ||
-                      "暂无结论"
+                    selectedReport.scorecard_json.summary ||
+                      selectedReport.error_message ||
+                      "",
                   )}
                 </p>
-              </div>
-              <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
-                  置信度
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-black">
-                  {selectedReport.scorecard_json.confidence != null
-                    ? `${Math.round(Number(selectedReport.scorecard_json.confidence) * 100)}%`
-                    : "待补充"}
-                </p>
-              </div>
-              <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
-                  生成时间
-                </p>
-                <p className="mt-2 text-sm leading-7 text-black/72">
-                  {formatDate(selectedReport.created_at)}
-                </p>
-              </div>
-            </div>
+              </PaperPanel>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                <p className="text-sm font-medium text-black">匹配证据</p>
-                <p className="mt-3 text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
-                  已命中的 JD 关键项
-                </p>
-                <p className="mt-2 text-sm leading-7 text-black/68">
-                  {Object.values(selectedReport.evidence_map_json.matched_jd_fields ?? {})
-                    .flat()
-                    .join("、") || "暂无"}
-                </p>
-                <p className="mt-4 text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
-                  证据备注
-                </p>
-                <p className="mt-2 text-sm leading-7 text-black/68">
-                  {selectedReport.evidence_map_json.notes?.join("；") || "暂无"}
-                </p>
-              </div>
+              <section className="grid gap-4 md:grid-cols-3">
+                <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    总体判断
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-black/72">
+                    {String(
+                      selectedReport.scorecard_json.reasoning ||
+                        selectedReport.scorecard_json.summary ||
+                        "暂无结论",
+                    )}
+                  </p>
+                </div>
 
-              <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-                <p className="text-sm font-medium text-black">差距分析</p>
-                <div className="mt-3 space-y-3">
-                  {(selectedReport.gap_taxonomy_json.must_fix ?? []).slice(0, 3).map((item) => (
-                    <div key={`must-${item.label}-${item.reason}`}>
-                      <p className="text-sm font-medium text-black">必须补：{item.label}</p>
-                      <p className="text-sm leading-7 text-black/68">{item.reason}</p>
-                    </div>
-                  ))}
-                  {(selectedReport.gap_taxonomy_json.should_fix ?? []).slice(0, 3).map((item) => (
-                    <div key={`should-${item.label}-${item.reason}`}>
-                      <p className="text-sm font-medium text-black">建议补：{item.label}</p>
-                      <p className="text-sm leading-7 text-black/68">{item.reason}</p>
-                    </div>
-                  ))}
-                  {selectedReport.evidence_map_json.missing_items?.length ? (
-                    <p className="text-sm leading-7 text-black/68">
-                      缺失项：{selectedReport.evidence_map_json.missing_items.join("、")}
+                <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    置信度
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-black">
+                    {selectedReport.scorecard_json.confidence != null
+                      ? `${Math.round(Number(selectedReport.scorecard_json.confidence) * 100)}%`
+                      : "待补充"}
+                  </p>
+                </div>
+
+                <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    生成时间
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-black/72">
+                    {formatDate(selectedReport.created_at)}
+                  </p>
+                </div>
+              </section>
+
+              <section className="grid gap-5 md:grid-cols-2">
+                <PaperPanel
+                  title="匹配证据"
+                  eyebrow="Evidence"
+                  accentClassName="bg-[#2f55d4]"
+                >
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    已命中的 JD 关键项
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-black/68">
+                    {Object.values(selectedReport.evidence_map_json.matched_jd_fields ?? {})
+                      .flat()
+                      .join("、") || "暂无"}
+                  </p>
+
+                  <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    证据备注
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-black/68">
+                    {selectedReport.evidence_map_json.notes?.join("；") || "暂无"}
+                  </p>
+                </PaperPanel>
+
+                <PaperPanel
+                  title="差距分析"
+                  eyebrow="Gap Analysis"
+                  accentClassName="bg-[#f13798]"
+                >
+                  <div className="space-y-3">
+                    {(selectedReport.gap_taxonomy_json.must_fix ?? [])
+                      .slice(0, 3)
+                      .map((item) => (
+                        <div key={`must-${item.label}-${item.reason}`}>
+                          <p className="text-sm font-semibold text-black">
+                            必须补：{item.label}
+                          </p>
+                          <p className="text-sm leading-7 text-black/68">{item.reason}</p>
+                        </div>
+                      ))}
+
+                    {(selectedReport.gap_taxonomy_json.should_fix ?? [])
+                      .slice(0, 3)
+                      .map((item) => (
+                        <div key={`should-${item.label}-${item.reason}`}>
+                          <p className="text-sm font-semibold text-black">
+                            建议补：{item.label}
+                          </p>
+                          <p className="text-sm leading-7 text-black/68">{item.reason}</p>
+                        </div>
+                      ))}
+
+                    {selectedReport.evidence_map_json.missing_items?.length ? (
+                      <p className="text-sm leading-7 text-black/68">
+                        缺失项：
+                        {selectedReport.evidence_map_json.missing_items.join("、")}
+                      </p>
+                    ) : null}
+                  </div>
+                </PaperPanel>
+              </section>
+
+              <PaperPanel
+                title="下一步动作"
+                eyebrow="Tailoring Plan"
+                accentClassName="bg-[#10bf7a]"
+              >
+                <div className="space-y-3">
+                  {(selectedReport.tailoring_plan_json.rewrite_tasks ?? [])
+                    .slice(0, 3)
+                    .map((task, index) => (
+                      <div key={`${String(task.title)}-${index}`}>
+                        <p className="text-sm font-semibold text-black">
+                          P{String(task.priority ?? index + 1)} ·{" "}
+                          {String(task.title ?? "定制任务")}
+                        </p>
+                        <p className="text-sm leading-7 text-black/68">
+                          {String(task.instruction ?? "")}
+                        </p>
+                      </div>
+                    ))}
+
+                  {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).length ===
+                  0 ? (
+                    <p className="text-sm text-black/58">
+                      当前报告还没有生成可执行任务。
                     </p>
                   ) : null}
                 </div>
-              </div>
-            </div>
-
-            <div className="rounded-[1.5rem] border border-black/10 bg-[#f5f5f7] px-4 py-4">
-              <p className="text-sm font-medium text-black">下一步动作</p>
-              <div className="mt-3 space-y-3">
-                {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).slice(0, 3).map((task, index) => (
-                  <div key={`${String(task.title)}-${index}`}>
-                    <p className="text-sm font-medium text-black">
-                      P{String(task.priority ?? index + 1)} · {String(task.title ?? "定制任务")}
-                    </p>
-                    <p className="text-sm leading-7 text-black/68">
-                      {String(task.instruction ?? "")}
-                    </p>
-                  </div>
-                ))}
-                {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).length === 0 ? (
-                  <p className="text-sm text-black/58">当前报告还没有生成可执行任务。</p>
-                ) : null}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              </PaperPanel>
+            </>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

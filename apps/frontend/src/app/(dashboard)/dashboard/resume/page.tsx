@@ -43,7 +43,7 @@ function logResumePage(event: string, payload?: Record<string, unknown>) {
 }
 
 function normalizeStructuredResume(
-  value?: Partial<ResumeStructuredData> | null
+  value?: Partial<ResumeStructuredData> | null,
 ): ResumeStructuredData {
   const empty = createEmptyStructuredResume();
 
@@ -76,14 +76,14 @@ function normalizeStructuredResume(
 
 async function loadResumeListData(
   token: string,
-  preferredResumeId?: string | null
+  preferredResumeId?: string | null,
 ) {
   logResumePage("load-list:start", { preferredResumeId });
   const items = await fetchResumeList(token);
   const nextSelectedId =
     preferredResumeId && items.some((item) => item.id === preferredResumeId)
       ? preferredResumeId
-      : items[0]?.id ?? null;
+      : (items[0]?.id ?? null);
 
   logResumePage("load-list:done", {
     count: items.length,
@@ -120,14 +120,45 @@ function upsertResumeRecord(items: ResumeRecord[], resume: ResumeRecord) {
   return items.map((item) => (item.id === resume.id ? resume : item));
 }
 
+function PaperSection({
+  title,
+  eyebrow,
+  children,
+}: {
+  title: string;
+  eyebrow?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+      <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+        {eyebrow ? (
+          <div className="mb-3 flex items-center gap-3">
+            <span className="size-2.5 bg-[#2f55d4]" />
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+              {eyebrow}
+            </p>
+          </div>
+        ) : null}
+        <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+          {title}
+        </h2>
+      </div>
+      <div className="px-5 py-5 sm:px-6">{children}</div>
+    </section>
+  );
+}
+
 export default function DashboardResumePage() {
   const { token } = useAuth();
   const [resumes, setResumes] = useState<ResumeRecord[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [selectedResume, setSelectedResume] = useState<ResumeRecord | null>(null);
+  const [selectedResume, setSelectedResume] = useState<ResumeRecord | null>(
+    null,
+  );
   const [parseJobs, setParseJobs] = useState<ResumeParseJob[]>([]);
   const [structuredValue, setStructuredValue] = useState<ResumeStructuredData>(
-    createEmptyStructuredResume()
+    createEmptyStructuredResume(),
   );
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -141,7 +172,7 @@ export default function DashboardResumePage() {
     detail: Awaited<ReturnType<typeof loadResumeDetailData>>,
     options?: {
       preserveDraft?: boolean;
-    }
+    },
   ) {
     logResumePage("apply-detail", {
       resumeId: detail.resume.id,
@@ -158,7 +189,9 @@ export default function DashboardResumePage() {
     setResumes((current) => upsertResumeRecord(current, detail.resume));
 
     if (!options?.preserveDraft) {
-      setStructuredValue(normalizeStructuredResume(detail.resume.structured_json));
+      setStructuredValue(
+        normalizeStructuredResume(detail.resume.structured_json),
+      );
       setIsStructuredDirty(false);
     }
   }
@@ -188,7 +221,7 @@ export default function DashboardResumePage() {
         if (result.nextSelectedId) {
           const detail = await loadResumeDetailData(
             accessToken,
-            result.nextSelectedId
+            result.nextSelectedId,
           );
           if (!cancelled) {
             applyResumeDetail(detail);
@@ -233,7 +266,10 @@ export default function DashboardResumePage() {
         return;
       }
       try {
-        const detail = await loadResumeDetailData(accessToken, selectedResumeId);
+        const detail = await loadResumeDetailData(
+          accessToken,
+          selectedResumeId,
+        );
         if (!cancelled) {
           applyResumeDetail(detail);
         }
@@ -267,7 +303,10 @@ export default function DashboardResumePage() {
           return;
         }
         try {
-          const result = await loadResumeListData(accessToken, selectedResumeId);
+          const result = await loadResumeListData(
+            accessToken,
+            selectedResumeId,
+          );
           if (cancelled) {
             return;
           }
@@ -278,7 +317,7 @@ export default function DashboardResumePage() {
           if (result.nextSelectedId) {
             const detail = await loadResumeDetailData(
               accessToken,
-              result.nextSelectedId
+              result.nextSelectedId,
             );
             if (!cancelled) {
               applyResumeDetail(detail, { preserveDraft: isStructuredDirty });
@@ -354,7 +393,7 @@ export default function DashboardResumePage() {
 
     if (isStructuredDirty) {
       const confirmed = window.confirm(
-        "当前简历有未保存的人工修改，切换后会丢失这些内容。确认继续吗？"
+        "当前简历有未保存的人工修改，切换后会丢失这些内容。确认继续吗？",
       );
       if (!confirmed) {
         return;
@@ -377,10 +416,12 @@ export default function DashboardResumePage() {
       const updatedResume = await updateResumeStructuredData(
         token,
         selectedResumeId,
-        structuredValue
+        structuredValue,
       );
       setSelectedResume(updatedResume);
-      setStructuredValue(normalizeStructuredResume(updatedResume.structured_json));
+      setStructuredValue(
+        normalizeStructuredResume(updatedResume.structured_json),
+      );
       setIsStructuredDirty(false);
       const result = await loadResumeListData(token, selectedResumeId);
       setResumes(result.items);
@@ -435,7 +476,7 @@ export default function DashboardResumePage() {
     }
 
     const confirmed = window.confirm(
-      `确认删除简历《${selectedResume.file_name}》吗？这会同时删除 MinIO 中的原始文件。`
+      `确认删除简历《${selectedResume.file_name}》吗？这会同时删除 MinIO 中的原始文件。`,
     );
     if (!confirmed) {
       return;
@@ -468,48 +509,112 @@ export default function DashboardResumePage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <header className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+        <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex items-center border-2 border-black bg-[#f9f7f0] px-5 py-3 shadow-[4px_4px_0_0_#000]">
+              <span className="mr-4 text-2xl leading-none text-[#2f55d4]">
+                *
+              </span>
+              <span className="text-[1.55rem] font-black uppercase tracking-[-0.06em] text-black sm:text-[1.8rem]">
+                Resume Center
+              </span>
+            </div>
+
+            <div className="mt-6 inline-block border-2 border-black bg-[#2f55d4] px-4 py-2 shadow-[5px_5px_0_0_#000]">
+              <h1 className="text-3xl font-semibold tracking-[-0.08em] text-white sm:text-4xl">
+                简历中心
+              </h1>
+            </div>
+
+            <p className="mt-5 max-w-3xl text-base leading-8 text-[#38445a] sm:text-[1.05rem]">
+              上传 PDF
+              简历、查看解析状态、修正结构化结果，并从同一工作台完成下载、
+              重试解析与删除等操作。
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div className="border-2 border-black bg-[#f13798] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+              {resumes.length} 份简历
+            </div>
+            <div className="border-2 border-black bg-[#10bf7a] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+              {selectedResume ? "已选中详情" : "等待选择"}
+            </div>
+          </div>
+        </div>
+      </header>
+
       {pageError ? (
-        <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
-          <AlertTitle className="text-black">操作提示</AlertTitle>
-          <AlertDescription className="text-black/72">{pageError}</AlertDescription>
+        <Alert className="border-2 border-black bg-[#fff1f1] text-black shadow-[6px_6px_0_0_#000]">
+          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+            操作提示
+          </AlertTitle>
+          <AlertDescription className="text-sm leading-7 text-black/72">
+            {pageError}
+          </AlertDescription>
         </Alert>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <ResumeUploadCard isUploading={isUploading} onUpload={handleUpload} />
-          {resumes.length === 0 ? (
-            <PageEmptyState
-              description="先上传一份 PDF 简历，系统会自动进入解析流程。"
-              title="还没有简历"
+      <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="space-y-6">
+          <PaperSection title="上传入口" eyebrow="Resume Upload">
+            <ResumeUploadCard
+              isUploading={isUploading}
+              onUpload={handleUpload}
             />
-          ) : (
-            <ResumeList
-              items={resumes}
-              onSelect={handleSelectResume}
-              selectedResumeId={selectedResumeId}
-            />
-          )}
+          </PaperSection>
+
+          <PaperSection title="简历列表" eyebrow="Stored Files">
+            {resumes.length === 0 ? (
+              <PageEmptyState
+                description="先上传一份 PDF 简历，系统会自动进入解析流程。"
+                title="还没有简历"
+              />
+            ) : (
+              <ResumeList
+                items={resumes}
+                onSelect={handleSelectResume}
+                selectedResumeId={selectedResumeId}
+              />
+            )}
+          </PaperSection>
         </div>
 
-        <ResumeDetailPanel
-          isDeleting={isDeleting}
-          isStructuredDirty={isStructuredDirty}
-          isRetrying={isRetrying}
-          isSaving={isSaving}
-          onChangeStructured={(value) => {
-            setStructuredValue(value);
-            setIsStructuredDirty(true);
-          }}
-          onDelete={handleDelete}
-          onDownload={handleDownload}
-          onRetry={handleRetryParse}
-          onSave={handleSaveStructured}
-          parseJobs={parseJobs}
-          resume={selectedResume}
-          structuredValue={structuredValue}
-        />
+        <div className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+          <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="size-2.5 bg-[#ff7a10]" />
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+                Structured Resume Workspace
+              </p>
+            </div>
+            <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+              简历详情与结构化编辑
+            </h2>
+          </div>
+
+          <div className="px-5 py-5 sm:px-6">
+            <ResumeDetailPanel
+              isDeleting={isDeleting}
+              isStructuredDirty={isStructuredDirty}
+              isRetrying={isRetrying}
+              isSaving={isSaving}
+              onChangeStructured={(value) => {
+                setStructuredValue(value);
+                setIsStructuredDirty(true);
+              }}
+              onDelete={handleDelete}
+              onDownload={handleDownload}
+              onRetry={handleRetryParse}
+              onSave={handleSaveStructured}
+              parseJobs={parseJobs}
+              resume={selectedResume}
+              structuredValue={structuredValue}
+            />
+          </div>
+        </div>
       </section>
     </div>
   );
