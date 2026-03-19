@@ -92,7 +92,7 @@
 
 ### Resume upload / parse / retry / structured save
 
-- 上传入口：`apps/backend/app/api/routes/resumes.py`
+- 上传入口：`apps/backend/app/routers/resumes.py`
 - 业务编排：`apps/backend/app/services/resume.py`
 - 规则解析：`apps/backend/app/services/resume_parser.py`
 - AI 校正：`apps/backend/app/services/resume_ai.py`
@@ -109,7 +109,7 @@
 
 ### Match report
 
-- API 入口：`apps/backend/app/api/routes/match_reports.py`
+- API 入口：`apps/backend/app/routers/match_reports.py`
 - 业务编排：`apps/backend/app/services/match_report.py`
 - 规则匹配：`apps/backend/app/services/match_engine.py`
 - AI 修正：`apps/backend/app/services/match_ai.py`
@@ -118,7 +118,7 @@
 
 ### Resume optimization
 
-- API 入口：`apps/backend/app/api/routes/resume_optimization.py`
+- API 入口：`apps/backend/app/routers/resume_optimization.py`
 - 业务逻辑：`apps/backend/app/services/resume_optimizer.py`
 - 数据模型：`apps/backend/app/models/resume_optimization_session.py`
 - 前端页面：`apps/frontend/src/app/(dashboard)/dashboard/optimizer/page.tsx`
@@ -126,8 +126,8 @@
 
 ### Profile and auth
 
-- Profile API：`apps/backend/app/api/routes/profile.py`
-- Auth API：`apps/backend/app/api/routes/auth.py`
+- Profile API：`apps/backend/app/routers/profile.py`
+- Auth API：`apps/backend/app/routers/auth.py`
 - 服务层：`apps/backend/app/services/profile.py`、`apps/backend/app/services/auth.py`
 - 测试：`apps/backend/tests/test_profile.py`、`apps/backend/tests/test_auth.py`
 

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis, from_url
 
-from app.api.routes import api_router
+from app.routers import api_router
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiException, ErrorCode
 from app.core.logging import configure_logging
