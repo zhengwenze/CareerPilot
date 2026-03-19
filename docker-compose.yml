@@ -51,7 +51,48 @@ services:
       timeout: 10s
       retries: 5
 
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: career-pilot-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+asyncpg://career:career@postgres:5432/career_pilot
+      - ALEMBIC_DATABASE_URL=postgresql+psycopg://career:career@postgres:5432/career_pilot
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_ENDPOINT=minio:9000
+      - STORAGE_ACCESS_KEY=careerpilot
+      - STORAGE_SECRET_KEY=careerpilot123
+      - CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - career-pilot-backend-data:/app/data
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: career-pilot-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+
 volumes:
   career-pilot-postgres-data:
   career-pilot-redis-data:
   career-pilot-minio-data:
+  career-pilot-backend-data:
