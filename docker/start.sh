@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # CareerPilot 启动脚本
-# 用途：一键启动所有中间件服务和后端 API 服务
+# 用途：一键启动所有中间件服务和后端服务
 # 用法：./docker/start.sh
 
 # 颜色定义
@@ -50,16 +50,16 @@ check_dependencies() {
 check_env_files() {
     log_info "检查环境变量文件..."
 
-    if [[ ! -f "apps/api/.env" ]]; then
-        log_warn "apps/api/.env 不存在，正在创建..."
-        cp apps/api/.env.example apps/api/.env
-        log_info "已创建 apps/api/.env，请检查并配置必要的环境变量（特别是 AI API Key）"
+    if [[ ! -f "apps/backend/.env" ]]; then
+        log_warn "apps/backend/.env 不存在，正在创建..."
+        cp apps/backend/.env.example apps/backend/.env
+        log_info "已创建 apps/backend/.env，请检查并配置必要的环境变量（特别是 AI API Key）"
     fi
 
-    if [[ ! -f "apps/web/.env.local" ]]; then
-        log_warn "apps/web/.env.local 不存在，正在创建..."
-        cp apps/web/.env.example apps/web/.env.local
-        log_info "已创建 apps/web/.env.local"
+    if [[ ! -f "apps/frontend/.env.local" ]]; then
+        log_warn "apps/frontend/.env.local 不存在，正在创建..."
+        cp apps/frontend/.env.example apps/frontend/.env.local
+        log_info "已创建 apps/frontend/.env.local"
     fi
 
     log_info "环境变量文件检查完成"
@@ -102,10 +102,10 @@ start_middleware() {
 init_database() {
     log_info "初始化数据库..."
 
-    cd apps/api
+    cd apps/backend
 
     if [[ ! -f ".env" ]]; then
-        log_error "apps/api/.env 不存在，请先运行脚本或手动创建"
+        log_error "apps/backend/.env 不存在，请先运行脚本或手动创建"
         exit 1
     fi
 
@@ -120,10 +120,10 @@ init_database() {
 start_backend() {
     log_info "启动后端 API 服务..."
 
-    cd apps/api
+    cd apps/backend
 
     if [[ ! -f ".env" ]]; then
-        log_error "apps/api/.env 不存在，请先运行脚本或手动创建"
+        log_error "apps/backend/.env 不存在，请先运行脚本或手动创建"
         exit 1
     fi
 
