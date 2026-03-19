@@ -1,0 +1,5 @@
+# uv lock file
+uv.lock
+
+# Python version file
+.python-version

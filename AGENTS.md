@@ -312,16 +312,16 @@ Success criteria：
 
 ### Verification by change type
 
-| 改动类型                                               | 最小验证命令                                                                                           | 验证要点                                  |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| 改动类型                                               | 最小验证命令                                                                                               | 验证要点                                  |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | 仅改 `resume_parser.py` / `resume_ai.py` / `resume.py` | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 解析状态流转、AI fallback、结构化结果写回 |
 | Resume parse API 或 schema 改动                        | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume.py tests/test_resume_parser.py` | 上传、详情、重试、parse jobs 正常         |
 | Match report 改动                                      | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_match_reports.py tests/test_jobs.py`   | 匹配报告生成与 AI 修正逻辑正常            |
 | Resume optimization 改动                               | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_resume_optimizer.py`                   | 会话创建、草案生成、应用版本提升          |
 | Profile/Auth 改动                                      | `cd apps/backend && UV_CACHE_DIR=.uv-cache uv run pytest tests/test_profile.py tests/test_auth.py`         | 登录、鉴权、资料读写正常                  |
-| Frontend-only changes                                  | `cd apps/frontend && npm run lint`                                                                          | ESLint 通过                               |
-| Resume page / polling 改动                             | `cd apps/frontend && npm run lint`                                                                          | 手工验证上传、轮询、成功/失败、停止轮询   |
-| API contract changes                                   | 后端定向 pytest + `cd apps/frontend && npm run lint`                                                        | 接口与前端映射一致                        |
+| Frontend-only changes                                  | `cd apps/frontend && npm run lint`                                                                         | ESLint 通过                               |
+| Resume page / polling 改动                             | `cd apps/frontend && npm run lint`                                                                         | 手工验证上传、轮询、成功/失败、停止轮询   |
+| API contract changes                                   | 后端定向 pytest + `cd apps/frontend && npm run lint`                                                       | 接口与前端映射一致                        |
 
 ### Testing requirements
 
