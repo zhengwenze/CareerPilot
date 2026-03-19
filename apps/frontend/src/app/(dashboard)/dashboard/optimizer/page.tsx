@@ -13,8 +13,6 @@ import {
 } from "@/components/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import {
   applyResumeOptimizationSession,
@@ -68,6 +66,70 @@ function getMissingInfoQuestions(
     }
     return [{ field, question }];
   });
+}
+
+function PaperSection({
+  title,
+  eyebrow,
+  accentClassName = "bg-[#2f55d4]",
+  children,
+}: {
+  title: string;
+  eyebrow?: string;
+  accentClassName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+      <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+        {eyebrow ? (
+          <div className="mb-3 flex items-center gap-3">
+            <span className={`size-2.5 ${accentClassName}`} />
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+              {eyebrow}
+            </p>
+          </div>
+        ) : null}
+        <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+          {title}
+        </h2>
+      </div>
+      <div className="px-5 py-5 sm:px-6">{children}</div>
+    </section>
+  );
+}
+
+function PaperTextarea(
+  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+) {
+  return (
+    <textarea
+      {...props}
+      className={`min-h-[96px] w-full border-2 border-black bg-[#f9f7f0] px-4 py-3 text-sm leading-7 text-black outline-none shadow-[3px_3px_0_0_#000] placeholder:text-black/40 ${props.className ?? ""}`}
+    />
+  );
+}
+
+function PaperCheckbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3">
+      <input
+        checked={checked}
+        className="size-5 cursor-pointer accent-[#2f55d4]"
+        onChange={(e) => onChange(e.target.checked)}
+        type="checkbox"
+      />
+      <span className="text-sm text-black/70">{label}</span>
+    </label>
+  );
 }
 
 export default function DashboardOptimizerPage() {
@@ -154,20 +216,19 @@ export default function DashboardOptimizerPage() {
 
   if (!reportId && !initialSessionId) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <PageEmptyState
           title="缺少岗位上下文"
           description="请先从岗位工作台进入简历优化，这里不会脱离岗位快照单独开工。"
         />
         <Button
           asChild
-          className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
+          className="border-2 border-black bg-white px-5 py-3 text-sm font-semibold text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000]"
           type="button"
-          variant="outline"
         >
           <Link href="/dashboard/jobs">
             返回岗位工作台
-            <ArrowUpRight className="size-4" />
+            <ArrowUpRight className="ml-2 size-4" />
           </Link>
         </Button>
       </div>
@@ -259,132 +320,154 @@ export default function DashboardOptimizerPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <header className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+        <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex items-center border-2 border-black bg-[#f9f7f0] px-5 py-3 shadow-[4px_4px_0_0_#000]">
+              <span className="mr-4 text-2xl leading-none text-[#10bf7a]">
+                *
+              </span>
+              <span className="text-[1.55rem] font-black uppercase tracking-[-0.06em] text-black sm:text-[1.8rem]">
+                Resume Optimizer
+              </span>
+            </div>
+
+            <div className="mt-6 inline-block border-2 border-black bg-[#10bf7a] px-4 py-2 shadow-[5px_5px_0_0_#000]">
+              <h1 className="text-3xl font-semibold tracking-[-0.08em] text-white sm:text-4xl">
+                简历优化
+              </h1>
+            </div>
+
+            <p className="mt-5 max-w-3xl text-base leading-8 text-[#38445a] sm:text-[1.05rem]">
+              基于匹配报告生成改写草案，确认后应用到结构化简历。
+            </p>
+          </div>
+
+          <Button
+            asChild
+            className="border-2 border-black bg-white px-5 py-3 text-sm font-semibold text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000]"
+            type="button"
+          >
+            <Link href={`/dashboard/jobs?jobId=${session.jd_id}&staleHint=1`}>
+              返回岗位工作台
+              <ArrowUpRight className="ml-2 size-4" />
+            </Link>
+          </Button>
+        </div>
+      </header>
+
       {pageError ? (
-        <Alert className="rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
-          <AlertTitle className="text-black">操作失败</AlertTitle>
-          <AlertDescription className="text-black/72">{pageError}</AlertDescription>
+        <Alert className="border-2 border-black bg-[#fff1f1] text-black shadow-[6px_6px_0_0_#000]">
+          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+            操作失败
+          </AlertTitle>
+          <AlertDescription className="text-sm leading-7 text-black/72">
+            {pageError}
+          </AlertDescription>
         </Alert>
       ) : null}
 
       {session.is_stale ? (
-        <Alert className="rounded-[1.5rem] border-[#ff9500]/20 bg-[#FFF7E6]">
-          <AlertTitle className="text-black">当前岗位快照已过期</AlertTitle>
-          <AlertDescription className="text-black/72">
+        <Alert className="border-2 border-black bg-[#fff7e6] text-black shadow-[6px_6px_0_0_#000]">
+          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+            当前岗位快照已过期
+          </AlertTitle>
+          <AlertDescription className="text-sm leading-7 text-black/72">
             这份优化会话基于旧的匹配结果。建议回到岗位工作台重新匹配后，再继续编辑。
           </AlertDescription>
         </Alert>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
-        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
-          <CardHeader className="px-6 py-6">
-            <CardTitle className="text-xl font-semibold text-black">任务清单</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 px-6 pb-6">
+      <section className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)_280px]">
+        <PaperSection title="任务清单" eyebrow="Task List">
+          <div className="space-y-4">
             <div>
-              <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
                 必须补证据
               </p>
-              <p className="mt-2 text-sm leading-7 text-black/68">
+              <p className="mt-2 text-sm leading-7 text-black/70">
                 {session.optimizer_context.must_add_evidence.join("、") || "暂无"}
               </p>
             </div>
             <div className="space-y-3">
               {selectedTasks.map((task) => (
-                <label
-                  className="block rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
+                <div
+                  className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]"
                   key={task.key}
                 >
-                  <div className="flex items-start gap-3">
-                    <input
-                      checked={task.selected}
-                      className="mt-1"
-                      onChange={(event) =>
-                        setSelectedTasks((current) =>
-                          current.map((item) =>
-                            item.key === task.key
-                              ? { ...item, selected: event.target.checked }
-                              : item
-                          )
+                  <PaperCheckbox
+                    checked={task.selected}
+                    label=""
+                    onChange={(checked) =>
+                      setSelectedTasks((current) =>
+                        current.map((item) =>
+                          item.key === task.key
+                            ? { ...item, selected: checked }
+                            : item
                         )
-                      }
-                      type="checkbox"
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-black">
-                        P{task.priority} · {task.title}
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-black/68">
-                        {task.instruction}
-                      </p>
-                    </div>
+                      )
+                    }
+                  />
+                  <div className="mt-2">
+                    <p className="text-sm font-semibold text-black">
+                      P{task.priority} · {task.title}
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-black/70">
+                      {task.instruction}
+                    </p>
                   </div>
-                </label>
+                </div>
               ))}
               {selectedTasks.length === 0 ? (
-                <p className="text-sm text-black/58">当前岗位快照还没有改写任务。</p>
+                <p className="text-sm text-black/50">当前岗位快照还没有改写任务。</p>
               ) : null}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </PaperSection>
 
         <div className="space-y-5">
           {missingInfoQuestions.length > 0 ? (
-            <Card className="rounded-[2rem] border border-black/10 bg-[#FFF7E6] py-0 shadow-none">
-              <CardHeader className="px-6 py-6">
-                <CardTitle className="text-xl font-semibold text-black">
-                  先补这些事实
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 px-6 pb-6">
+            <PaperSection title="先补这些事实" eyebrow="Missing Info" accentClassName="bg-[#ff7a10]">
+              <div className="space-y-3">
                 {missingInfoQuestions.map((item, index) => (
                   <div
-                    className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
+                    className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[3px_3px_0_0_#000]"
                     key={`${item.field}-${index}`}
                   >
                     <p className="text-sm leading-7 text-black">{item.question}</p>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </PaperSection>
           ) : null}
           {Object.values(draftSections).map((section) => (
-            <Card
-              className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]"
+            <PaperSection
               key={section.key}
+              title={section.label}
+              eyebrow={section.selected ? "已选中" : "未选中"}
+              accentClassName={section.selected ? "bg-[#10bf7a]" : "bg-[#f13798]"}
             >
-              <CardHeader className="space-y-4 px-6 py-6">
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-                    {section.label}
-                  </CardTitle>
-                  <label className="text-sm text-black/68">
-                    <input
-                      checked={section.selected}
-                      className="mr-2"
-                      onChange={(event) =>
-                        setDraftSections((current) => ({
-                          ...current,
-                          [section.key]: {
-                            ...current[section.key],
-                            selected: event.target.checked,
-                          },
-                        }))
-                      }
-                      type="checkbox"
-                    />
-                    应用此区块
-                  </label>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4 px-6 pb-6">
+              <div className="space-y-4">
+                <PaperCheckbox
+                  checked={section.selected}
+                  label="应用此区块"
+                  onChange={(checked) =>
+                    setDraftSections((current) => ({
+                      ...current,
+                      [section.key]: {
+                        ...current[section.key],
+                        selected: checked,
+                      },
+                    }))
+                  }
+                />
                 <div>
-                  <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
                     当前内容
                   </p>
-                  <Textarea
-                    className="mt-2 min-h-[96px] rounded-[1.75rem] border-black/10 bg-[#f5f5f7] text-black"
+                  <PaperTextarea
+                    value={section.original_text}
                     onChange={(event) =>
                       setDraftSections((current) => ({
                         ...current,
@@ -394,15 +477,15 @@ export default function DashboardOptimizerPage() {
                         },
                       }))
                     }
-                    value={section.original_text}
                   />
                 </div>
                 <div>
-                  <p className="text-xs font-medium tracking-[0.12em] text-black/45 uppercase">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
                     建议草案
                   </p>
-                  <Textarea
-                    className="mt-2 min-h-[144px] rounded-[1.75rem] border-black/10 bg-[#F5F9FF] text-black"
+                  <PaperTextarea
+                    className="min-h-[144px]"
+                    value={section.suggested_text}
                     onChange={(event) =>
                       setDraftSections((current) => ({
                         ...current,
@@ -412,95 +495,81 @@ export default function DashboardOptimizerPage() {
                         },
                       }))
                     }
-                    value={section.suggested_text}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </PaperSection>
           ))}
         </div>
 
-        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
-          <CardHeader className="space-y-3 px-6 py-6">
-            <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-              应用与回流
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 px-6 pb-6">
-            <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-              <p className="text-sm font-medium text-black">
+        <PaperSection title="应用与回流" eyebrow="Apply & Feedback" accentClassName="bg-[#f13798]">
+          <div className="space-y-4">
+            <div className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]">
+              <p className="text-sm font-semibold text-black">
                 {session.optimizer_context.job_title}
               </p>
-              <p className="mt-2 text-sm leading-7 text-black/68">
+              <p className="mt-2 text-sm leading-6 text-black/70">
                 {session.optimizer_context.company || "未填写公司"} ·{" "}
                 {getFitBandLabel(session.optimizer_context.fit_band)}
               </p>
-              <p className="text-sm leading-7 text-black/68">
+              <p className="mt-1 text-sm text-black/50">
                 简历 v{session.source_resume_version} / 岗位 v{session.source_job_version}
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-              <p className="text-sm font-medium text-black">岗位摘要</p>
-              <p className="mt-2 text-sm leading-7 text-black/68">
+            <div className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+                岗位摘要
+              </p>
+              <p className="mt-2 text-sm leading-6 text-black/70">
                 {session.optimizer_context.target_summary || "暂无"}
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4">
-              <p className="text-sm font-medium text-black">原始短板</p>
-              <p className="mt-2 text-sm leading-7 text-black/68">
+            <div className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+                原始短板
+              </p>
+              <p className="mt-2 text-sm leading-6 text-black/70">
                 {session.optimizer_context.gap_summary.join("、") || "暂无"}
               </p>
             </div>
             <div className="space-y-3">
               <Button
-                className="w-full rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
+                className="w-full border-2 border-black bg-[#2f55d4] px-5 py-3 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isGenerating}
                 onClick={handleGenerateSuggestions}
                 type="button"
               >
                 {isGenerating ? "生成中..." : "生成/刷新草案"}
-                <WandSparkles className="size-4" />
+                <WandSparkles className="ml-2 size-4" />
               </Button>
               <Button
-                className="w-full rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
+                className="w-full border-2 border-black bg-white px-5 py-3 text-sm font-semibold text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isSaving}
                 onClick={handleSaveDraft}
                 type="button"
-                variant="outline"
               >
                 {isSaving ? "保存中..." : "保存草案"}
               </Button>
               <Button
-                className="w-full rounded-full"
+                className="w-full border-2 border-black bg-[#10bf7a] px-5 py-3 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isApplying || session.is_stale}
                 onClick={handleApply}
                 type="button"
               >
                 {isApplying ? "应用中..." : "应用到当前简历"}
-                <CheckCircle2 className="size-4" />
+                <CheckCircle2 className="ml-2 size-4" />
               </Button>
               {statusMessage ? (
-                <p className="text-sm leading-7 text-black/62">{statusMessage}</p>
+                <p className="text-sm leading-6 text-black/70">{statusMessage}</p>
               ) : null}
             </div>
-            <Button
-              asChild
-              className="w-full rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
-              type="button"
-              variant="outline"
-            >
-              <Link href={`/dashboard/jobs?jobId=${session.jd_id}&staleHint=1`}>
-                返回岗位工作台
-                <ArrowUpRight className="size-4" />
-              </Link>
-            </Button>
             {session.applied_resume_version ? (
-              <p className="text-sm text-black/68">
+              <p className="text-sm text-black/50">
                 最近已应用到简历 v{session.applied_resume_version}
               </p>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </PaperSection>
       </section>
     </div>
   );
