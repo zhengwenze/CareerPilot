@@ -51,49 +51,59 @@
 
 **认证模块**：
 
-- `POST /auth/register`：用户注册
-- `POST /auth/login`：用户登录（JWT access token）
+- `POST /auth/register`：用户注册（返回 access_token + user 信息）
+- `POST /auth/login`：用户登录（JWT access token，返回 access_token + user 信息）
 - `POST /auth/logout`：登出（Redis token blocklist）
 - `GET /auth/me`：当前用户查询
 
 **简历中心**：
 
-- `POST /resumes/upload`：上传 PDF 简历
-- `GET /resumes`：简历列表
-- `GET /resumes/{id}`：简历详情
+- `POST /resumes/upload`：上传 PDF 简历（异步解析任务）
+- `GET /resumes`：简历列表（按创建时间倒序）
+- `GET /resumes/{id}`：简历详情（含 latest_parse_job）
 - `DELETE /resumes/{id}`：删除简历
-- `GET /resumes/{id}/download-url`：生成下载链接
-- `GET /resumes/{id}/parse-jobs`：解析任务历史
-- `POST /resumes/{id}/parse`：重试解析
+- `GET /resumes/{id}/download-url`：生成 MinIO 下载链接
+- `GET /resumes/{id}/parse-jobs`：解析任务历史列表
+- `POST /resumes/{id}/parse`：重试解析（创建新 parse job）
 - `PUT /resumes/{id}/structured`：保存人工校正的结构化数据
-- 异步解析任务：自动抽取文本 → 结构化解析 → 回写数据库
+- 异步解析任务：自动抽取文本 → 规则解析 → AI 校正 → 回写数据库
 
 **岗位匹配**：
 
-- `POST /jobs`：创建岗位 JD
+- `POST /jobs`：创建岗位 JD（异步解析任务）
 - `GET /jobs`：岗位列表（支持 keyword / parse_status / status_stage / priority / stale 过滤）
-- `GET /jobs/{id}`：岗位详情
-- `PUT /jobs/{id}`：更新岗位
-- `POST /jobs/{id}/parse`：重跑解析
+- `GET /jobs/{id}`：岗位详情（含 latest_parse_job）
+- `PUT /jobs/{id}`：更新岗位 JD
+- `POST /jobs/{id}/parse`：重跑解析（创建新 parse job）
 - `DELETE /jobs/{id}`：删除岗位
-- `POST /jobs/{id}/match-reports`：生成匹配报告
+- `POST /jobs/{id}/match-reports`：生成匹配报告（异步任务）
 - `GET /jobs/{id}/match-reports`：匹配报告列表
-- `GET /match-reports/{id}`：匹配报告详情
+- `GET /match-reports/{id}`：匹配报告详情（评分卡 + 改写任务 + 面试蓝图）
 - `DELETE /match-reports/{id}`：删除匹配报告
 - 异步匹配任务：岗位画像生成 → 简历匹配评分 → 生成可解释报告
 
 **简历优化**：
 
-- `POST /resume-optimization-sessions`：创建优化会话
-- `GET /resume-optimization-sessions/{id}`：获取优化会话
+- `POST /resume-optimization-sessions`：创建优化会话（关联 job + report）
+- `GET /resume-optimization-sessions/{id}`：获取优化会话（含 job + report 信息）
 - `PUT /resume-optimization-sessions/{id}`：更新优化草案
-- `POST /resume-optimization-sessions/{id}/suggestions`：生成改写建议
-- `POST /resume-optimization-sessions/{id}/apply`：应用优化到简历
+- `POST /resume-optimization-sessions/{id}/suggestions`：生成改写建议（AI）
+- `POST /resume-optimization-sessions/{id}/apply`：应用优化到简历（版本提升）
 
 **个人资料**：
 
-- `GET /profile/me`：查询个人资料
-- `PUT /profile/me`：更新个人资料（求职方向、目标城市、目标岗位等）
+- `GET /profile/me`：查询个人资料（求职方向、目标城市、目标岗位等）
+- `PUT /profile/me`：更新个人资料
+
+**模拟面试**：
+
+- `POST /mock-interviews`：创建模拟面试会话（关联 job + resume）
+- `GET /mock-interviews`：模拟面试会话列表（支持 job_id / resume_id / status / mode 过滤）
+- `GET /mock-interviews/{id}`：获取模拟面试会话详情
+- `POST /mock-interviews/{id}/turns/{turn_id}/answer`：提交面试回答
+- `POST /mock-interviews/{id}/finish`：结束面试并生成评价
+- `GET /mock-interviews/{id}/review`：获取面试评价
+- `DELETE /mock-interviews/{id}`：删除模拟面试会话
 
 **系统健康检查**：
 
@@ -112,6 +122,8 @@
 - `JobReadinessEvent`：岗位准备度事件历史
 - `MatchReport`：匹配报告（评分、优势、短板、建议、证据）
 - `ResumeOptimizationSession`：简历优化会话
+- `MockInterviewSession`：模拟面试会话
+- `MockInterviewTurn`：模拟面试轮次
 
 #### 基础设施
 
