@@ -47,24 +47,24 @@ function SidebarNavItem({
   const hasChildren = Boolean(item.children?.length);
 
   const itemClassName = cn(
-    "group flex w-full items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-left transition-all duration-200",
+    "group flex w-full items-center gap-3 border border-transparent px-3 py-3 text-left transition-all duration-200",
     collapsed ? "justify-center px-2.5" : "",
     depth > 0 ? "py-2.5" : "",
     item.disabled
       ? "cursor-not-allowed opacity-55"
       : active
-      ? "border-sidebar-border bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-      : "text-muted-foreground hover:border-sidebar-border/70 hover:bg-white/80 hover:text-foreground"
+      ? "border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]"
+      : "text-[#1C1C1C]/60 hover:border-[#1C1C1C]/10 hover:bg-[#1C1C1C]/[0.02] hover:text-[#1C1C1C]"
   );
 
   const itemBody = (
     <>
       <span
         className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-2xl border transition-colors",
+          "flex size-10 shrink-0 items-center justify-center border transition-colors",
           active
-            ? "border-sidebar-primary/20 bg-sidebar-primary/12 text-sidebar-primary"
-            : "border-sidebar-border/70 bg-white/75 text-muted-foreground group-hover:text-foreground"
+            ? "border-[#1C1C1C]/20 bg-[#1C1C1C]/[0.05] text-[#1C1C1C]"
+            : "border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]/60 group-hover:text-[#1C1C1C]"
         )}
       >
         <Icon className="size-4.5" />
@@ -75,7 +75,7 @@ function SidebarNavItem({
             {item.title}
           </span>
           {item.description ? (
-            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            <span className="mt-0.5 block truncate text-xs text-[#1C1C1C]/60">
               {item.description}
             </span>
           ) : null}
@@ -83,7 +83,7 @@ function SidebarNavItem({
       )}
       {!collapsed && item.badge ? (
         <Badge
-          className="shrink-0 bg-primary/10 text-primary hover:bg-primary/10"
+          className="shrink-0 bg-[#1C1C1C]/10 text-[#1C1C1C] hover:bg-[#1C1C1C]/10"
           variant="secondary"
         >
           {item.badge}
@@ -149,17 +149,17 @@ export function AppSidebar() {
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
-      <div className="border-b border-sidebar-border/70 px-4 py-4">
+      <div className="border-b border-[#1C1C1C]/10 px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-3xl bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-emerald-950/10">
+          <div className="flex size-11 items-center justify-center border border-[#1C1C1C]/20 bg-[#1C1C1C] text-[#F9F8F6]">
             <PanelLeftOpen className="size-5" />
           </div>
           {!collapsed ? (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-foreground">
+              <p className="truncate text-sm font-semibold text-[#1C1C1C]">
                 CareerPilot
               </p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-xs text-[#1C1C1C]/60">
                 AI 求职工作台
               </p>
             </div>
@@ -191,20 +191,20 @@ export function AppSidebar() {
 
       <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
         {!collapsed ? (
-          <div className="rounded-[28px] border border-sidebar-border/70 bg-white/80 p-4 shadow-sm">
-            <Badge className="mb-3 bg-primary/10 text-primary hover:bg-primary/10">
+          <div className="border border-[#1C1C1C]/10 bg-[#F9F8F6] p-4">
+            <Badge className="mb-3 bg-[#1C1C1C]/10 text-[#1C1C1C] hover:bg-[#1C1C1C]/10">
               Dashboard Shell
             </Badge>
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-sm font-medium text-[#1C1C1C]">
               左侧导航已经独立成组件，后续页面只需要填内容区。
             </p>
             {activeSection ? (
-              <p className="mt-2 text-xs leading-6 text-muted-foreground">
+              <p className="mt-2 text-xs leading-6 text-[#1C1C1C]/60">
                 当前定位到「{activeSection.title}
                 」分组，后续加页面时只需要补充对应路由。
               </p>
             ) : (
-              <p className="mt-2 text-xs leading-6 text-muted-foreground">
+              <p className="mt-2 text-xs leading-6 text-[#1C1C1C]/60">
                 当前 dashboard 路由还在搭建中，这里已经预留好统一菜单入口。
               </p>
             )}
@@ -214,7 +214,7 @@ export function AppSidebar() {
         {dashboardNavSections.map((section) => (
           <section className="space-y-2" key={section.title}>
             {!collapsed ? (
-              <div className="px-3 text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+              <div className="px-3 text-xs font-semibold tracking-[0.18em] text-[#1C1C1C]/60 uppercase">
                 {section.title}
               </div>
             ) : null}
@@ -233,17 +233,17 @@ export function AppSidebar() {
         ))}
       </div>
 
-      <div className="border-t border-sidebar-border/70 px-3 py-3">
+      <div className="border-t border-[#1C1C1C]/10 px-3 py-3">
         <div
           className={cn(
-            "rounded-[26px] border border-sidebar-border/70 bg-white/80 p-3 shadow-sm",
+            "border border-[#1C1C1C]/10 bg-[#F9F8F6] p-3",
             collapsed ? "flex justify-center px-2 py-3" : ""
           )}
         >
           {collapsed ? (
             <Button
               aria-label="退出登录"
-              className="size-10 rounded-2xl"
+              className="size-10"
               disabled={isLoggingOut}
               onClick={() => void handleLogout()}
               size="icon"
@@ -255,18 +255,18 @@ export function AppSidebar() {
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
+                <div className="flex size-10 items-center justify-center border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
                   <Menu className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
+                  <p className="truncate text-sm font-medium text-[#1C1C1C]">
                     {isBootstrapping
                       ? "正在恢复登录态"
                       : isAuthenticated
                       ? user?.nickname || user?.email
                       : "未登录"}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-xs text-[#1C1C1C]/60">
                     {isAuthenticated
                       ? user?.email
                       : "登录后可直接进入求职工作台"}
@@ -277,7 +277,7 @@ export function AppSidebar() {
               <div className="flex items-center gap-2">
                 <Button
                   asChild
-                  className="flex-1 rounded-2xl"
+                  className="flex-1"
                   size="sm"
                   variant="outline"
                 >
@@ -285,7 +285,7 @@ export function AppSidebar() {
                 </Button>
                 {isAuthenticated ? (
                   <Button
-                    className="rounded-2xl"
+                    className=""
                     disabled={isLoggingOut}
                     onClick={() => void handleLogout()}
                     size="sm"
@@ -296,7 +296,7 @@ export function AppSidebar() {
                     <LogOut className="size-4" />
                   </Button>
                 ) : (
-                  <Button asChild className="rounded-2xl" size="sm">
+                  <Button asChild className="" size="sm">
                     <Link href="/login">去登录</Link>
                   </Button>
                 )}
@@ -311,7 +311,7 @@ export function AppSidebar() {
   return (
     <>
       <Button
-        className="fixed left-4 top-4 z-30 rounded-2xl border-sidebar-border/70 bg-white/90 shadow-lg md:hidden"
+        className="fixed left-4 top-4 z-30 border-[#1C1C1C]/20 bg-white/90 md:hidden"
         onClick={() => setMobileOpen(true)}
         size="icon"
         type="button"
@@ -323,7 +323,7 @@ export function AppSidebar() {
       {mobileOpen ? (
         <button
           aria-label="关闭侧边栏蒙层"
-          className="fixed inset-0 z-40 bg-foreground/18 backdrop-blur-[2px] md:hidden"
+          className="fixed inset-0 z-40 bg-[#1C1C1C]/10 md:hidden"
           onClick={() => setMobileOpen(false)}
           type="button"
         />
@@ -331,7 +331,7 @@ export function AppSidebar() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 h-screen border-r border-sidebar-border/70 bg-sidebar/94 backdrop-blur-xl transition-transform duration-300 md:sticky md:top-0 md:z-20 md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 h-screen border-r border-[#1C1C1C]/10 bg-[#F9F8F6]/95 backdrop-blur transition-transform duration-300 md:sticky md:top-0 md:z-20 md:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           collapsed ? "w-[88px]" : "w-[296px]"
         )}
