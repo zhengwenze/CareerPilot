@@ -130,17 +130,17 @@ function PaperSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
-      <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+    <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
+      <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
         {eyebrow ? (
           <div className="mb-3 flex items-center gap-3">
-            <span className="size-2.5 bg-[#2f55d4]" />
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+            <span className="size-2.5 bg-[#1C1C1C]" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
               {eyebrow}
             </p>
           </div>
         ) : null}
-        <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+        <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
           {title}
         </h2>
       </div>
@@ -510,25 +510,25 @@ export default function DashboardResumePage() {
 
   return (
     <div className="space-y-6">
-      <header className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
         <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="inline-flex items-center border-2 border-black bg-[#f9f7f0] px-5 py-3 shadow-[4px_4px_0_0_#000]">
-              <span className="mr-4 text-2xl leading-none text-[#2f55d4]">
+            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
+              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">
                 *
               </span>
-              <span className="text-[1.55rem] font-black uppercase tracking-[-0.06em] text-black sm:text-[1.8rem]">
+              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
                 Resume Center
               </span>
             </div>
 
-            <div className="mt-6 inline-block border-2 border-black bg-[#2f55d4] px-4 py-2 shadow-[5px_5px_0_0_#000]">
-              <h1 className="text-3xl font-semibold tracking-[-0.08em] text-white sm:text-4xl">
+            <div className="mt-6">
+              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
                 简历中心
               </h1>
             </div>
 
-            <p className="mt-5 max-w-3xl text-base leading-8 text-[#38445a] sm:text-[1.05rem]">
+            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
               上传 PDF
               简历、查看解析状态、修正结构化结果，并从同一工作台完成下载、
               重试解析与删除等操作。
@@ -536,10 +536,10 @@ export default function DashboardResumePage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <div className="border-2 border-black bg-[#f13798] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
               {resumes.length} 份简历
             </div>
-            <div className="border-2 border-black bg-[#10bf7a] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
               {selectedResume ? "已选中详情" : "等待选择"}
             </div>
           </div>
@@ -547,11 +547,11 @@ export default function DashboardResumePage() {
       </header>
 
       {pageError ? (
-        <Alert className="border-2 border-black bg-[#fff1f1] text-black shadow-[6px_6px_0_0_#000]">
-          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
             操作提示
           </AlertTitle>
-          <AlertDescription className="text-sm leading-7 text-black/72">
+          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
             {pageError}
           </AlertDescription>
         </Alert>
@@ -582,15 +582,15 @@ export default function DashboardResumePage() {
           </PaperSection>
         </div>
 
-        <div className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
-          <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+        <div className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
+          <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
             <div className="mb-3 flex items-center gap-3">
-              <span className="size-2.5 bg-[#ff7a10]" />
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+              <span className="size-2.5 bg-[#1C1C1C]" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                 Structured Resume Workspace
               </p>
             </div>
-            <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+            <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
               简历详情与结构化编辑
             </h2>
           </div>
