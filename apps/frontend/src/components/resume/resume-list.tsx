@@ -4,7 +4,6 @@ import { FileText } from "lucide-react";
 
 import { getResumeStatusMeta } from "@/components/resume/status-meta";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { ResumeRecord } from "@/lib/api/modules/resume";
 
@@ -27,56 +26,49 @@ export function ResumeList({
   onSelect: (resumeId: string) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-0">
       {items.map((item) => {
         const isActive = item.id === selectedResumeId;
         const statusMeta = getResumeStatusMeta(item.parse_status);
 
         return (
           <button
-            className="block w-full text-left"
+            className="block w-full text-left transition-none"
             key={item.id}
             onClick={() => onSelect(item.id)}
             type="button"
           >
-            <Card
+            <div
               className={cn(
-                "rounded-[2rem] border py-0 shadow-none transition-all",
+                "border-2 border-black p-4",
                 isActive
-                  ? "border-[#0071E3]/30 bg-[#F5F9FF]"
-                  : "border-black/10 bg-white hover:border-black/20"
+                  ? "bg-black text-white"
+                  : "bg-white text-black hover:bg-gray-100"
               )}
             >
-              <CardContent className="space-y-3 px-5 py-5">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[#f5f5f7] text-black">
-                    <FileText className="size-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-black">
-                      {item.file_name}
-                    </p>
-                    <p className="mt-1 text-xs text-black/55">
-                      上传于 {formatDate(item.created_at)}
-                    </p>
-                  </div>
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center border-2 border-black bg-white">
+                  <FileText className="size-4 text-black" />
                 </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-sm font-bold text-black">
+                    {item.file_name}
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-black">
+                    上传于 {formatDate(item.created_at)}
+                  </p>
+                </div>
+              </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <Badge
-                    className={cn(
-                      "rounded-full px-3 py-1 hover:bg-inherit",
-                      statusMeta.className
-                    )}
-                  >
-                    {statusMeta.label}
-                  </Badge>
-                  <span className="text-xs text-black/45">
-                    v{item.latest_version}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <Badge className={cn("font-mono text-xs", statusMeta.className)}>
+                  {statusMeta.label}
+                </Badge>
+                <span className="font-mono text-xs text-black">
+                  v{item.latest_version}
+                </span>
+              </div>
+            </div>
           </button>
         );
       })}

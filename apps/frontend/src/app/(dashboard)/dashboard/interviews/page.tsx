@@ -12,6 +12,12 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
+import { PaperTextarea } from "@/components/brutalist/form-controls";
+import {
+  PageHeader,
+  PageShell,
+  PaperSection,
+} from "@/components/brutalist/page-shell";
 import {
   PageEmptyState,
   PageErrorState,
@@ -118,62 +124,13 @@ function getNextActionMessage(value: string | undefined) {
 
 function upsertSession(
   items: MockInterviewSessionRecord[],
-  session: MockInterviewSessionRecord
+  session: MockInterviewSessionRecord,
 ) {
   const index = items.findIndex((item) => item.id === session.id);
   if (index === -1) {
     return [session, ...items];
   }
   return items.map((item) => (item.id === session.id ? session : item));
-}
-
-function PaperSection({
-  title,
-  eyebrow,
-  rightSlot,
-  accentClassName = "bg-[#1C1C1C]",
-  children,
-}: {
-  title: string;
-  eyebrow?: string;
-  rightSlot?: React.ReactNode;
-  accentClassName?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-      <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            {eyebrow ? (
-              <div className="mb-3 flex items-center gap-3">
-                <span className={`size-2.5 ${accentClassName}`} />
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
-                  {eyebrow}
-                </p>
-              </div>
-            ) : null}
-            <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
-              {title}
-            </h2>
-          </div>
-          {rightSlot}
-        </div>
-      </div>
-      <div className="px-5 py-5 sm:px-6">{children}</div>
-    </section>
-  );
-}
-
-function PaperTextarea(
-  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>
-) {
-  return (
-    <textarea
-      {...props}
-      className={`min-h-[180px] w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 py-3 text-sm leading-relaxed text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
-    />
-  );
 }
 
 export default function DashboardInterviewsPage() {
@@ -188,13 +145,15 @@ export default function DashboardInterviewsPage() {
   const [sessions, setSessions] = useState<MockInterviewSessionRecord[]>([]);
   const [selectedSession, setSelectedSession] =
     useState<MockInterviewSessionRecord | null>(null);
-  const [review, setReview] = useState<MockInterviewReviewResponse | null>(null);
+  const [review, setReview] = useState<MockInterviewReviewResponse | null>(
+    null,
+  );
   const [answerText, setAnswerText] = useState("");
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [isDeletingSessionId, setIsDeletingSessionId] = useState<string | null>(
-    null
+    null,
   );
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
@@ -289,7 +248,14 @@ export default function DashboardInterviewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [jobId, optimizationSessionId, reportId, router, sessionIdFromQuery, token]);
+  }, [
+    jobId,
+    optimizationSessionId,
+    reportId,
+    router,
+    sessionIdFromQuery,
+    token,
+  ]);
 
   if (!token) {
     return null;
@@ -354,7 +320,7 @@ export default function DashboardInterviewsPage() {
         token,
         selectedSession.id,
         selectedSession.current_turn.id,
-        nextAnswer
+        nextAnswer,
       );
       await loadSelectedSession(selectedSession.id);
       setStatusMessage(getNextActionMessage(result.next_action.type));
@@ -375,7 +341,10 @@ export default function DashboardInterviewsPage() {
     setStatusMessage("");
 
     try {
-      const nextReview = await finishMockInterviewSession(token, selectedSession.id);
+      const nextReview = await finishMockInterviewSession(
+        token,
+        selectedSession.id,
+      );
       await loadSelectedSession(selectedSession.id);
       setReview(nextReview);
       setStatusMessage("本场模拟已结束，复盘结果已生成。");
@@ -424,42 +393,24 @@ export default function DashboardInterviewsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-        <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
-              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">
-                *
-              </span>
-              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
-                Mock Interviews
-              </span>
-            </div>
-
-            <div className="mt-6">
-              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
-                模拟面试
-              </h1>
-            </div>
-
-            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
-              基于岗位快照与匹配报告进入真实问答训练，提交回答后即时生成追问或复盘。
-            </p>
-          </div>
-
-          <Button
-            asChild
-            className="border-b border-[#1C1C1C]/20 bg-white px-5 py-3 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5"
-            type="button"
-          >
-            <Link href={jobId ? `/dashboard/jobs?jobId=${jobId}` : "/dashboard/jobs"}>
+    <PageShell className="gap-6">
+      <PageHeader
+        description="基于岗位快照与匹配报告进入真实问答训练，提交回答后即时生成追问或复盘。"
+        eyebrow="Mock Interviews"
+        meta={
+          <Button asChild type="button" variant="secondary">
+            <Link
+              href={
+                jobId ? `/dashboard/jobs?jobId=${jobId}` : "/dashboard/jobs"
+              }
+            >
               返回岗位工作台
               <ArrowUpRight className="ml-2 size-4" />
             </Link>
           </Button>
-        </div>
-      </header>
+        }
+        title="模拟面试"
+      />
 
       {pageError ? (
         <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
@@ -506,10 +457,12 @@ export default function DashboardInterviewsPage() {
                     type="button"
                   >
                     <p className="text-sm font-semibold text-[#1C1C1C]">
-                      {getModeLabel(session.mode)} · {getSessionStatusLabel(session.status)}
+                      {getModeLabel(session.mode)} ·{" "}
+                      {getSessionStatusLabel(session.status)}
                     </p>
                     <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
-                      简历 v{session.source_resume_version} / 岗位 v{session.source_job_version}
+                      简历 v{session.source_resume_version} / 岗位 v
+                      {session.source_job_version}
                     </p>
                     <p className="mt-1 text-xs text-[#1C1C1C]/45">
                       {formatDate(session.created_at)}
@@ -530,10 +483,9 @@ export default function DashboardInterviewsPage() {
           <div className="space-y-6">
             <PaperSection
               title={`${getModeLabel(selectedSession.mode)} · ${getSessionStatusLabel(
-                selectedSession.status
+                selectedSession.status,
               )}`}
               eyebrow="Current Session"
-              accentClassName="bg-[#ff7a10]"
               rightSlot={
                 <div className="flex flex-wrap gap-3">
                   <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm text-[#1C1C1C]/60">
@@ -544,9 +496,11 @@ export default function DashboardInterviewsPage() {
                     disabled={isDeletingSessionId === selectedSession.id}
                     onClick={() => void handleDeleteSession(selectedSession.id)}
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                   >
-                    {isDeletingSessionId === selectedSession.id ? "删除中..." : "删除会话"}
+                    {isDeletingSessionId === selectedSession.id
+                      ? "删除中..."
+                      : "删除会话"}
                     <Trash2 className="ml-2 size-4" />
                   </Button>
                 </div>
@@ -604,20 +558,20 @@ export default function DashboardInterviewsPage() {
               ) : null}
             </PaperSection>
 
-            {selectedSession.status === "active" && selectedSession.current_turn ? (
+            {selectedSession.status === "active" &&
+            selectedSession.current_turn ? (
               <PaperSection
                 title="当前题目"
                 eyebrow={getQuestionSourceLabel(
-                  selectedSession.current_turn.question_source
+                  selectedSession.current_turn.question_source,
                 )}
-                accentClassName="bg-[#1C1C1C]"
                 rightSlot={
                   <Button
                     className="border-b border-[#1C1C1C]/20 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5"
                     disabled={isFinishing}
                     onClick={() => void handleFinishSession()}
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                   >
                     {isFinishing ? "结束中..." : "结束并生成复盘"}
                     <CheckCircle2 className="ml-2 size-4" />
@@ -663,7 +617,8 @@ export default function DashboardInterviewsPage() {
                     key={turn.id}
                   >
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
-                      第 {turn.turn_index} 轮 · {getQuestionSourceLabel(turn.question_source)}
+                      第 {turn.turn_index} 轮 ·{" "}
+                      {getQuestionSourceLabel(turn.question_source)}
                     </p>
                     <p className="mt-2 text-sm font-semibold text-[#1C1C1C]">
                       {turn.question_text}
@@ -686,7 +641,6 @@ export default function DashboardInterviewsPage() {
                 <PaperSection
                   title={`复盘总分 ${review.overall_score ?? "待计算"}`}
                   eyebrow="Review"
-                  accentClassName="bg-[#10bf7a]"
                 >
                   <p className="text-sm leading-7 text-[#1C1C1C]/68">
                     {review.review_json.overall_summary}
@@ -761,7 +715,10 @@ export default function DashboardInterviewsPage() {
                         key={`${item.title}-${item.reason}`}
                       >
                         <p className="text-sm font-semibold text-[#1C1C1C]">
-                          {item.title} · {item.task_type === "resume" ? "简历任务" : "面试任务"}
+                          {item.title} ·{" "}
+                          {item.task_type === "resume"
+                            ? "简历任务"
+                            : "面试任务"}
                         </p>
                         <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                           {item.instruction}
@@ -773,7 +730,10 @@ export default function DashboardInterviewsPage() {
                     ))}
                     <div className="border border-[#1C1C1C]/10 bg-white p-4">
                       <p className="text-sm font-semibold text-[#1C1C1C]">
-                        就绪信号：{getReadinessLabel(review.review_json.job_readiness_signal.status)}
+                        就绪信号：
+                        {getReadinessLabel(
+                          review.review_json.job_readiness_signal.status,
+                        )}
                       </p>
                       <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                         {review.review_json.job_readiness_signal.reason}
@@ -808,6 +768,6 @@ export default function DashboardInterviewsPage() {
           </div>
         )}
       </section>
-    </div>
+    </PageShell>
   );
 }

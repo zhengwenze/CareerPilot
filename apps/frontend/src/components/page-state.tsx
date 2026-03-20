@@ -1,7 +1,7 @@
 import { AlertTriangle, Inbox, LoaderCircle } from "lucide-react";
 
+import { PaperSection } from "@/components/brutalist/page-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type PageStateProps = {
   title: string;
@@ -24,32 +24,30 @@ function PageStateCard({
     ) : tone === "empty" ? (
       <Inbox className="size-5" />
     ) : (
-      <LoaderCircle className="size-5 animate-spin" />
+      <LoaderCircle className="size-5" />
     );
 
   return (
-    <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.06)]">
-      <CardHeader className="px-6 py-6 sm:px-8">
-        <div className="flex size-12 items-center justify-center rounded-2xl bg-[#f5f5f7] text-black">
+    <PaperSection
+      eyebrow={
+        tone === "error" ? "Error State" : tone === "empty" ? "Empty State" : "Loading State"
+      }
+      title={title}
+    >
+      <div className="flex items-start gap-4">
+        <div className="flex size-10 shrink-0 items-center justify-center border-2 border-black">
           {icon}
         </div>
-        <CardTitle className="pt-4 text-2xl font-semibold text-black">
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 px-6 pb-6 text-sm leading-7 text-black/70 sm:px-8 sm:pb-8">
-        <p>{description}</p>
-        {actionLabel && onAction ? (
-          <Button
-            className="rounded-full bg-[#0071E3] px-5 text-white hover:bg-[#0077ED]"
-            onClick={onAction}
-            type="button"
-          >
-            {actionLabel}
-          </Button>
-        ) : null}
-      </CardContent>
-    </Card>
+        <div className="space-y-4">
+          <p className="bw-muted-text">{description}</p>
+          {actionLabel && onAction ? (
+            <Button onClick={onAction} type="button">
+              {actionLabel}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </PaperSection>
   );
 }
 

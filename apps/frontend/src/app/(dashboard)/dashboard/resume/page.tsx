@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
+  MetaChip,
+  PageHeader,
+  PageShell,
+  PaperSection,
+} from "@/components/brutalist/page-shell";
+import {
   PageEmptyState,
   PageErrorState,
   PageLoadingState,
@@ -120,34 +126,7 @@ function upsertResumeRecord(items: ResumeRecord[], resume: ResumeRecord) {
   return items.map((item) => (item.id === resume.id ? resume : item));
 }
 
-function PaperSection({
-  title,
-  eyebrow,
-  children,
-}: {
-  title: string;
-  eyebrow?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-      <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
-        {eyebrow ? (
-          <div className="mb-3 flex items-center gap-3">
-            <span className="size-2.5 bg-[#1C1C1C]" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
-              {eyebrow}
-            </p>
-          </div>
-        ) : null}
-        <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
-          {title}
-        </h2>
-      </div>
-      <div className="px-5 py-5 sm:px-6">{children}</div>
-    </section>
-  );
-}
+
 
 export default function DashboardResumePage() {
   const { token } = useAuth();
@@ -509,64 +488,40 @@ export default function DashboardResumePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-        <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
-              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">
-                *
-              </span>
-              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
-                Resume Center
-              </span>
-            </div>
-
-            <div className="mt-6">
-              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
-                简历中心
-              </h1>
-            </div>
-
-            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
-              上传 PDF
-              简历、查看解析状态、修正结构化结果，并从同一工作台完成下载、
-              重试解析与删除等操作。
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
-              {resumes.length} 份简历
-            </div>
-            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
-              {selectedResume ? "已选中详情" : "等待选择"}
-            </div>
-          </div>
-        </div>
-      </header>
+    <PageShell>
+      <PageHeader
+        description="上传 PDF 简历、查看解析状态、修正结构化结果，并从同一工作台完成下载、重试解析与删除等操作。"
+        eyebrow="Resume Center"
+        meta={
+          <>
+            <MetaChip>{resumes.length} 份简历</MetaChip>
+            <MetaChip>{selectedResume ? "已选中详情" : "等待选择"}</MetaChip>
+          </>
+        }
+        title="简历中心"
+      />
 
       {pageError ? (
-        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
-          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
+        <Alert className="border-2 border-black bg-white font-mono">
+          <AlertTitle className="font-serif text-lg font-bold text-black">
             操作提示
           </AlertTitle>
-          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
+          <AlertDescription className="font-mono text-sm leading-7 text-black">
             {pageError}
           </AlertDescription>
         </Alert>
       ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <PaperSection title="上传入口" eyebrow="Resume Upload">
+      <section className="grid gap-0 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="space-y-0">
+          <div className="pt-4">
             <ResumeUploadCard
               isUploading={isUploading}
               onUpload={handleUpload}
             />
-          </PaperSection>
+          </div>
 
-          <PaperSection title="简历列表" eyebrow="Stored Files">
+          <PaperSection className="border-t-0" title="简历列表" eyebrow="Resume List">
             {resumes.length === 0 ? (
               <PageEmptyState
                 description="先上传一份 PDF 简历，系统会自动进入解析流程。"
@@ -582,20 +537,12 @@ export default function DashboardResumePage() {
           </PaperSection>
         </div>
 
-        <div className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-          <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
-            <div className="mb-3 flex items-center gap-3">
-              <span className="size-2.5 bg-[#1C1C1C]" />
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
-                Structured Resume Workspace
-              </p>
-            </div>
-            <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
-              简历详情与结构化编辑
-            </h2>
-          </div>
-
-          <div className="px-5 py-5 sm:px-6">
+        <PaperSection
+          bodyClassName="p-5 sm:p-6"
+          className="border-l-0 border-t-0"
+          title="简历详情与结构化编辑"
+          eyebrow="Structured Resume Workspace"
+        >
             <ResumeDetailPanel
               isDeleting={isDeleting}
               isStructuredDirty={isStructuredDirty}
@@ -613,9 +560,8 @@ export default function DashboardResumePage() {
               resume={selectedResume}
               structuredValue={structuredValue}
             />
-          </div>
-        </div>
+        </PaperSection>
       </section>
-    </div>
+    </PageShell>
   );
 }

@@ -10,17 +10,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-white text-black hover:bg-black hover:text-white border-2 border-t-white border-l-white border-r-black border-b-black active:border-t-black active:border-l-black active:border-r-white active:border-b-white",
+          "bg-[#dfdfdf] text-black hover:text-[#0000ff] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
         primary:
-          "bg-black text-white hover:bg-gray-800 border-2 border-t-white border-l-white border-r-black border-b-black active:border-t-black active:border-l-black active:border-r-white active:border-b-white",
+          "bg-[#dfdfdf] text-black hover:text-[#0000ff] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
         secondary:
-          "bg-white text-black hover:bg-gray-100 border-2 border-black active:border-t-black active:border-l-black active:border-r-white active:border-b-white",
+          "bg-white text-black hover:text-[#0000ff] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
         destructive:
-          "bg-white text-red hover:bg-red hover:text-white border-2 border-t-white border-l-white border-r-black border-b-black active:border-t-black active:border-l-black active:border-r-white active:border-b-white",
+          "bg-white text-[#ff0000] hover:text-[#ff0000] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
         link:
-          "bg-transparent text-blue-500 underline border-0 hover:text-red",
+          "border-0 bg-transparent p-0 text-[#0000ff] underline hover:text-[#ff0000]",
         ghost:
-          "bg-transparent text-black hover:bg-gray-100 border-2 border-transparent hover:border-black",
+          "bg-transparent text-black hover:text-[#0000ff] border border-transparent",
       },
       size: {
         default: "h-10 px-4 py-2 gap-2",

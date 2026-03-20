@@ -6,6 +6,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
 import {
+  PaperInput,
+  PaperSelect,
+  PaperTextarea,
+} from "@/components/brutalist/form-controls";
+import {
+  MetaChip,
+  PageHeader,
+  PageShell,
+  PaperSection,
+} from "@/components/brutalist/page-shell";
+import {
   PageEmptyState,
   PageErrorState,
   PageLoadingState,
@@ -122,77 +133,9 @@ function getPreferredResumeId(job: JobRecord | null, resumes: ResumeRecord[]) {
     job?.recommended_resume_id ??
     [...resumes]
       .filter((item) => item.parse_status === "success")
-      .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))[0]?.id ??
+      .sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))[0]
+      ?.id ??
     ""
-  );
-}
-
-function PaperSection({
-  title,
-  eyebrow,
-  rightSlot,
-  accentClassName = "bg-[#1C1C1C]",
-  children,
-}: {
-  title: string;
-  eyebrow?: string;
-  rightSlot?: React.ReactNode;
-  accentClassName?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-      <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            {eyebrow ? (
-              <div className="mb-3 flex items-center gap-3">
-                <span className={`size-2.5 ${accentClassName}`} />
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
-                  {eyebrow}
-                </p>
-              </div>
-            ) : null}
-            <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
-              {title}
-            </h2>
-          </div>
-          {rightSlot}
-        </div>
-      </div>
-      <div className="px-5 py-5 sm:px-6">{children}</div>
-    </section>
-  );
-}
-
-function PaperInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`h-12 w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 text-sm text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
-    />
-  );
-}
-
-function PaperTextarea(
-  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>,
-) {
-  return (
-    <textarea
-      {...props}
-      className={`min-h-[260px] w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 py-3 text-sm leading-relaxed text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
-    />
-  );
-}
-
-function PaperSelect(
-  props: React.SelectHTMLAttributes<HTMLSelectElement>,
-) {
-  return (
-    <select
-      {...props}
-      className={`h-12 w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 text-sm text-[#1C1C1C] outline-none ${props.className ?? ""}`}
-    />
   );
 }
 
@@ -202,21 +145,19 @@ function PaperButton({
   className = "",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "danger" | "success";
+  variant?: "primary" | "secondary" | "danger";
 }) {
   const variantClassName =
     variant === "primary"
-      ? "bg-[#1C1C1C] text-white"
+      ? "border-2 border-black bg-black text-white hover:bg-black/80"
       : variant === "danger"
-        ? "bg-[#F9F8F6] text-[#1C1C1C]"
-        : variant === "success"
-          ? "bg-[#1C1C1C] text-white"
-          : "bg-[#F9F8F6] text-[#1C1C1C]";
+        ? "border-2 border-black bg-white text-black hover:bg-gray-100"
+        : "border-2 border-black bg-white text-black hover:bg-gray-100";
 
   return (
     <button
       {...props}
-      className={`border-b border-[#1C1C1C]/20 px-5 py-3 text-sm font-medium transition-colors hover:bg-[#1C1C1C]/5 disabled:cursor-not-allowed disabled:opacity-60 ${variantClassName} ${className}`}
+      className={`px-5 py-2 font-mono text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${variantClassName} ${className}`}
     >
       {children}
     </button>
@@ -240,7 +181,9 @@ export default function DashboardJobsPage() {
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isOpeningOptimizer, setIsOpeningOptimizer] = useState(false);
   const [isDeletingJob, setIsDeletingJob] = useState(false);
-  const [isDeletingReportId, setIsDeletingReportId] = useState<string | null>(null);
+  const [isDeletingReportId, setIsDeletingReportId] = useState<string | null>(
+    null,
+  );
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [showMoreInfo, setShowMoreInfo] = useState(false);
@@ -279,7 +222,7 @@ export default function DashboardJobsPage() {
           preferredJobIdFromQuery &&
           nextJobs.some((item) => item.id === preferredJobIdFromQuery)
             ? preferredJobIdFromQuery
-            : nextJobs[0]?.id ?? null;
+            : (nextJobs[0]?.id ?? null);
         const nextJob = nextJobs.find((item) => item.id === nextJobId) ?? null;
 
         setJobs(nextJobs);
@@ -329,7 +272,7 @@ export default function DashboardJobsPage() {
         setSelectedReportId((current) =>
           current && nextReports.some((item) => item.id === current)
             ? current
-            : nextReports[0]?.id ?? null,
+            : (nextReports[0]?.id ?? null),
         );
       } catch (error) {
         if (!cancelled) {
@@ -426,21 +369,26 @@ export default function DashboardJobsPage() {
     const nextSelectedJobId =
       preferredJobId && nextJobs.some((item) => item.id === preferredJobId)
         ? preferredJobId
-        : nextJobs[0]?.id ?? null;
-    const nextJob = nextJobs.find((item) => item.id === nextSelectedJobId) ?? null;
-    const nextReports =
-      nextSelectedJobId ? await fetchJobMatchReports(token, nextSelectedJobId) : [];
+        : (nextJobs[0]?.id ?? null);
+    const nextJob =
+      nextJobs.find((item) => item.id === nextSelectedJobId) ?? null;
+    const nextReports = nextSelectedJobId
+      ? await fetchJobMatchReports(token, nextSelectedJobId)
+      : [];
 
     setJobs(nextJobs);
     setResumes(nextResumes);
     setSelectedJobId(nextSelectedJobId);
     setJobDraft(nextJob ? toJobDraft(nextJob) : createEmptyJobDraft());
-    setSelectedResumeId((current) => current || getPreferredResumeId(nextJob, nextResumes));
+    setSelectedResumeId(
+      (current) => current || getPreferredResumeId(nextJob, nextResumes),
+    );
     setReports(nextReports);
     setSelectedReportId(
-      preferredReportId && nextReports.some((item) => item.id === preferredReportId)
+      preferredReportId &&
+        nextReports.some((item) => item.id === preferredReportId)
         ? preferredReportId
-        : nextReports[0]?.id ?? null,
+        : (nextReports[0]?.id ?? null),
     );
   }
 
@@ -586,7 +534,9 @@ export default function DashboardJobsPage() {
 
       await refreshPageState(workingJob.id, readyReport.id);
       setWorkflowStatus("ready");
-      setStatusMessage("匹配报告已生成，你现在可以直接查看结论并进入简历优化。");
+      setStatusMessage(
+        "匹配报告已生成，你现在可以直接查看结论并进入简历优化。",
+      );
     } catch (error) {
       setWorkflowStatus("failed");
       setPageError(getErrorMessage(error));
@@ -673,7 +623,9 @@ export default function DashboardJobsPage() {
     }
 
     if (selectedReport.status !== "success") {
-      setPageError(`当前报告状态为 ${selectedReport.status}，请完成后再进入简历优化。`);
+      setPageError(
+        `当前报告状态为 ${selectedReport.status}，请完成后再进入简历优化。`,
+      );
       return;
     }
 
@@ -681,7 +633,10 @@ export default function DashboardJobsPage() {
     setPageError("");
 
     try {
-      const session = await createResumeOptimizationSession(token, selectedReport.id);
+      const session = await createResumeOptimizationSession(
+        token,
+        selectedReport.id,
+      );
       router.push(
         `/dashboard/optimizer?sessionId=${session.id}&jobId=${selectedJobId}&reportId=${selectedReport.id}`,
       );
@@ -699,46 +654,30 @@ export default function DashboardJobsPage() {
     }
 
     if (selectedReport.status !== "success") {
-      setPageError(`当前报告状态为 ${selectedReport.status}，请完成后再进入模拟面试。`);
+      setPageError(
+        `当前报告状态为 ${selectedReport.status}，请完成后再进入模拟面试。`,
+      );
       return;
     }
 
-    router.push(`/dashboard/interviews?reportId=${selectedReport.id}&jobId=${selectedJobId}`);
+    router.push(
+      `/dashboard/interviews?reportId=${selectedReport.id}&jobId=${selectedJobId}`,
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-        <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
-              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">*</span>
-              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
-                Job Matching
-              </span>
-            </div>
-
-            <div className="mt-6">
-              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
-                岗位匹配
-              </h1>
-            </div>
-
-            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
-              把 JD 转成岗位目标，并基于已解析简历生成一份可执行的匹配报告。
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
-              {jobs.length} 个岗位
-            </div>
-            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
-              {reports.length} 份报告
-            </div>
-          </div>
-        </div>
-      </header>
+    <PageShell className="gap-6">
+      <PageHeader
+        description="把 JD 转成岗位目标，并基于已解析简历生成一份可执行的匹配报告。"
+        eyebrow="Job Matching"
+        meta={
+          <>
+            <MetaChip>{jobs.length} 个岗位</MetaChip>
+            <MetaChip>{reports.length} 份报告</MetaChip>
+          </>
+        }
+        title="岗位匹配"
+      />
 
       {pageError ? (
         <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
@@ -778,7 +717,6 @@ export default function DashboardJobsPage() {
           <PaperSection
             title="输入岗位目标"
             eyebrow="Job Input"
-            accentClassName="bg-[#f13798]"
             rightSlot={
               <div className="flex flex-wrap gap-3">
                 {jobs.length > 0 ? (
@@ -790,10 +728,15 @@ export default function DashboardJobsPage() {
                           resetToNewJob();
                           return;
                         }
-                        const nextJob = jobs.find((item) => item.id === nextJobId) ?? null;
+                        const nextJob =
+                          jobs.find((item) => item.id === nextJobId) ?? null;
                         setSelectedJobId(nextJobId);
-                        setJobDraft(nextJob ? toJobDraft(nextJob) : createEmptyJobDraft());
-                        setSelectedResumeId(getPreferredResumeId(nextJob, resumes));
+                        setJobDraft(
+                          nextJob ? toJobDraft(nextJob) : createEmptyJobDraft(),
+                        );
+                        setSelectedResumeId(
+                          getPreferredResumeId(nextJob, resumes),
+                        );
                         setPageError("");
                         setStatusMessage("");
                         setWorkflowStatus("idle");
@@ -810,7 +753,11 @@ export default function DashboardJobsPage() {
                   </div>
                 ) : null}
 
-                <PaperButton onClick={resetToNewJob} type="button" variant="secondary">
+                <PaperButton
+                  onClick={resetToNewJob}
+                  type="button"
+                  variant="secondary"
+                >
                   新建岗位
                 </PaperButton>
               </div>
@@ -818,7 +765,10 @@ export default function DashboardJobsPage() {
           >
             <div className="space-y-5">
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-black" htmlFor="job-title">
+                <label
+                  className="text-sm font-medium text-black"
+                  htmlFor="job-title"
+                >
                   岗位标题
                 </label>
                 <PaperInput
@@ -830,12 +780,17 @@ export default function DashboardJobsPage() {
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-black" htmlFor="job-jd-text">
+                <label
+                  className="text-sm font-medium text-black"
+                  htmlFor="job-jd-text"
+                >
                   JD 原文
                 </label>
                 <PaperTextarea
                   id="job-jd-text"
-                  onChange={(event) => updateDraft("jd_text", event.target.value)}
+                  onChange={(event) =>
+                    updateDraft("jd_text", event.target.value)
+                  }
                   placeholder="直接粘贴完整职位描述。点击一次后，系统会自动完成结构化与 Minimax 匹配。"
                   value={jobDraft.jd_text}
                 />
@@ -852,29 +807,42 @@ export default function DashboardJobsPage() {
               {showMoreInfo ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="grid gap-2">
-                    <label className="text-sm font-medium text-black" htmlFor="job-company">
+                    <label
+                      className="text-sm font-medium text-black"
+                      htmlFor="job-company"
+                    >
                       公司
                     </label>
                     <PaperInput
                       id="job-company"
-                      onChange={(event) => updateDraft("company", event.target.value)}
+                      onChange={(event) =>
+                        updateDraft("company", event.target.value)
+                      }
                       value={jobDraft.company}
                     />
                   </div>
 
                   <div className="grid gap-2">
-                    <label className="text-sm font-medium text-black" htmlFor="job-city">
+                    <label
+                      className="text-sm font-medium text-black"
+                      htmlFor="job-city"
+                    >
                       城市
                     </label>
                     <PaperInput
                       id="job-city"
-                      onChange={(event) => updateDraft("job_city", event.target.value)}
+                      onChange={(event) =>
+                        updateDraft("job_city", event.target.value)
+                      }
                       value={jobDraft.job_city}
                     />
                   </div>
 
                   <div className="grid gap-2">
-                    <label className="text-sm font-medium text-black" htmlFor="job-type">
+                    <label
+                      className="text-sm font-medium text-black"
+                      htmlFor="job-type"
+                    >
                       用工类型
                     </label>
                     <PaperInput
@@ -895,7 +863,9 @@ export default function DashboardJobsPage() {
                     </label>
                     <PaperInput
                       id="job-source-name"
-                      onChange={(event) => updateDraft("source_name", event.target.value)}
+                      onChange={(event) =>
+                        updateDraft("source_name", event.target.value)
+                      }
                       value={jobDraft.source_name}
                     />
                   </div>
@@ -909,7 +879,9 @@ export default function DashboardJobsPage() {
                     </label>
                     <PaperInput
                       id="job-source-url"
-                      onChange={(event) => updateDraft("source_url", event.target.value)}
+                      onChange={(event) =>
+                        updateDraft("source_url", event.target.value)
+                      }
                       value={jobDraft.source_url}
                     />
                   </div>
@@ -921,7 +893,6 @@ export default function DashboardJobsPage() {
           <PaperSection
             title="生成匹配报告"
             eyebrow="Matching Workflow"
-            accentClassName="bg-[#2f55d4]"
             rightSlot={
               <PaperButton
                 disabled={
@@ -946,7 +917,10 @@ export default function DashboardJobsPage() {
               {availableResumes.length === 0 ? (
                 <div className="border border-dashed border-[#1C1C1C]/20 bg-[#F9F8F6]/50 px-4 py-4 text-sm leading-relaxed text-[#1C1C1C]/60">
                   当前没有可用简历。请先到{" "}
-                  <Link className="font-medium text-[#1C1C1C] underline underline-offset-4" href="/dashboard/resume">
+                  <Link
+                    className="font-medium text-[#1C1C1C] underline underline-offset-4"
+                    href="/dashboard/resume"
+                  >
                     简历中心
                   </Link>{" "}
                   完成至少一份解析。
@@ -954,10 +928,13 @@ export default function DashboardJobsPage() {
               ) : (
                 <>
                   <div className="border border-[#1C1C1C]/10 bg-white px-4 py-4">
-                    <p className="text-sm font-medium text-[#1C1C1C]">默认使用的简历</p>
+                    <p className="text-sm font-medium text-[#1C1C1C]">
+                      默认使用的简历
+                    </p>
                     <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
-                      {availableResumes.find((item) => item.id === selectedResumeId)?.file_name ||
-                        availableResumes[0]?.file_name}
+                      {availableResumes.find(
+                        (item) => item.id === selectedResumeId,
+                      )?.file_name || availableResumes[0]?.file_name}
                     </p>
                     <button
                       className="mt-3 text-sm font-medium text-[#1C1C1C] underline underline-offset-4"
@@ -978,8 +955,12 @@ export default function DashboardJobsPage() {
                       </label>
                       <PaperSelect
                         id="resume-select"
-                        onChange={(event) => setSelectedResumeId(event.target.value)}
-                        value={selectedResumeId || availableResumes[0]?.id || ""}
+                        onChange={(event) =>
+                          setSelectedResumeId(event.target.value)
+                        }
+                        value={
+                          selectedResumeId || availableResumes[0]?.id || ""
+                        }
                       >
                         {availableResumes.map((resume) => (
                           <option key={resume.id} value={resume.id}>
@@ -1028,18 +1009,16 @@ export default function DashboardJobsPage() {
           </PaperSection>
 
           {showHistory && reports.length > 0 ? (
-            <PaperSection
-              title="历史报告"
-              eyebrow="Report Archive"
-              accentClassName="bg-[#10bf7a]"
-            >
+            <PaperSection title="历史报告" eyebrow="Report Archive">
               <div className="space-y-3">
                 {reports.map((report) => {
                   const isActive = report.id === selectedReportId;
                   return (
                     <div
                       className={`flex flex-wrap items-center justify-between gap-3 border border-[#1C1C1C]/10 px-4 py-4 ${
-                        isActive ? "bg-[#1C1C1C] text-white" : "bg-white text-[#1C1C1C]"
+                        isActive
+                          ? "bg-[#1C1C1C] text-white"
+                          : "bg-white text-[#1C1C1C]"
                       }`}
                       key={report.id}
                     >
@@ -1071,7 +1050,9 @@ export default function DashboardJobsPage() {
                         variant={isActive ? "secondary" : "danger"}
                         className={isActive ? "bg-white text-black" : ""}
                       >
-                        {isDeletingReportId === report.id ? "删除中..." : "删除"}
+                        {isDeletingReportId === report.id
+                          ? "删除中..."
+                          : "删除"}
                       </PaperButton>
                     </div>
                   );
@@ -1096,7 +1077,6 @@ export default function DashboardJobsPage() {
                     : `报告状态：${selectedReport.status}`
                 }
                 eyebrow="Match Report"
-                accentClassName="bg-[#ff7a10]"
                 rightSlot={
                   <div className="flex flex-wrap gap-3">
                     <PaperButton
@@ -1108,7 +1088,10 @@ export default function DashboardJobsPage() {
                       去模拟面试
                     </PaperButton>
                     <PaperButton
-                      disabled={selectedReport.status !== "success" || isOpeningOptimizer}
+                      disabled={
+                        selectedReport.status !== "success" ||
+                        isOpeningOptimizer
+                      }
                       onClick={handleOpenOptimizer}
                       type="button"
                       variant="primary"
@@ -1163,16 +1146,14 @@ export default function DashboardJobsPage() {
               </section>
 
               <section className="grid gap-5 md:grid-cols-2">
-                <PaperSection
-                  title="匹配证据"
-                  eyebrow="Evidence"
-                  accentClassName="bg-[#2f55d4]"
-                >
+                <PaperSection title="匹配证据" eyebrow="Evidence">
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
                     已命中的 JD 关键项
                   </p>
                   <p className="mt-2 text-sm leading-7 text-black/68">
-                    {Object.values(selectedReport.evidence_map_json.matched_jd_fields ?? {})
+                    {Object.values(
+                      selectedReport.evidence_map_json.matched_jd_fields ?? {},
+                    )
                       .flat()
                       .join("、") || "暂无"}
                   </p>
@@ -1181,15 +1162,12 @@ export default function DashboardJobsPage() {
                     证据备注
                   </p>
                   <p className="mt-2 text-sm leading-7 text-black/68">
-                    {selectedReport.evidence_map_json.notes?.join("；") || "暂无"}
+                    {selectedReport.evidence_map_json.notes?.join("；") ||
+                      "暂无"}
                   </p>
                 </PaperSection>
 
-                <PaperSection
-                  title="差距分析"
-                  eyebrow="Gap Analysis"
-                  accentClassName="bg-[#f13798]"
-                >
+                <PaperSection title="差距分析" eyebrow="Gap Analysis">
                   <div className="space-y-3">
                     {(selectedReport.gap_taxonomy_json.must_fix ?? [])
                       .slice(0, 3)
@@ -1198,7 +1176,9 @@ export default function DashboardJobsPage() {
                           <p className="text-sm font-semibold text-black">
                             必须补：{item.label}
                           </p>
-                          <p className="text-sm leading-7 text-black/68">{item.reason}</p>
+                          <p className="text-sm leading-7 text-black/68">
+                            {item.reason}
+                          </p>
                         </div>
                       ))}
 
@@ -1209,25 +1189,25 @@ export default function DashboardJobsPage() {
                           <p className="text-sm font-semibold text-black">
                             建议补：{item.label}
                           </p>
-                          <p className="text-sm leading-7 text-black/68">{item.reason}</p>
+                          <p className="text-sm leading-7 text-black/68">
+                            {item.reason}
+                          </p>
                         </div>
                       ))}
 
                     {selectedReport.evidence_map_json.missing_items?.length ? (
                       <p className="text-sm leading-7 text-black/68">
                         缺失项：
-                        {selectedReport.evidence_map_json.missing_items.join("、")}
+                        {selectedReport.evidence_map_json.missing_items.join(
+                          "、",
+                        )}
                       </p>
                     ) : null}
                   </div>
                 </PaperSection>
               </section>
 
-              <PaperSection
-                title="下一步动作"
-                eyebrow="Tailoring Plan"
-                accentClassName="bg-[#10bf7a]"
-              >
+              <PaperSection title="下一步动作" eyebrow="Tailoring Plan">
                 <div className="space-y-3">
                   {(selectedReport.tailoring_plan_json.rewrite_tasks ?? [])
                     .slice(0, 3)
@@ -1243,8 +1223,8 @@ export default function DashboardJobsPage() {
                       </div>
                     ))}
 
-                  {(selectedReport.tailoring_plan_json.rewrite_tasks ?? []).length ===
-                  0 ? (
+                  {(selectedReport.tailoring_plan_json.rewrite_tasks ?? [])
+                    .length === 0 ? (
                     <p className="text-sm text-black/58">
                       当前报告还没有生成可执行任务。
                     </p>
@@ -1255,6 +1235,6 @@ export default function DashboardJobsPage() {
           )}
         </div>
       </section>
-    </div>
+    </PageShell>
   );
 }

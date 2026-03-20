@@ -11,7 +11,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type {
@@ -31,15 +30,15 @@ function formatDate(value: string) {
 
 function getAIMessageTone(status: string | null | undefined) {
   if (status === "pending") {
-    return "text-[#0071E3]";
+    return "text-black";
   }
   if (status === "fallback_rule") {
-    return "text-[#B26A00]";
+    return "text-black";
   }
   if (status === "skipped") {
-    return "text-black/58";
+    return "text-black";
   }
-  return "text-black/62";
+  return "text-black";
 }
 
 export function ResumeDetailPanel({
@@ -92,212 +91,205 @@ export function ResumeDetailPanel({
     );
 
   return (
-    <div className="space-y-5">
-      <Card className="rounded-[2rem] border border-black/10 bg-white py-0 shadow-[0_18px_48px_rgba(0,0,0,0.05)]">
-        <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  className={cn(
-                    "rounded-full px-3 py-1 hover:bg-inherit",
-                    statusMeta.className
-                  )}
-                >
-                  {statusMeta.label}
+    <div className="space-y-0">
+      <div className="border-2 border-black bg-white p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={cn("font-mono text-xs", statusMeta.className)}>
+                {statusMeta.label}
+              </Badge>
+              {aiStatusMeta ? (
+                <Badge className={cn("font-mono text-xs", aiStatusMeta.className)}>
+                  {aiStatusMeta.label}
                 </Badge>
-                {aiStatusMeta ? (
-                  <Badge
-                    className={cn(
-                      "rounded-full px-3 py-1 hover:bg-inherit",
-                      aiStatusMeta.className
-                    )}
-                  >
-                    {aiStatusMeta.label}
-                  </Badge>
-                ) : null}
-                {isStructuredDirty ? (
-                  <Badge className="rounded-full bg-[#FFF7E6] px-3 py-1 text-[#B26A00] hover:bg-[#FFF7E6]">
-                    有未保存修改
-                  </Badge>
-                ) : null}
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-3xl font-semibold tracking-[-0.04em] text-black">
-                  {resume.file_name}
-                </h2>
-                <p className="text-sm leading-7 text-black/62">
-                  上传时间 {formatDate(resume.created_at)}，文件大小{" "}
-                  {(resume.file_size / 1024).toFixed(1)} KB，当前版本 v
-                  {resume.latest_version}
-                </p>
-              </div>
-              {showLatestAIMessage ? (
-                <p
-                  className={cn(
-                    "text-sm",
-                    getAIMessageTone(resume.latest_parse_job?.ai_status)
-                  )}
-                >
-                  {latestAIMessage}
-                </p>
+              ) : null}
+              {isStructuredDirty ? (
+                <Badge className="border-2 border-black bg-white font-mono text-xs text-black">
+                  有未保存修改
+                </Badge>
               ) : null}
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
-                disabled={isRetrying}
-                onClick={onRetry}
-                type="button"
-                variant="outline"
-              >
-                {isRetrying ? "重新解析中..." : "重试解析"}
-                <RefreshCw className="size-4" />
-              </Button>
-              <Button
-                className="rounded-full border-black/10 bg-white text-black hover:bg-[#f5f5f7]"
-                onClick={onDownload}
-                type="button"
-                variant="outline"
-              >
-                下载原文件
-                <Download className="size-4" />
-              </Button>
-              <Button
-                className="rounded-full"
-                disabled={isDeleting}
-                onClick={onDelete}
-                type="button"
-                variant="destructive"
-              >
-                {isDeleting ? "删除中..." : "删除简历"}
-                <Trash2 className="size-4" />
-              </Button>
-              <Button
-                className="rounded-full bg-[#0071E3] text-white hover:bg-[#0077ED]"
-                disabled={isSaving || !isStructuredDirty}
-                onClick={onSave}
-                type="button"
-              >
-                {isSaving
-                  ? "保存中..."
-                  : isStructuredDirty
-                    ? "保存人工修正"
-                    : "暂无待保存修改"}
-                <Save className="size-4" />
-              </Button>
+            <div className="space-y-2">
+              <h2 className="font-serif text-3xl font-bold tracking-tight text-black">
+                {resume.file_name}
+              </h2>
+              <p className="font-mono text-sm leading-7 text-black">
+                上传时间 {formatDate(resume.created_at)}，文件大小{" "}
+                {(resume.file_size / 1024).toFixed(1)} KB，当前版本 v
+                {resume.latest_version}
+              </p>
             </div>
+            {showLatestAIMessage ? (
+              <p
+                className={cn(
+                  "font-mono text-sm",
+                  getAIMessageTone(resume.latest_parse_job?.ai_status)
+                )}
+              >
+                {latestAIMessage}
+              </p>
+            ) : null}
           </div>
 
-          {resume.parse_error ? (
-            <Alert className="mt-5 rounded-[1.5rem] border-[#ff3b30]/20 bg-[#fff5f5]">
-              <AlertTitle className="text-black">解析失败</AlertTitle>
-              <AlertDescription className="text-black/72">
-                {resume.parse_error}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-        </CardContent>
-      </Card>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={isRetrying}
+              onClick={onRetry}
+              type="button"
+              variant="secondary"
+            >
+              {isRetrying ? "重新解析中..." : "重试解析"}
+              <RefreshCw className="ml-2 size-4" />
+            </Button>
+            <Button
+              onClick={onDownload}
+              type="button"
+              variant="secondary"
+            >
+              下载原文件
+              <Download className="ml-2 size-4" />
+            </Button>
+            <Button
+              onClick={onDelete}
+              type="button"
+              variant="destructive"
+            >
+              {isDeleting ? "删除中..." : "删除简历"}
+              <Trash2 className="ml-2 size-4" />
+            </Button>
+            <Button
+              disabled={isSaving || !isStructuredDirty}
+              onClick={onSave}
+              type="button"
+            >
+              {isSaving
+                ? "保存中..."
+                : isStructuredDirty
+                  ? "保存人工修正"
+                  : "暂无待保存修改"}
+              <Save className="ml-2 size-4" />
+            </Button>
+          </div>
+        </div>
 
-      <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="rounded-[2rem] border border-black/10 bg-[#f5f5f7] py-0 shadow-none">
-          <CardHeader className="px-6 py-6">
-            <CardTitle className="text-2xl font-semibold tracking-[-0.04em] text-black">
-              原始文本预览
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5 px-6 pb-6">
-            <Textarea
-              className="min-h-[360px] rounded-[1.75rem] border-black/10 bg-white font-mono text-xs leading-6 text-black focus-visible:border-[#0071E3] focus-visible:ring-[#0071E3]/20"
-              readOnly
-              value={
-                resume.raw_text ??
-                "解析尚未完成，完成后这里会展示抽取出来的原始文本。"
-              }
-            />
+        {resume.parse_error ? (
+          <Alert className="mt-5 border-2 border-black bg-white font-mono">
+            <AlertTitle className="font-serif text-lg font-bold text-black">
+              解析失败
+            </AlertTitle>
+            <AlertDescription className="font-mono text-sm leading-7 text-black">
+              {resume.parse_error}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+      </div>
 
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-black">解析任务记录</p>
-              <div className="space-y-3">
-                {parseJobs.length === 0 ? (
-                  <div className="rounded-[1.5rem] border border-dashed border-black/12 bg-white px-4 py-4 text-sm text-black/58">
-                    还没有解析任务记录。
-                  </div>
-                ) : null}
-                {parseJobs.map((job) => {
-                  const jobStatusMeta = getResumeStatusMeta(job.status);
-                  const jobAiStatusMeta = getResumeAIStatusMeta(
-                    job.ai_status,
-                    job.ai_message
-                  );
+      <div className="grid gap-0 lg:grid-cols-2">
+        <div className="border-2 border-t-0 border-black p-6">
+          <h3 className="font-serif text-xl font-bold text-black">
+            原始文本预览
+          </h3>
+          <Textarea
+            className="mt-4 min-h-[360px] border-2 border-black bg-white font-mono text-xs leading-6 text-black focus:bg-[#ffffcc]"
+            readOnly
+            value={
+              resume.raw_text ??
+              "解析尚未完成，完成后这里会展示抽取出来的原始文本。"
+            }
+          />
 
-                  return (
-                    <div
-                      className="rounded-[1.5rem] border border-black/10 bg-white px-4 py-4"
-                      key={job.id}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            className={cn(
-                              "rounded-full px-3 py-1 hover:bg-inherit",
-                              jobStatusMeta.className
-                            )}
-                          >
-                            {jobStatusMeta.label}
-                          </Badge>
-                          {jobAiStatusMeta ? (
-                            <Badge
-                              className={cn(
-                                "rounded-full px-3 py-1 hover:bg-inherit",
-                                jobAiStatusMeta.className
-                              )}
-                            >
-                              {jobAiStatusMeta.label}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <span className="text-xs text-black/45">
-                          尝试 {job.attempt_count} 次
-                        </span>
-                      </div>
-                      <p className="mt-3 text-xs leading-6 text-black/55">
-                        创建于 {formatDate(job.created_at)}
-                        {job.finished_at ? `，结束于 ${formatDate(job.finished_at)}` : ""}
-                      </p>
-                      {job.ai_message &&
-                      ["pending", "fallback_rule", "skipped"].includes(
-                        job.ai_status ?? ""
-                      ) ? (
-                        <p
+          <div className="mt-6">
+            <h4 className="font-mono text-sm font-bold uppercase text-black">
+              解析任务记录
+            </h4>
+            <div className="mt-3 space-y-3">
+              {parseJobs.length === 0 ? (
+                <div className="border-2 border-dashed border-black bg-white p-4 font-mono text-sm text-black">
+                  还没有解析任务记录。
+                </div>
+              ) : null}
+              {parseJobs.map((job) => {
+                const jobStatusMeta = getResumeStatusMeta(job.status);
+                const jobAiStatusMeta = getResumeAIStatusMeta(
+                  job.ai_status,
+                  job.ai_message
+                );
+
+                return (
+                  <div
+                    className="border-2 border-black bg-white p-4"
+                    key={job.id}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
                           className={cn(
-                            "mt-2 text-sm",
-                            getAIMessageTone(job.ai_status)
+                            "font-mono text-xs",
+                            jobStatusMeta.className
                           )}
                         >
-                          {job.ai_message}
-                        </p>
-                      ) : null}
-                      {job.error_message ? (
-                        <p className="mt-2 text-sm text-[#D93025]">
-                          {job.error_message}
-                        </p>
-                      ) : null}
+                          {jobStatusMeta.label}
+                        </Badge>
+                        {jobAiStatusMeta ? (
+                          <Badge
+                            className={cn(
+                              "font-mono text-xs",
+                              jobAiStatusMeta.className
+                            )}
+                          >
+                            {jobAiStatusMeta.label}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <span className="font-mono text-xs text-black">
+                        尝试 {job.attempt_count} 次
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
+                    <p className="mt-3 font-mono text-xs leading-6 text-black">
+                      创建于 {formatDate(job.created_at)}
+                      {job.finished_at ? `，结束于 ${formatDate(job.finished_at)}` : ""}
+                    </p>
+                    {job.ai_message &&
+                    ["pending", "fallback_rule", "skipped"].includes(
+                      job.ai_status ?? ""
+                    ) ? (
+                      <p
+                        className={cn(
+                          "mt-2 font-mono text-sm",
+                          getAIMessageTone(job.ai_status)
+                        )}
+                      >
+                        {job.ai_message}
+                      </p>
+                    ) : null}
+                    {job.error_message ? (
+                      <p className="mt-2 font-mono text-sm text-black">
+                        {job.error_message}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <ResumeStructuredEditor
-          onChange={onChangeStructured}
-          value={structuredValue}
-        />
-      </section>
+        <div className="border-2 border-t-0 border-l-0 border-black p-6">
+          <h3 className="font-serif text-xl font-bold text-black">
+            结构化数据编辑
+          </h3>
+          <div className="mt-1 font-mono text-xs text-black">
+            直接编辑下方字段，人工修正会自动保存
+          </div>
+          <div className="mt-4">
+            <ResumeStructuredEditor
+              onChange={onChangeStructured}
+              value={structuredValue}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

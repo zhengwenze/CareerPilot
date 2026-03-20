@@ -4,9 +4,16 @@ import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
+import {
+  MetaChip,
+  PageHeader,
+  PageShell,
+  PaperSection,
+} from "@/components/brutalist/page-shell";
 import { PageErrorState, PageLoadingState } from "@/components/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -39,15 +46,6 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
   return "保存失败，请稍后重试。";
-}
-
-function PaperInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`h-12 w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 text-sm text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
-    />
-  );
 }
 
 export default function DashboardProfilePage() {
@@ -156,55 +154,21 @@ export default function DashboardProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-        <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
-              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">
-                *
-              </span>
-              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
-                Profile
-              </span>
-            </div>
+    <PageShell>
+      <PageHeader
+        description="这些字段会被后续简历、岗位匹配和面试模块直接复用。"
+        eyebrow="Profile"
+        meta={profile?.email ? <MetaChip>{profile.email}</MetaChip> : null}
+        title="个人资料"
+      />
 
-            <div className="mt-6">
-              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
-                个人资料
-              </h1>
-            </div>
-
-            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
-              这些字段会被后续简历、岗位匹配和面试模块直接复用。
-            </p>
-          </div>
-
-          <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]/60">
-            {profile?.email}
-          </div>
-        </div>
-      </header>
-
-      <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
-        <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
-          <div className="mb-3 flex items-center gap-3">
-            <span className="size-2.5 bg-[#1C1C1C]" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
-              编辑资料
-            </p>
-          </div>
-          <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
-            基本信息
-          </h2>
-        </div>
-        <div className="px-5 py-5 sm:px-6">
+      <PaperSection title="基本信息" eyebrow="Edit Profile">
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div className="grid gap-2">
-              <Label className="text-sm font-semibold text-black" htmlFor="nickname">
+              <Label className="font-mono text-xs font-bold uppercase text-black" htmlFor="nickname">
                 昵称
               </Label>
-              <PaperInput
+              <Input
                 id="nickname"
                 onChange={(event) =>
                   setForm((current) => ({
@@ -218,10 +182,10 @@ export default function DashboardProfilePage() {
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-sm font-semibold text-black" htmlFor="jobDirection">
+              <Label className="font-mono text-xs font-bold uppercase text-black" htmlFor="jobDirection">
                 求职方向
               </Label>
-              <PaperInput
+              <Input
                 id="jobDirection"
                 onChange={(event) =>
                   setForm((current) => ({
@@ -235,10 +199,10 @@ export default function DashboardProfilePage() {
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-sm font-semibold text-black" htmlFor="targetCity">
+              <Label className="font-mono text-xs font-bold uppercase text-black" htmlFor="targetCity">
                 目标城市
               </Label>
-              <PaperInput
+              <Input
                 id="targetCity"
                 onChange={(event) =>
                   setForm((current) => ({
@@ -252,10 +216,10 @@ export default function DashboardProfilePage() {
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-sm font-semibold text-black" htmlFor="targetRole">
+              <Label className="font-mono text-xs font-bold uppercase text-black" htmlFor="targetRole">
                 期望岗位
               </Label>
-              <PaperInput
+              <Input
                 id="targetRole"
                 onChange={(event) =>
                   setForm((current) => ({
@@ -269,30 +233,29 @@ export default function DashboardProfilePage() {
             </div>
 
             {error ? (
-              <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
-                <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
+              <Alert className="border-2 border-black bg-white font-mono">
+                <AlertTitle className="font-serif text-lg font-bold text-black">
                   保存失败
                 </AlertTitle>
-                <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
+                <AlertDescription className="text-sm leading-7 text-black">
                   {error}
                 </AlertDescription>
               </Alert>
             ) : null}
 
             <Button
-              className="border-b border-[#1C1C1C]/20 bg-[#1C1C1C] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1C1C1C]/90 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isSubmitting}
               type="submit"
             >
               {isSubmitting ? "保存中..." : "保存个人资料"}
               <Save className="ml-2 size-4" />
             </Button>
+
             {successMessage ? (
-              <p className="text-sm leading-7 text-black/70">{successMessage}</p>
+              <p className="font-mono text-sm leading-7 text-black">{successMessage}</p>
             ) : null}
           </form>
-        </div>
-      </section>
-    </div>
+      </PaperSection>
+    </PageShell>
   );
 }

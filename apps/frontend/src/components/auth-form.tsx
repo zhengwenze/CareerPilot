@@ -87,14 +87,14 @@ export function AuthForm({ mode }: AuthFormProps) {
       : "输入邮箱与密码，继续访问你的简历解析和职位进展。";
 
   return (
-    <div className="w-full border-2 border-black bg-white p-8 font-mono sm:p-10">
+    <div className="w-full font-mono">
       <div className="space-y-4">
-        <div className="border-2 border-black px-3 py-1 font-mono text-xs font-bold uppercase tracking-widest text-black">
+        <div className="bw-kicker">
           {mode === "register" ? "Create Account" : "Sign In"}
         </div>
 
         <div className="space-y-2">
-          <h3 className="font-serif text-3xl font-bold tracking-[-0.05em] text-black">
+          <h3 className="font-serif text-3xl font-bold text-black">
             {title}
           </h3>
           <p className="text-sm leading-6 text-black">{description}</p>
@@ -115,7 +115,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               placeholder="比如：阿泽 / 数据分析求职者"
               value={nickname}
               onChange={(event) => setNickname(event.target.value)}
-              className="h-12 border-2 border-black bg-white px-4 text-base text-black placeholder:text-gray-500 focus:bg-yellow-100"
+              className="h-12 px-4 text-base"
             />
           </div>
         )}
@@ -131,7 +131,7 @@ export function AuthForm({ mode }: AuthFormProps) {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
-            className="h-12 border-2 border-black bg-white px-4 text-base text-black placeholder:text-gray-500 focus:bg-yellow-100"
+            className="h-12 px-4 text-base"
           />
         </div>
 
@@ -147,12 +147,12 @@ export function AuthForm({ mode }: AuthFormProps) {
             onChange={(event) => setPassword(event.target.value)}
             minLength={8}
             required
-            className="h-12 border-2 border-black bg-white px-4 text-base text-black placeholder:text-gray-500 focus:bg-yellow-100"
+            className="h-12 px-4 text-base"
           />
         </div>
 
         {error && (
-          <Alert variant="destructive" className="border-2 border-red bg-white px-4 py-3 text-black">
+          <Alert variant="destructive" className="px-4 py-3 text-black">
             <AlertCircle className="mt-0.5 size-4 text-red" />
             <AlertTitle className="text-sm font-bold uppercase text-red">提交失败</AlertTitle>
             <AlertDescription className="text-sm text-black">
@@ -162,7 +162,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         )}
 
         <Button
-          className="h-12 w-full border-2 border-black bg-black text-sm font-bold uppercase text-white hover:bg-gray-800 disabled:opacity-60"
+          className="h-12 w-full"
           disabled={isPending}
           type="submit"
         >
