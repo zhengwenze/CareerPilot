@@ -692,6 +692,20 @@ export default function DashboardJobsPage() {
     }
   }
 
+  function handleOpenInterview() {
+    if (!selectedReport) {
+      setPageError("请先生成一份成功的匹配报告。");
+      return;
+    }
+
+    if (selectedReport.status !== "success") {
+      setPageError(`当前报告状态为 ${selectedReport.status}，请完成后再进入模拟面试。`);
+      return;
+    }
+
+    router.push(`/dashboard/interviews?reportId=${selectedReport.id}&jobId=${selectedJobId}`);
+  }
+
   return (
     <div className="space-y-6">
       <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
@@ -1084,14 +1098,24 @@ export default function DashboardJobsPage() {
                 eyebrow="Match Report"
                 accentClassName="bg-[#ff7a10]"
                 rightSlot={
-                  <PaperButton
-                    disabled={selectedReport.status !== "success" || isOpeningOptimizer}
-                    onClick={handleOpenOptimizer}
-                    type="button"
-                    variant="primary"
-                  >
-                    {isOpeningOptimizer ? "进入中..." : "去简历优化"}
-                  </PaperButton>
+                  <div className="flex flex-wrap gap-3">
+                    <PaperButton
+                      disabled={selectedReport.status !== "success"}
+                      onClick={handleOpenInterview}
+                      type="button"
+                      variant="secondary"
+                    >
+                      去模拟面试
+                    </PaperButton>
+                    <PaperButton
+                      disabled={selectedReport.status !== "success" || isOpeningOptimizer}
+                      onClick={handleOpenOptimizer}
+                      type="button"
+                      variant="primary"
+                    >
+                      {isOpeningOptimizer ? "进入中..." : "去简历优化"}
+                    </PaperButton>
+                  </div>
                 }
               >
                 <p className="text-sm leading-7 text-black/68">

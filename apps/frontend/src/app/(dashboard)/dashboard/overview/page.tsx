@@ -116,7 +116,7 @@ export default function DashboardOverviewPage() {
     {
       title: "模拟面试",
       description:
-        "后续会接入练习题、AI 反馈和复盘记录，保持与其他模块同一视觉语言。",
+        "基于岗位快照进入问答训练，获取 AI 反馈、复盘结论和后续改进任务。",
       href: "/dashboard/interviews",
       icon: Sparkles,
     },

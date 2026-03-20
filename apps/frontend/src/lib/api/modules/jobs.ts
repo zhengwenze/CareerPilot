@@ -193,6 +193,7 @@ export type JobDraft = {
   employment_type: string;
   source_name: string;
   source_url: string;
+  priority: number;
   jd_text: string;
 };
 
@@ -204,6 +205,7 @@ export function createEmptyJobDraft(): JobDraft {
     employment_type: "",
     source_name: "",
     source_url: "",
+    priority: 3,
     jd_text: "",
   };
 }
@@ -216,6 +218,7 @@ export function toJobDraft(job: JobRecord): JobDraft {
     employment_type: job.employment_type ?? "",
     source_name: job.source_name ?? "",
     source_url: job.source_url ?? "",
+    priority: job.priority,
     jd_text: job.jd_text,
   };
 }
@@ -228,12 +231,40 @@ function normalizeDraft(draft: JobDraft) {
     employment_type: draft.employment_type.trim() || undefined,
     source_name: draft.source_name.trim() || undefined,
     source_url: draft.source_url.trim() || undefined,
+    priority: draft.priority,
     jd_text: draft.jd_text.trim(),
   };
 }
 
-export async function fetchJobList(token: string): Promise<JobRecord[]> {
-  return apiRequest<JobRecord[]>("/jobs", {
+export async function fetchJobList(
+  token: string,
+  filters: {
+    keyword?: string;
+    parseStatus?: string;
+    statusStage?: string;
+    priority?: number;
+    stale?: boolean;
+  } = {}
+): Promise<JobRecord[]> {
+  const params = new URLSearchParams();
+  if (filters.keyword) {
+    params.set("keyword", filters.keyword);
+  }
+  if (filters.parseStatus) {
+    params.set("parse_status", filters.parseStatus);
+  }
+  if (filters.statusStage) {
+    params.set("status_stage", filters.statusStage);
+  }
+  if (typeof filters.priority === "number") {
+    params.set("priority", String(filters.priority));
+  }
+  if (typeof filters.stale === "boolean") {
+    params.set("stale", String(filters.stale));
+  }
+
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiRequest<JobRecord[]>(`/jobs${suffix}`, {
     method: "GET",
     token,
   });

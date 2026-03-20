@@ -1,6 +1,6 @@
 import type { ApiErrorResponse, ApiSuccessResponse } from "./contracts";
 
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
@@ -47,10 +47,12 @@ async function parseError(response: Response): Promise<never> {
   }
 }
 
-export async function apiRequest<T>(
+type ApiRequestInit = RequestInit & { token?: string };
+
+async function performRequest(
   path: string,
-  init: RequestInit & { token?: string } = {}
-): Promise<T> {
+  init: ApiRequestInit = {}
+): Promise<Response> {
   const { token, headers, ...rest } = init;
   const hasJsonBody = rest.body != null && !(rest.body instanceof FormData);
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -67,10 +69,53 @@ export async function apiRequest<T>(
     await parseError(response);
   }
 
+  return response;
+}
+
+function parseContentDispositionFileName(
+  contentDisposition: string | null
+): string | null {
+  if (!contentDisposition) {
+    return null;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1];
+  }
+
+  const plainMatch = contentDisposition.match(/filename=([^;]+)/i);
+  return plainMatch?.[1]?.trim() ?? null;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  init: ApiRequestInit = {}
+): Promise<T> {
+  const response = await performRequest(path, init);
+
   if (response.status === 204) {
     return undefined as T;
   }
 
   const payload = (await response.json()) as ApiSuccessResponse<T>;
   return payload.data;
+}
+
+export async function apiRequestBlob(
+  path: string,
+  init: ApiRequestInit = {}
+): Promise<{ blob: Blob; fileName: string | null }> {
+  const response = await performRequest(path, init);
+  return {
+    blob: await response.blob(),
+    fileName: parseContentDispositionFileName(
+      response.headers.get("Content-Disposition")
+    ),
+  };
 }

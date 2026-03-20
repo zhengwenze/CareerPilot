@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api/client";
+import { apiRequest, apiRequestBlob } from "@/lib/api/client";
 
 export type ResumeOptimizationTaskState = {
   key: string;
@@ -42,6 +42,9 @@ export type ResumeOptimizationSessionRecord = {
   tailoring_plan_snapshot: Record<string, unknown>;
   draft_sections: Record<string, ResumeOptimizationSectionDraft>;
   selected_tasks: ResumeOptimizationTaskState[];
+  optimized_resume_md: string;
+  has_downloadable_markdown: boolean;
+  downloadable_file_name: string | null;
   is_stale: boolean;
   created_at: string;
   updated_at: string;
@@ -120,4 +123,17 @@ export async function applyResumeOptimizationSession(
     method: "POST",
     token,
   });
+}
+
+export async function downloadResumeOptimizationMarkdown(
+  token: string,
+  sessionId: string
+): Promise<{ blob: Blob; fileName: string | null }> {
+  return apiRequestBlob(
+    `/resume-optimization-sessions/${sessionId}/download-markdown`,
+    {
+      method: "GET",
+      token,
+    }
+  );
 }

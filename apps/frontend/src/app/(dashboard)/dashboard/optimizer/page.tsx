@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, CheckCircle2, WandSparkles } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Download, Sparkles, WandSparkles } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -17,6 +17,7 @@ import { ApiError } from "@/lib/api/client";
 import {
   applyResumeOptimizationSession,
   createResumeOptimizationSession,
+  downloadResumeOptimizationMarkdown,
   fetchResumeOptimizationSession,
   generateResumeOptimizationSuggestions,
   updateResumeOptimizationSession,
@@ -152,6 +153,7 @@ export default function DashboardOptimizerPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -316,6 +318,34 @@ export default function DashboardOptimizerPage() {
       setPageError(getErrorMessage(error));
     } finally {
       setIsApplying(false);
+    }
+  }
+
+  async function handleDownloadMarkdown() {
+    if (!token || !session) {
+      return;
+    }
+
+    setIsDownloading(true);
+    setPageError("");
+    setStatusMessage("");
+
+    try {
+      const result = await downloadResumeOptimizationMarkdown(token, session.id);
+      const objectUrl = window.URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download =
+        result.fileName || session.downloadable_file_name || "optimized_resume.md";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+      setStatusMessage("Markdown 已下载，可直接用于投递或复盘。");
+    } catch (error) {
+      setPageError(getErrorMessage(error));
+    } finally {
+      setIsDownloading(false);
     }
   }
 
@@ -551,6 +581,15 @@ export default function DashboardOptimizerPage() {
                 {isSaving ? "保存中..." : "保存草案"}
               </Button>
               <Button
+                className="w-full border-b border-[#1C1C1C]/20 bg-white px-5 py-3 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!session.has_downloadable_markdown || isDownloading}
+                onClick={handleDownloadMarkdown}
+                type="button"
+              >
+                {isDownloading ? "下载中..." : "下载 Markdown"}
+                <Download className="ml-2 size-4" />
+              </Button>
+              <Button
                 className="w-full border-b border-[#1C1C1C]/20 bg-[#1C1C1C] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1C1C1C]/90 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isApplying || session.is_stale}
                 onClick={handleApply}
@@ -558,6 +597,19 @@ export default function DashboardOptimizerPage() {
               >
                 {isApplying ? "应用中..." : "应用到当前简历"}
                 <CheckCircle2 className="ml-2 size-4" />
+              </Button>
+              <Button
+                className="w-full border-b border-[#1C1C1C]/20 bg-white px-5 py-3 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={session.is_stale}
+                onClick={() =>
+                  router.push(
+                    `/dashboard/interviews?reportId=${session.match_report_id}&optimizationSessionId=${session.id}&jobId=${session.jd_id}`,
+                  )
+                }
+                type="button"
+              >
+                去模拟面试
+                <Sparkles className="ml-2 size-4" />
               </Button>
               {statusMessage ? (
                 <p className="text-sm leading-relaxed text-[#1C1C1C]/60">{statusMessage}</p>
