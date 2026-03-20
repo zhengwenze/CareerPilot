@@ -7,7 +7,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background text-foreground">
-        <div className="min-h-screen bg-muted/30">
+        <div className="min-h-screen bg-[#F9F8F6]/50">
           <DashboardTopNav />
 
           <main className="py-6 sm:py-8 lg:py-12">
