@@ -68,7 +68,7 @@ export const dashboardNavSections: NavSection[] = [
         disabled: true,
       },
       {
-        title: "模拟面试（暂未开放）",
+        title: "模拟面试",
         href: "/dashboard/interviews",
         icon: Sparkles,
         match: "prefix",
@@ -86,4 +86,8 @@ export const dashboardNavSections: NavSection[] = [
       },
     ],
   },
-];
+] as const;
+
+export const dashboardNavItems: NavItem[] = dashboardNavSections
+  .flatMap((section) => section.items)
+  .filter((item): item is NavItem => Boolean(item.href) && !item.disabled);
