@@ -1,88 +1,20 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.core.config import Settings
+from app.prompts.mock_interview import render_mock_interview_prompt
+from app.schemas.mock_interview import (
+    MockInterviewDecisionJson,
+    MockInterviewEvaluationJson,
+    MockInterviewPlanJson,
+    MockInterviewReviewJson,
+)
 from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
-
-PLANNER_INSTRUCTIONS = """
-You are the interview planner for a job-specific mock interview.
-
-Build a compact interview plan from:
-- resume_snapshot
-- job_snapshot
-- match_report_snapshot
-- optional optimization_snapshot
-
-Hard constraints:
-- Output strict JSON only.
-- Stay grounded in the provided resume, job, and match report.
-- Do not invent employers, projects, metrics, technologies, or achievements.
-- Prefer interview_blueprint_json.question_pack and focus_areas when available.
-- Prioritize weak areas from gap_json and tailoring_plan_json.must_add_evidence.
-- Produce at most 6 main questions.
-- Each main question can have at most 1 follow-up rule.
-- Keep questions concise and suitable for a text-only interview.
-""".strip()
-
-PLANNER_REPAIR_INSTRUCTIONS = """
-Your previous planner JSON was invalid.
-
-Regenerate the full interview plan.
-- Output strict JSON only.
-- Keep the same schema.
-- Do not invent candidate evidence.
-""".strip()
-
-TURN_INSTRUCTIONS = """
-You are the turn orchestrator for a structured mock interview.
-
-Evaluate the candidate answer and choose exactly one next action:
-- follow_up
-- next_question
-- finish_and_review
-
-Hard constraints:
-- Output strict JSON only.
-- Do not invent missing candidate evidence.
-- Use only the provided answer and context.
-- If the answer is relevant but vague, prefer one focused follow-up.
-- If the answer is off-topic or already exhausted, move on.
-- Do not ask more than one follow-up for the same main question.
-""".strip()
-
-TURN_REPAIR_INSTRUCTIONS = """
-Your previous turn-evaluation JSON was invalid.
-
-Regenerate the full JSON object.
-- Output strict JSON only.
-- Keep the same schema.
-- Choose exactly one next action.
-""".strip()
-
-REVIEW_INSTRUCTIONS = """
-You are the final reviewer for a structured mock interview.
-
-Produce a compact but actionable review.
-
-Hard constraints:
-- Output strict JSON only.
-- Ground all conclusions in the transcript and match_report_snapshot.
-- Do not invent candidate experience or unrelated improvement tasks.
-- The review must help improve both interview answers and resume evidence.
-""".strip()
-
-REVIEW_REPAIR_INSTRUCTIONS = """
-Your previous review JSON was invalid.
-
-Regenerate the full JSON object.
-- Output strict JSON only.
-- Keep the same schema.
-- Do not invent evidence.
-""".strip()
 
 
 @dataclass(slots=True)
@@ -96,13 +28,22 @@ class AIInterviewPlanRequest:
 
 
 @dataclass(slots=True)
-class AIInterviewTurnRequest:
+class AIInterviewEvaluationRequest:
     session_context: dict[str, object]
     current_question: dict[str, object]
     conversation_history: list[dict[str, object]]
     candidate_answer: dict[str, object]
+
+
+@dataclass(slots=True)
+class AIInterviewDecisionRequest:
+    session_context: dict[str, object]
+    current_question: dict[str, object]
+    conversation_history: list[dict[str, object]]
+    candidate_answer: dict[str, object]
+    evaluation_json: dict[str, object]
     remaining_question_topics: list[str]
-    constraints: dict[str, int]
+    constraints: dict[str, object]
 
 
 @dataclass(slots=True)
@@ -112,139 +53,46 @@ class AIInterviewReviewRequest:
     transcript: list[dict[str, object]]
 
 
-class InterviewPlanFocusArea(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    topic: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    priority: str = "medium"
+def _schema_json(model_cls: type[BaseModel]) -> str:
+    return json.dumps(model_cls.model_json_schema(), ensure_ascii=False, indent=2)
 
 
-class InterviewPlanRubricItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    dimension: str = Field(min_length=1)
-    weight: int = Field(ge=1)
-    criteria: str = Field(min_length=1)
-
-
-class InterviewPlannedQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    group_index: int = Field(ge=1)
-    topic: str = Field(min_length=1)
-    source: str = Field(min_length=1)
-    question_text: str = Field(min_length=1)
-    intent: str = Field(min_length=1)
-    follow_up_rule: str | None = None
-    rubric: list[InterviewPlanRubricItem] = Field(default_factory=list)
-
-
-class InterviewPlanEndingRule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    max_questions: int = Field(ge=1)
-    max_follow_ups_per_question: int = Field(ge=0)
-
-
-class InterviewPlanPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    session_summary: str = Field(min_length=1)
-    mode: str = Field(min_length=1)
-    target_role: str | None = None
-    focus_areas: list[InterviewPlanFocusArea] = Field(default_factory=list)
-    question_plan: list[InterviewPlannedQuestion] = Field(default_factory=list)
-    ending_rule: InterviewPlanEndingRule
-
-
-class InterviewTurnEvaluation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    dimension_scores: dict[str, int] = Field(default_factory=dict)
-    summary: str = Field(min_length=1)
-    strengths: list[str] = Field(default_factory=list)
-    gaps: list[str] = Field(default_factory=list)
-    evidence_used: list[str] = Field(default_factory=list)
-
-
-class InterviewDecisionQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    topic: str = Field(min_length=1)
-    question_text: str = Field(min_length=1)
-    intent: str = Field(min_length=1)
-
-
-class InterviewTurnDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["follow_up", "next_question", "finish_and_review"]
-    reason: str = Field(min_length=1)
-    next_question: InterviewDecisionQuestion | None = None
-
-
-class InterviewTurnPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    evaluation: InterviewTurnEvaluation
-    decision: InterviewTurnDecision
-
-
-class InterviewReviewItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    label: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    severity: str | None = None
-
-
-class InterviewQuestionReview(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    question_text: str = Field(min_length=1)
-    what_went_well: str = Field(min_length=1)
-    what_was_missing: str = Field(min_length=1)
-    better_answer_direction: str = Field(min_length=1)
-
-
-class InterviewFollowUpTask(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = Field(min_length=1)
-    instruction: str = Field(min_length=1)
-    target_section: str = "work_experience_or_projects"
-    source: str = "mock_interview_review"
-
-
-class InterviewReadinessSignal(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    status: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-
-
-class InterviewReviewPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    overall_score: float = Field(ge=0.0, le=100.0)
-    overall_summary: str = Field(min_length=1)
-    dimension_scores: dict[str, int] = Field(default_factory=dict)
-    strengths: list[InterviewReviewItem] = Field(default_factory=list)
-    weaknesses: list[InterviewReviewItem] = Field(default_factory=list)
-    question_reviews: list[InterviewQuestionReview] = Field(default_factory=list)
-    follow_up_tasks: list[InterviewFollowUpTask] = Field(default_factory=list)
-    job_readiness_signal: InterviewReadinessSignal
+def _build_repair_instructions(
+    *,
+    template_name: str,
+    contract_json_schema: str,
+    **variables: str,
+) -> str:
+    base_instructions = render_mock_interview_prompt(
+        template_name,
+        contract_json_schema=contract_json_schema,
+        **variables,
+    )
+    return (
+        f"{base_instructions}\n\n"
+        "Your previous response violated the JSON contract.\n"
+        "Regenerate the full response as strict JSON only.\n"
+        "Do not add markdown, explanations, or extra keys."
+    )
 
 
 class AIMockInterviewProvider:
-    async def plan(self, payload: AIInterviewPlanRequest) -> InterviewPlanPayload:
+    async def plan(self, payload: AIInterviewPlanRequest) -> MockInterviewPlanJson:
         raise NotImplementedError
 
-    async def evaluate_turn(self, payload: AIInterviewTurnRequest) -> InterviewTurnPayload:
+    async def evaluate_turn(
+        self,
+        payload: AIInterviewEvaluationRequest,
+    ) -> MockInterviewEvaluationJson:
         raise NotImplementedError
 
-    async def review(self, payload: AIInterviewReviewRequest) -> InterviewReviewPayload:
+    async def decide_turn(
+        self,
+        payload: AIInterviewDecisionRequest,
+    ) -> MockInterviewDecisionJson:
+        raise NotImplementedError
+
+    async def review(self, payload: AIInterviewReviewRequest) -> MockInterviewReviewJson:
         raise NotImplementedError
 
 
@@ -317,31 +165,82 @@ class ConfiguredAIMockInterviewProvider(AIMockInterviewProvider):
                     detail=f"Mock interview AI payload validation failed: {exc}",
                 ) from exc
 
-    async def plan(self, payload: AIInterviewPlanRequest) -> InterviewPlanPayload:
+    async def plan(self, payload: AIInterviewPlanRequest) -> MockInterviewPlanJson:
+        contract_json_schema = _schema_json(MockInterviewPlanJson)
         return await self._validate_with_repair(
-            instructions=PLANNER_INSTRUCTIONS,
-            repair_instructions=PLANNER_REPAIR_INSTRUCTIONS,
+            instructions=render_mock_interview_prompt(
+                "interview_plan_system",
+                contract_json_schema=contract_json_schema,
+                max_questions=str(payload.constraints.get("max_questions", 6)),
+                max_follow_ups_per_question=str(
+                    payload.constraints.get("max_follow_ups_per_question", 1)
+                ),
+            ),
+            repair_instructions=_build_repair_instructions(
+                template_name="interview_plan_system",
+                contract_json_schema=contract_json_schema,
+                max_questions=str(payload.constraints.get("max_questions", 6)),
+                max_follow_ups_per_question=str(
+                    payload.constraints.get("max_follow_ups_per_question", 1)
+                ),
+            ),
             payload=payload,
-            model_cls=InterviewPlanPayload,
-            max_tokens=1800,
+            model_cls=MockInterviewPlanJson,
+            max_tokens=2200,
         )
 
-    async def evaluate_turn(self, payload: AIInterviewTurnRequest) -> InterviewTurnPayload:
+    async def evaluate_turn(
+        self,
+        payload: AIInterviewEvaluationRequest,
+    ) -> MockInterviewEvaluationJson:
+        contract_json_schema = _schema_json(MockInterviewEvaluationJson)
         return await self._validate_with_repair(
-            instructions=TURN_INSTRUCTIONS,
-            repair_instructions=TURN_REPAIR_INSTRUCTIONS,
+            instructions=render_mock_interview_prompt(
+                "interview_turn_evaluator",
+                contract_json_schema=contract_json_schema,
+            ),
+            repair_instructions=_build_repair_instructions(
+                template_name="interview_turn_evaluator",
+                contract_json_schema=contract_json_schema,
+            ),
             payload=payload,
-            model_cls=InterviewTurnPayload,
+            model_cls=MockInterviewEvaluationJson,
             max_tokens=1200,
         )
 
-    async def review(self, payload: AIInterviewReviewRequest) -> InterviewReviewPayload:
+    async def decide_turn(
+        self,
+        payload: AIInterviewDecisionRequest,
+    ) -> MockInterviewDecisionJson:
+        contract_json_schema = _schema_json(MockInterviewDecisionJson)
         return await self._validate_with_repair(
-            instructions=REVIEW_INSTRUCTIONS,
-            repair_instructions=REVIEW_REPAIR_INSTRUCTIONS,
+            instructions=render_mock_interview_prompt(
+                "interview_followup_decider",
+                contract_json_schema=contract_json_schema,
+            ),
+            repair_instructions=_build_repair_instructions(
+                template_name="interview_followup_decider",
+                contract_json_schema=contract_json_schema,
+            ),
             payload=payload,
-            model_cls=InterviewReviewPayload,
-            max_tokens=1800,
+            model_cls=MockInterviewDecisionJson,
+            max_tokens=900,
+        )
+
+    async def review(self, payload: AIInterviewReviewRequest) -> MockInterviewReviewJson:
+        contract_json_schema = _schema_json(MockInterviewReviewJson)
+        return await self._validate_with_repair(
+            instructions=render_mock_interview_prompt(
+                "interview_final_review",
+                contract_json_schema=contract_json_schema,
+            ),
+            repair_instructions=_build_repair_instructions(
+                template_name="interview_final_review",
+                contract_json_schema=contract_json_schema,
+            ),
+            payload=payload,
+            model_cls=MockInterviewReviewJson,
+            max_tokens=2200,
         )
 
 

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,20 +24,23 @@ from app.schemas.job import JobStructuredData
 from app.schemas.mock_interview import (
     MockInterviewAnswerSubmitRequest,
     MockInterviewAnswerSubmitResponse,
+    MockInterviewDecisionJson,
     MockInterviewDeleteResponse,
+    MockInterviewEvaluationJson,
+    MockInterviewPlanJson,
+    MockInterviewQuestionPlanItem,
     MockInterviewReviewResponse,
+    MockInterviewReviewJson,
     MockInterviewSessionCreateRequest,
     MockInterviewSessionResponse,
     MockInterviewTurnResponse,
 )
 from app.schemas.resume import ResumeStructuredData
 from app.services.mock_interview_ai import (
+    AIInterviewDecisionRequest,
+    AIInterviewEvaluationRequest,
     AIInterviewPlanRequest,
     AIInterviewReviewRequest,
-    AIInterviewTurnRequest,
-    InterviewPlanPayload,
-    InterviewReviewPayload,
-    InterviewTurnPayload,
     build_mock_interview_ai_provider,
 )
 
@@ -131,6 +135,72 @@ def _compact_optimization_snapshot(
     }
 
 
+def _load_plan_json(plan_json: dict | None) -> MockInterviewPlanJson | None:
+    if not plan_json:
+        return None
+    try:
+        return MockInterviewPlanJson.model_validate(plan_json)
+    except ValidationError as exc:
+        raise ApiException(
+            status_code=500,
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"Invalid mock interview plan_json stored in session: {exc}",
+        ) from exc
+
+
+def _load_evaluation_json(
+    evaluation_json: dict | None,
+) -> MockInterviewEvaluationJson | None:
+    if not evaluation_json:
+        return None
+    try:
+        return MockInterviewEvaluationJson.model_validate(evaluation_json)
+    except ValidationError as exc:
+        raise ApiException(
+            status_code=500,
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"Invalid mock interview evaluation_json stored in turn: {exc}",
+        ) from exc
+
+
+def _load_decision_json(decision_json: dict | None) -> MockInterviewDecisionJson | None:
+    if not decision_json:
+        return None
+    try:
+        return MockInterviewDecisionJson.model_validate(decision_json)
+    except ValidationError as exc:
+        raise ApiException(
+            status_code=500,
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"Invalid mock interview decision_json stored in turn: {exc}",
+        ) from exc
+
+
+def _load_review_json(review_json: dict | None) -> MockInterviewReviewJson | None:
+    if not review_json:
+        return None
+    try:
+        return MockInterviewReviewJson.model_validate(review_json)
+    except ValidationError as exc:
+        raise ApiException(
+            status_code=500,
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"Invalid mock interview review_json stored in session: {exc}",
+        ) from exc
+
+
+def _select_resume_fact_snapshot(
+    *,
+    resume: Resume,
+    optimization_session: ResumeOptimizationSession | None,
+) -> ResumeStructuredData:
+    if optimization_session is not None and optimization_session.status != "applied":
+        optimized_snapshot = optimization_session.optimized_resume_json or {}
+        if optimized_snapshot:
+            return ResumeStructuredData.model_validate(optimized_snapshot)
+    return ResumeStructuredData.model_validate(resume.structured_json)
+
+
 def serialize_mock_interview_turn(turn: MockInterviewTurn) -> MockInterviewTurnResponse:
     return MockInterviewTurnResponse(
         id=turn.id,
@@ -145,8 +215,8 @@ def serialize_mock_interview_turn(turn: MockInterviewTurn) -> MockInterviewTurnR
         answer_text=turn.answer_text,
         answer_latency_seconds=turn.answer_latency_seconds,
         status=turn.status,
-        evaluation_json=turn.evaluation_json or {},
-        decision_json=turn.decision_json or {},
+        evaluation_json=_load_evaluation_json(turn.evaluation_json),
+        decision_json=_load_decision_json(turn.decision_json),
         asked_at=turn.asked_at,
         answered_at=turn.answered_at,
         evaluated_at=turn.evaluated_at,
@@ -175,8 +245,8 @@ def _serialize_mock_interview_session(
         current_follow_up_count=session_record.current_follow_up_count,
         max_questions=session_record.max_questions,
         max_follow_ups_per_question=session_record.max_follow_ups_per_question,
-        plan_json=session_record.plan_json or {},
-        review_json=session_record.review_json or {},
+        plan_json=_load_plan_json(session_record.plan_json),
+        review_json=_load_review_json(session_record.review_json),
         follow_up_tasks_json=list(session_record.follow_up_tasks_json or []),
         overall_score=session_record.overall_score,
         error_message=session_record.error_message,
@@ -367,7 +437,7 @@ async def _assert_session_context_fresh(
 def _build_first_turn(
     *,
     session_record: MockInterviewSession,
-    plan: InterviewPlanPayload,
+    plan: MockInterviewPlanJson,
     current_user: User,
 ) -> MockInterviewTurn:
     first_question = plan.question_plan[0]
@@ -419,24 +489,55 @@ def _build_planned_main_turn(
     *,
     session_record: MockInterviewSession,
     turn_index: int,
-    plan_question: dict[str, object],
+    plan_question: MockInterviewQuestionPlanItem,
     current_user: User,
 ) -> MockInterviewTurn:
     now = _utc_now_naive()
     return MockInterviewTurn(
         session_id=session_record.id,
         turn_index=turn_index,
-        question_group_index=int(plan_question.get("group_index") or 1),
-        question_source=str(plan_question.get("source") or "planner_generated"),
-        question_topic=str(plan_question.get("topic") or "unknown"),
-        question_text=str(plan_question.get("question_text") or ""),
-        question_intent=str(plan_question.get("intent") or "") or None,
-        question_rubric_json=list(plan_question.get("rubric") or []),
+        question_group_index=plan_question.group_index,
+        question_source=plan_question.source,
+        question_topic=plan_question.topic,
+        question_text=plan_question.question_text,
+        question_intent=plan_question.intent,
+        question_rubric_json=[item.model_dump() for item in plan_question.rubric],
         status="asked",
         asked_at=now,
         created_by=current_user.id,
         updated_by=current_user.id,
     )
+
+
+def _enforce_decision_rules(
+    *,
+    decision: MockInterviewDecisionJson,
+    session_record: MockInterviewSession,
+    current_turn: MockInterviewTurn,
+    plan: MockInterviewPlanJson,
+) -> MockInterviewDecisionJson:
+    follow_up_allowed = (
+        current_turn.question_source != "follow_up"
+        and session_record.current_follow_up_count < session_record.max_follow_ups_per_question
+    )
+    if decision.type == "follow_up" and not follow_up_allowed:
+        has_remaining_main_question = session_record.current_question_index < min(
+            len(plan.question_plan),
+            session_record.max_questions,
+        )
+        return MockInterviewDecisionJson(
+            type="next_question" if has_remaining_main_question else "finish_and_review",
+            reason="Follow-up limit reached for this main question.",
+        )
+    if decision.type == "follow_up" and decision.next_question is not None:
+        return MockInterviewDecisionJson(
+            type="follow_up",
+            reason=decision.reason,
+            next_question=decision.next_question.model_copy(
+                update={"topic": current_turn.question_topic}
+            ),
+        )
+    return decision
 
 
 async def _record_readiness_event_from_review(
@@ -445,7 +546,7 @@ async def _record_readiness_event_from_review(
     current_user: User,
     job: JobDescription,
     report: MatchReport,
-    review_payload: InterviewReviewPayload,
+    review_payload: MockInterviewReviewJson,
 ) -> None:
     status_to = review_payload.job_readiness_signal.status
     if status_to not in ALLOWED_JOB_READINESS_STATES:
@@ -480,15 +581,22 @@ async def _generate_and_persist_review(
     session_record: MockInterviewSession,
     settings: Settings,
 ) -> MockInterviewReviewResponse:
-    resume, job, report = await _assert_session_context_fresh(session, session_record=session_record)
+    _resume, job, report = await _assert_session_context_fresh(
+        session,
+        session_record=session_record,
+    )
     turns = await _list_turns(session, session_id=session_record.id)
     provider = build_mock_interview_ai_provider(settings)
 
     transcript = [
         {
+            "question_group_index": turn.question_group_index,
+            "question_source": turn.question_source,
+            "question_topic": turn.question_topic,
             "question_text": turn.question_text,
             "answer_text": turn.answer_text,
-            "evaluation": turn.evaluation_json or {},
+            "evaluation_json": turn.evaluation_json or {},
+            "decision_json": turn.decision_json or {},
         }
         for turn in turns
         if turn.answer_text
@@ -531,7 +639,7 @@ async def _generate_and_persist_review(
         session_id=session_record.id,
         status=session_record.status,
         overall_score=session_record.overall_score,
-        review_json=session_record.review_json or {},
+        review_json=_load_review_json(session_record.review_json),
         follow_up_tasks_json=list(session_record.follow_up_tasks_json or []),
     )
 
@@ -559,12 +667,10 @@ async def create_mock_interview_session(
         )
 
     provider = build_mock_interview_ai_provider(settings)
-    resume_snapshot = ResumeStructuredData.model_validate(resume.structured_json)
-    if optimization_session is not None and optimization_session.status != "applied":
-        # Module 4 can only consume structured optimization snapshots before apply.
-        optimized_snapshot = optimization_session.optimized_resume_json or {}
-        if optimized_snapshot:
-            resume_snapshot = ResumeStructuredData.model_validate(optimized_snapshot)
+    resume_snapshot = _select_resume_fact_snapshot(
+        resume=resume,
+        optimization_session=optimization_session,
+    )
     job_snapshot = JobStructuredData.model_validate(job.structured_json)
     plan = await provider.plan(
         AIInterviewPlanRequest(
@@ -683,7 +789,7 @@ async def submit_mock_interview_answer(
             code=ErrorCode.CONFLICT,
             message="Mock interview session is not active",
         )
-    _resume, _job, report = await _assert_session_context_fresh(session, session_record=session_record)
+    await _assert_session_context_fresh(session, session_record=session_record)
     turn = await _get_turn_or_404(session, session_record=session_record, turn_id=turn_id)
     if turn.status != "asked":
         raise ApiException(
@@ -714,59 +820,104 @@ async def submit_mock_interview_answer(
     await session.flush()
 
     turns = await _list_turns(session, session_id=session_record.id)
+    plan = _load_plan_json(session_record.plan_json)
+    if plan is None:
+        raise ApiException(
+            status_code=500,
+            code=ErrorCode.INTERNAL_ERROR,
+            message="Mock interview session is missing plan_json",
+        )
     provider = build_mock_interview_ai_provider(settings)
+    conversation_history = [
+        {
+            "question_group_index": item.question_group_index,
+            "question_source": item.question_source,
+            "question_topic": item.question_topic,
+            "question_text": item.question_text,
+            "answer_text": item.answer_text,
+            "evaluation_json": item.evaluation_json or {},
+            "decision_json": item.decision_json or {},
+        }
+        for item in turns
+        if item.turn_index < turn.turn_index and item.answer_text
+    ]
     evaluation_result = await provider.evaluate_turn(
-        AIInterviewTurnRequest(
+        AIInterviewEvaluationRequest(
             session_context={
                 "mode": session_record.mode,
-                "target_role": (session_record.plan_json or {}).get("target_role"),
+                "target_role": plan.target_role,
+                "session_summary": plan.session_summary,
             },
             current_question={
                 "group_index": turn.question_group_index,
+                "source": turn.question_source,
                 "topic": turn.question_topic,
                 "question_text": turn.question_text,
                 "intent": turn.question_intent or "",
                 "rubric": list(turn.question_rubric_json or []),
             },
-            conversation_history=[
-                {
-                    "question_text": item.question_text,
-                    "answer_text": item.answer_text,
-                }
-                for item in turns
-                if item.turn_index < turn.turn_index and item.answer_text
-            ],
+            conversation_history=conversation_history,
             candidate_answer={"answer_text": answer_text},
+        )
+    )
+    follow_up_allowed = (
+        turn.question_source != "follow_up"
+        and session_record.current_follow_up_count < session_record.max_follow_ups_per_question
+    )
+    decision_result = await provider.decide_turn(
+        AIInterviewDecisionRequest(
+            session_context={
+                "mode": session_record.mode,
+                "target_role": plan.target_role,
+                "ending_rule": plan.ending_rule.model_dump(),
+            },
+            current_question={
+                "group_index": turn.question_group_index,
+                "source": turn.question_source,
+                "topic": turn.question_topic,
+                "question_text": turn.question_text,
+                "intent": turn.question_intent or "",
+                "rubric": list(turn.question_rubric_json or []),
+            },
+            conversation_history=conversation_history,
+            candidate_answer={"answer_text": answer_text},
+            evaluation_json=evaluation_result.model_dump(),
             remaining_question_topics=[
-                str(item.get("topic"))
-                for item in (session_record.plan_json or {}).get("question_plan", [])
-                if int(item.get("group_index") or 0) > turn.question_group_index
+                item.topic
+                for item in plan.question_plan
+                if item.group_index > turn.question_group_index
             ],
             constraints={
-                "follow_up_used": session_record.current_follow_up_count,
+                "follow_up_allowed": follow_up_allowed,
+                "current_follow_up_count": session_record.current_follow_up_count,
                 "max_follow_ups_per_question": session_record.max_follow_ups_per_question,
+                "current_question_index": session_record.current_question_index,
+                "planned_question_count": len(plan.question_plan),
             },
         )
     )
+    decision_result = _enforce_decision_rules(
+        decision=decision_result,
+        session_record=session_record,
+        current_turn=turn,
+        plan=plan,
+    )
 
-    turn.evaluation_json = evaluation_result.evaluation.model_dump()
-    turn.decision_json = evaluation_result.decision.model_dump()
+    turn.evaluation_json = evaluation_result.model_dump()
+    turn.decision_json = decision_result.model_dump()
     turn.status = "evaluated"
     turn.evaluated_at = _utc_now_naive()
     session.add(turn)
 
-    next_action: dict[str, object] = {"type": evaluation_result.decision.type}
+    next_action: dict[str, object] = {
+        "type": decision_result.type,
+        "reason": decision_result.reason,
+    }
     next_turn: MockInterviewTurn | None = None
-    plan_questions = list((session_record.plan_json or {}).get("question_plan", []))
+    plan_questions = plan.question_plan
 
-    if evaluation_result.decision.type == "follow_up":
-        if session_record.current_follow_up_count >= session_record.max_follow_ups_per_question:
-            raise ApiException(
-                status_code=409,
-                code=ErrorCode.CONFLICT,
-                message="Follow-up limit reached for current question",
-            )
-        if evaluation_result.decision.next_question is None:
+    if decision_result.type == "follow_up":
+        if decision_result.next_question is None:
             raise ApiException(
                 status_code=502,
                 code=ErrorCode.SERVICE_UNAVAILABLE,
@@ -776,9 +927,9 @@ async def submit_mock_interview_answer(
             session_record=session_record,
             previous_turn=turn,
             turn_index=len(turns) + 1,
-            question_topic=evaluation_result.decision.next_question.topic,
-            question_text=evaluation_result.decision.next_question.question_text,
-            question_intent=evaluation_result.decision.next_question.intent,
+            question_topic=turn.question_topic,
+            question_text=decision_result.next_question.question_text,
+            question_intent=decision_result.next_question.intent,
             current_user=current_user,
         )
         session_record.current_follow_up_count += 1
@@ -787,7 +938,7 @@ async def submit_mock_interview_answer(
         session.add(next_turn)
         await session.flush()
         next_action["turn"] = serialize_mock_interview_turn(next_turn).model_dump()
-    elif evaluation_result.decision.type == "next_question":
+    elif decision_result.type == "next_question":
         next_plan_index = session_record.current_question_index
         if next_plan_index >= len(plan_questions):
             session_record.status = "reviewing"
@@ -837,7 +988,7 @@ async def submit_mock_interview_answer(
     return MockInterviewAnswerSubmitResponse(
         session_id=session_record.id,
         submitted_turn_id=turn.id,
-        submitted_turn_evaluation=turn.evaluation_json or {},
+        submitted_turn_evaluation=evaluation_result,
         next_action=next_action,
     )
 
@@ -860,7 +1011,7 @@ async def finish_mock_interview_session(
                 session_id=session_record.id,
                 status=session_record.status,
                 overall_score=session_record.overall_score,
-                review_json=session_record.review_json or {},
+                review_json=_load_review_json(session_record.review_json),
                 follow_up_tasks_json=list(session_record.follow_up_tasks_json or []),
             )
         raise ApiException(
@@ -902,7 +1053,7 @@ async def get_mock_interview_review(
         session_id=session_record.id,
         status=session_record.status,
         overall_score=session_record.overall_score,
-        review_json=session_record.review_json or {},
+        review_json=_load_review_json(session_record.review_json),
         follow_up_tasks_json=list(session_record.follow_up_tasks_json or []),
     )
 

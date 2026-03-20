@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.core.errors import ApiException
-from app.models import JobDescription, MatchReport, MockInterviewSession, Resume, User
+from app.models import (
+    JobDescription,
+    MatchReport,
+    MockInterviewSession,
+    Resume,
+    ResumeOptimizationSession,
+    User,
+)
 from app.schemas.job import JobCreateRequest
 from app.schemas.match_report import MatchReportCreateRequest
 from app.schemas.mock_interview import (
@@ -161,13 +168,13 @@ def _mock_interview_planner_payload() -> dict[str, object]:
             {
                 "group_index": 1,
                 "topic": "量化结果表达",
-                "source": "blueprint",
+                "source": "gap",
                 "question_text": "请说明一次你主导实验分析并推动结果落地的经历。",
                 "intent": "验证真实项目证据与结果表达。",
                 "follow_up_rule": "If result is vague, ask for measurable impact.",
                 "rubric": [
                     {
-                        "dimension": "specificity_of_evidence",
+                        "dimension": "evidence",
                         "weight": 30,
                         "criteria": "Candidate gives concrete scenario and actions.",
                     }
@@ -175,14 +182,29 @@ def _mock_interview_planner_payload() -> dict[str, object]:
             },
             {
                 "group_index": 2,
+                "topic": "实验分析优势",
+                "source": "strength",
+                "question_text": "你认为自己最能打动这个岗位的一段分析经历是什么？",
+                "intent": "展开候选人最强项目证据。",
+                "follow_up_rule": "If evidence is broad, ask for the strongest proof point.",
+                "rubric": [
+                    {
+                        "dimension": "relevance",
+                        "weight": 30,
+                        "criteria": "Candidate selects the most job-relevant example.",
+                    }
+                ],
+            },
+            {
+                "group_index": 3,
                 "topic": "跨团队协作",
-                "source": "blueprint",
+                "source": "behavioral_general",
                 "question_text": "请描述一次你与业务团队协作推进分析结论落地的经历。",
                 "intent": "验证协作推进能力。",
                 "follow_up_rule": "If ownership is vague, ask for personal contribution.",
                 "rubric": [
                     {
-                        "dimension": "ownership_and_depth",
+                        "dimension": "communication",
                         "weight": 25,
                         "criteria": "Candidate explains personal ownership clearly.",
                     }
@@ -193,31 +215,38 @@ def _mock_interview_planner_payload() -> dict[str, object]:
     }
 
 
-def _mock_interview_follow_up_payload() -> dict[str, object]:
+def _mock_interview_evaluation_payload() -> dict[str, object]:
     return {
-        "evaluation": {
-            "dimension_scores": {
-                "relevance_to_job": 82,
-                "specificity_of_evidence": 68,
-                "ownership_and_depth": 75,
-                "structure_and_clarity": 74,
-                "results_and_metrics": 60,
-                "risk_flags": 10,
-            },
-            "summary": "回答方向正确，但结果指标仍然偏少。",
-            "strengths": ["经历相关", "表达清楚"],
-            "gaps": ["缺少量化结果"],
-            "evidence_used": ["项目经历", "实验分析能力"],
+        "dimension_scores": {
+            "relevance": 4,
+            "specificity": 2,
+            "evidence": 2,
+            "structure": 4,
+            "communication": 4,
         },
-        "decision": {
-            "type": "follow_up",
-            "reason": "需要继续追问具体结果指标。",
-            "next_question": {
-                "topic": "量化结果表达",
-                "question_text": "你提到推动了结果落地，具体有哪些指标变化？",
-                "intent": "验证量化结果和业务影响。",
-            },
+        "summary": "回答方向正确，但结果指标仍然偏少。",
+        "strengths": ["经历相关", "表达清楚"],
+        "gaps": ["缺少量化结果"],
+        "evidence_used": ["实验分析经历", "推动结果落地"],
+    }
+
+
+def _mock_interview_follow_up_decision_payload() -> dict[str, object]:
+    return {
+        "type": "follow_up",
+        "reason": "答案相关但仍然空泛，需要追问具体结果指标。",
+        "next_question": {
+            "topic": "量化结果表达",
+            "question_text": "你提到推动了结果落地，具体有哪些指标变化？",
+            "intent": "验证量化结果和业务影响。",
         },
+    }
+
+
+def _mock_interview_next_question_decision_payload() -> dict[str, object]:
+    return {
+        "type": "next_question",
+        "reason": "当前问题已经获得足够信息，进入下一个主问题。",
     }
 
 
@@ -226,14 +255,14 @@ def _mock_interview_review_payload() -> dict[str, object]:
         "overall_score": 78,
         "overall_summary": "岗位相关性较强，但指标结果表达仍需继续打磨。",
         "dimension_scores": {
-            "relevance_to_job": 82,
-            "specificity_of_evidence": 71,
-            "ownership_and_depth": 76,
-            "structure_and_clarity": 75,
-            "results_and_metrics": 66,
+            "relevance": 4,
+            "specificity": 3,
+            "evidence": 3,
+            "structure": 4,
+            "communication": 4,
         },
         "strengths": [
-            {"label": "经历相关", "reason": "回答紧贴岗位重点。"},
+            {"label": "经历相关", "reason": "回答紧贴岗位重点。", "severity": "high"},
         ],
         "weaknesses": [
             {
@@ -244,17 +273,30 @@ def _mock_interview_review_payload() -> dict[str, object]:
         ],
         "question_reviews": [
             {
+                "question_group_index": 1,
+                "source": "gap",
                 "question_text": "请说明一次你主导实验分析并推动结果落地的经历。",
-                "what_went_well": "能说明背景和动作。",
-                "what_was_missing": "结果指标与影响不够具体。",
-                "better_answer_direction": "用 STAR 方式补充指标变化与业务收益。",
+                "summary": "能说明背景和动作，但量化结果不够完整。",
+                "strengths": ["背景和动作交代较清楚"],
+                "gaps": ["结果指标与业务影响不够具体"],
+                "suggested_better_answer": "用 STAR 方式补充指标变化与业务收益。",
             }
         ],
         "follow_up_tasks": [
             {
                 "title": "补写实验分析结果",
+                "task_type": "resume",
                 "instruction": "在项目经历中补充实验目标、指标变化与业务收益。",
                 "target_section": "work_experience_or_projects",
+                "reason": "把面试里缺失的量化结果反补到简历事实层。",
+                "source": "mock_interview_review",
+            },
+            {
+                "title": "强化指标表达训练",
+                "task_type": "interview",
+                "instruction": "围绕同一项目准备 90 秒版本，按背景-动作-指标-影响复述两遍。",
+                "target_section": None,
+                "reason": "为下一轮模拟面试补强结果表达。",
                 "source": "mock_interview_review",
             }
         ],
@@ -287,6 +329,48 @@ async def _create_parsed_resume(session: AsyncSession, *, user: User) -> Resume:
     await session.commit()
     await session.refresh(resume)
     return resume
+
+
+async def _create_optimization_session(
+    session: AsyncSession,
+    *,
+    user: User,
+    resume_id: UUID,
+    jd_id: UUID,
+    match_report_id: UUID,
+) -> ResumeOptimizationSession:
+    optimization_session = ResumeOptimizationSession(
+        user_id=user.id,
+        resume_id=resume_id,
+        jd_id=jd_id,
+        match_report_id=match_report_id,
+        source_resume_version=1,
+        source_job_version=1,
+        status="draft",
+        optimized_resume_json={
+            **_resume_structured_data().model_dump(),
+            "basic_info": {
+                **_resume_structured_data().basic_info.model_dump(),
+                "summary": "来自 optimized_resume_json 的结构化事实源",
+            },
+        },
+        optimized_resume_md="# 不允许作为事实源\n这段 Markdown 不应被第四模块读取。",
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    session.add(optimization_session)
+    await session.commit()
+    await session.refresh(optimization_session)
+    return optimization_session
+
+
+def _interview_settings() -> Settings:
+    return Settings(
+        interview_ai_provider="minimax",
+        interview_ai_base_url="https://api.minimaxi.com/anthropic",
+        interview_ai_api_key="test-key",
+        interview_ai_model="MiniMax-M2.5",
+    )
 
 
 async def _create_ready_match_report(
@@ -389,17 +473,18 @@ async def test_mock_interview_flow_creates_session_from_match_report(
             session,
             current_user=test_user,
             payload=MockInterviewSessionCreateRequest(match_report_id=report_id),
-            settings=Settings(
-                interview_ai_provider="minimax",
-                interview_ai_base_url="https://api.minimaxi.com/anthropic",
-                interview_ai_api_key="test-key",
-                interview_ai_model="MiniMax-M2.5",
-            ),
+            settings=_interview_settings(),
         )
 
     assert result.status == "active"
     assert result.mode == "general"
-    assert result.plan_json["target_role"] == "增长数据分析师"
+    assert result.plan_json is not None
+    assert result.plan_json.target_role == "增长数据分析师"
+    assert [item.source for item in result.plan_json.question_plan] == [
+        "gap",
+        "strength",
+        "behavioral_general",
+    ]
     assert len(result.turns) == 1
     assert result.current_turn is not None
     assert result.current_turn.question_text == "请说明一次你主导实验分析并推动结果落地的经历。"
@@ -415,8 +500,10 @@ async def test_mock_interview_flow_submit_answer_creates_follow_up(
         payload = kwargs["payload"]
         if hasattr(payload, "session_mode"):
             return _mock_interview_planner_payload()
+        if hasattr(payload, "evaluation_json"):
+            return _mock_interview_follow_up_decision_payload()
         if hasattr(payload, "candidate_answer"):
-            return _mock_interview_follow_up_payload()
+            return _mock_interview_evaluation_payload()
         raise AssertionError("Unexpected AI stage during answer submission")
 
     monkeypatch.setattr(
@@ -435,12 +522,7 @@ async def test_mock_interview_flow_submit_answer_creates_follow_up(
             session,
             current_user=test_user,
             payload=MockInterviewSessionCreateRequest(match_report_id=report_id),
-            settings=Settings(
-                interview_ai_provider="minimax",
-                interview_ai_base_url="https://api.minimaxi.com/anthropic",
-                interview_ai_api_key="test-key",
-                interview_ai_model="MiniMax-M2.5",
-            ),
+            settings=_interview_settings(),
         )
         assert created.current_turn is not None
 
@@ -452,18 +534,14 @@ async def test_mock_interview_flow_submit_answer_creates_follow_up(
             payload=MockInterviewAnswerSubmitRequest(
                 answer_text="我在实习中负责实验分析，也推动了策略落地。"
             ),
-            settings=Settings(
-                interview_ai_provider="minimax",
-                interview_ai_base_url="https://api.minimaxi.com/anthropic",
-                interview_ai_api_key="test-key",
-                interview_ai_model="MiniMax-M2.5",
-            ),
+            settings=_interview_settings(),
         )
 
     assert answer_result.next_action["type"] == "follow_up"
     assert "turn" in answer_result.next_action
     assert answer_result.next_action["turn"]["question_source"] == "follow_up"
-    assert answer_result.submitted_turn_evaluation["gaps"] == ["缺少量化结果"]
+    assert answer_result.submitted_turn_evaluation.gaps == ["缺少量化结果"]
+    assert answer_result.submitted_turn_evaluation.dimension_scores.evidence == 2
 
 
 @pytest.mark.asyncio
@@ -496,28 +574,19 @@ async def test_mock_interview_flow_finish_generates_review_and_updates_session(
             session,
             current_user=test_user,
             payload=MockInterviewSessionCreateRequest(match_report_id=report_id),
-            settings=Settings(
-                interview_ai_provider="minimax",
-                interview_ai_base_url="https://api.minimaxi.com/anthropic",
-                interview_ai_api_key="test-key",
-                interview_ai_model="MiniMax-M2.5",
-            ),
+            settings=_interview_settings(),
         )
         review = await finish_mock_interview_session(
             session,
             current_user=test_user,
             session_id=created.id,
-            settings=Settings(
-                interview_ai_provider="minimax",
-                interview_ai_base_url="https://api.minimaxi.com/anthropic",
-                interview_ai_api_key="test-key",
-                interview_ai_model="MiniMax-M2.5",
-            ),
+            settings=_interview_settings(),
         )
 
     assert review.status == "completed"
-    assert review.review_json["overall_summary"] == "岗位相关性较强，但指标结果表达仍需继续打磨。"
-    assert review.follow_up_tasks_json[0]["title"] == "补写实验分析结果"
+    assert review.review_json is not None
+    assert review.review_json.overall_summary == "岗位相关性较强，但指标结果表达仍需继续打磨。"
+    assert review.follow_up_tasks_json[0].title == "补写实验分析结果"
 
     async with session_factory() as session:
         persisted_session = await session.get(MockInterviewSession, created.id)
@@ -530,6 +599,123 @@ async def test_mock_interview_flow_finish_generates_review_and_updates_session(
 
 
 @pytest.mark.asyncio
+async def test_mock_interview_flow_follow_up_is_limited_to_one_per_main_question(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_interview_request_json_completion(**kwargs: object) -> dict[str, object]:
+        payload = kwargs["payload"]
+        if hasattr(payload, "session_mode"):
+            return _mock_interview_planner_payload()
+        if hasattr(payload, "evaluation_json"):
+            return _mock_interview_follow_up_decision_payload()
+        if hasattr(payload, "candidate_answer"):
+            return _mock_interview_evaluation_payload()
+        raise AssertionError("Unexpected AI stage during follow-up limit test")
+
+    monkeypatch.setattr(
+        "app.services.mock_interview_ai.request_json_completion",
+        fake_interview_request_json_completion,
+    )
+
+    _resume_id, _job_id, report_id = await _create_ready_match_report(
+        session_factory=session_factory,
+        user=test_user,
+        monkeypatch=monkeypatch,
+    )
+
+    async with session_factory() as session:
+        created = await create_mock_interview_session(
+            session,
+            current_user=test_user,
+            payload=MockInterviewSessionCreateRequest(match_report_id=report_id),
+            settings=_interview_settings(),
+        )
+        assert created.current_turn is not None
+
+        first_answer = await submit_mock_interview_answer(
+            session,
+            current_user=test_user,
+            session_id=created.id,
+            turn_id=created.current_turn.id,
+            payload=MockInterviewAnswerSubmitRequest(
+                answer_text="我做了实验分析，也推动方案落地。"
+            ),
+            settings=_interview_settings(),
+        )
+        follow_up_turn = first_answer.next_action["turn"]
+
+        second_answer = await submit_mock_interview_answer(
+            session,
+            current_user=test_user,
+            session_id=created.id,
+            turn_id=follow_up_turn["id"],
+            payload=MockInterviewAnswerSubmitRequest(
+                answer_text="指标提升我暂时没有整理出来，但策略后续上线了。"
+            ),
+            settings=_interview_settings(),
+        )
+
+    assert first_answer.next_action["type"] == "follow_up"
+    assert second_answer.next_action["type"] == "next_question"
+    assert second_answer.next_action["turn"]["question_source"] == "strength"
+
+
+@pytest.mark.asyncio
+async def test_mock_interview_flow_uses_optimized_resume_json_not_markdown_as_fact_source(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_interview_request_json_completion(**kwargs: object) -> dict[str, object]:
+        payload = kwargs["payload"]
+        if hasattr(payload, "session_mode"):
+            assert payload.resume_snapshot["basic_info"]["summary"] == (
+                "来自 optimized_resume_json 的结构化事实源"
+            )
+            assert "Markdown" not in str(payload.resume_snapshot)
+            assert payload.optimization_snapshot["structured_fact_source"] == (
+                "resume_optimization_session.optimized_resume_json"
+            )
+            return _mock_interview_planner_payload()
+        raise AssertionError("Unexpected AI stage during optimization fact source test")
+
+    monkeypatch.setattr(
+        "app.services.mock_interview_ai.request_json_completion",
+        fake_interview_request_json_completion,
+    )
+
+    resume_id, job_id, report_id = await _create_ready_match_report(
+        session_factory=session_factory,
+        user=test_user,
+        monkeypatch=monkeypatch,
+    )
+
+    async with session_factory() as session:
+        optimization_session = await _create_optimization_session(
+            session,
+            user=test_user,
+            resume_id=resume_id,
+            jd_id=job_id,
+            match_report_id=report_id,
+        )
+
+        result = await create_mock_interview_session(
+            session,
+            current_user=test_user,
+            payload=MockInterviewSessionCreateRequest(
+                match_report_id=report_id,
+                optimization_session_id=optimization_session.id,
+            ),
+            settings=_interview_settings(),
+        )
+
+    assert result.plan_json is not None
+    assert result.status == "active"
+
+
+@pytest.mark.asyncio
 async def test_mock_interview_flow_blocks_when_context_turns_stale(
     session_factory: async_sessionmaker[AsyncSession],
     test_user: User,
@@ -539,8 +725,10 @@ async def test_mock_interview_flow_blocks_when_context_turns_stale(
         payload = kwargs["payload"]
         if hasattr(payload, "session_mode"):
             return _mock_interview_planner_payload()
+        if hasattr(payload, "evaluation_json"):
+            return _mock_interview_follow_up_decision_payload()
         if hasattr(payload, "candidate_answer"):
-            return _mock_interview_follow_up_payload()
+            return _mock_interview_evaluation_payload()
         raise AssertionError("Unexpected AI stage during stale-context test")
 
     monkeypatch.setattr(
@@ -559,12 +747,7 @@ async def test_mock_interview_flow_blocks_when_context_turns_stale(
             session,
             current_user=test_user,
             payload=MockInterviewSessionCreateRequest(match_report_id=report_id),
-            settings=Settings(
-                interview_ai_provider="minimax",
-                interview_ai_base_url="https://api.minimaxi.com/anthropic",
-                interview_ai_api_key="test-key",
-                interview_ai_model="MiniMax-M2.5",
-            ),
+            settings=_interview_settings(),
         )
 
     async with session_factory() as session:
@@ -586,12 +769,7 @@ async def test_mock_interview_flow_blocks_when_context_turns_stale(
                 session_id=created.id,
                 turn_id=created.current_turn.id,  # type: ignore[union-attr]
                 payload=MockInterviewAnswerSubmitRequest(answer_text="我做了实验分析。"),
-                settings=Settings(
-                    interview_ai_provider="minimax",
-                    interview_ai_base_url="https://api.minimaxi.com/anthropic",
-                    interview_ai_api_key="test-key",
-                    interview_ai_model="MiniMax-M2.5",
-                ),
+                settings=_interview_settings(),
             )
 
     assert exc_info.value.status_code == 409
