@@ -8,7 +8,6 @@ import { useState, useTransition } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { dashboardNavItems, type NavItem } from "@/config/nav-config";
-import { cn } from "@/lib/utils";
 
 function isItemActive(pathname: string, item: NavItem) {
   if (!item.href) {
@@ -63,31 +62,32 @@ export function DashboardTopNav() {
                 type="button"
                 variant="secondary"
               >
-                {isMenuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+                {isMenuOpen ? (
+                  <X className="size-4" />
+                ) : (
+                  <Menu className="size-4" />
+                )}
               </Button>
             </div>
 
-            <nav
-              className={cn(
-                "mt-4 flex-wrap gap-x-4 gap-y-2 font-mono text-sm lg:flex",
-                isMenuOpen ? "flex" : "hidden"
-              )}
-            >
+            <nav className="mt-4 hidden flex-col gap-2 lg:flex lg:flex-row lg:gap-2">
               {dashboardNavItems.map((item) => {
                 const active = isItemActive(pathname, item);
 
                 return (
-                  <Link
+                  <Button
                     key={item.href}
-                    href={item.href!}
-                    onClick={() => setIsMenuOpen(false)}
-                    className={cn(
-                      "underline underline-offset-2",
-                      active ? "font-bold text-black no-underline" : "text-[#0000ff]"
-                    )}
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      router.push(item.href!);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant={active ? "default" : "secondary"}
+                    className="font-mono text-xs hover:font-black"
                   >
                     {item.title}
-                  </Link>
+                  </Button>
                 );
               })}
             </nav>
@@ -96,7 +96,9 @@ export function DashboardTopNav() {
           <div className="flex flex-col gap-3 lg:items-end">
             {user ? (
               <div className="border-2 border-black px-3 py-2 font-mono text-sm">
-                <p className="font-bold">{user.nickname || "CareerPilot Member"}</p>
+                <p className="font-bold">
+                  {user.nickname || "CareerPilot Member"}
+                </p>
                 <p>{user.email}</p>
               </div>
             ) : null}

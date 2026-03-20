@@ -1,104 +1,122 @@
 "use client";
 
-import {
-  ArrowRight,
-  BriefcaseBusiness,
-  FileText,
-  Settings,
-  Sparkles,
-  Target,
-  WandSparkles,
-} from "lucide-react";
 import Link from "next/link";
+import { FileText, Sparkles, Target, WandSparkles } from "lucide-react";
 
-import {
-  PageHeader,
-  PageShell,
-  PaperSection,
-} from "@/components/brutalist/page-shell";
+import { BrutalCard, BrutalSection, BrutalTag } from "@/components/ui/brutal";
 
-const sections = [
+const modules = [
   {
-    title: "简历中心",
-    description: "上传 PDF、查看解析状态，并直接在结构化编辑区修正结果。",
+    title: "简历解析",
+    description:
+      "上传 PDF 简历，AI 自动抽取结构化信息，支持在线修正，一键同步到后续所有模块。",
     href: "/dashboard/resume",
     icon: FileText,
+    color: "bg-[#ff006e]",
+    textColor: "text-white",
   },
   {
     title: "岗位匹配",
-    description: "维护 JD、生成匹配报告，并把岗位要求和简历能力放在同一张面板里。",
+    description:
+      "维护 JD 文本或结构化要求，生成匹配报告，找出简历与岗位之间的能力差距。",
     href: "/dashboard/jobs",
     icon: Target,
+    color: "bg-[#00d9ff]",
+    textColor: "text-black",
   },
   {
     title: "简历优化",
-    description: "基于岗位快照生成可编辑的改写草案，并把确认后的建议应用到结构化简历。",
+    description:
+      "基于目标岗位快照生成改写草案，人工确认后应用到结构化简历版本中。",
     href: "/dashboard/optimizer",
     icon: WandSparkles,
+    color: "bg-[#ccff00]",
+    textColor: "text-black",
   },
   {
     title: "模拟面试",
-    description: "基于岗位快照进入问答训练，获取 AI 反馈、复盘结论和后续改进任务。",
+    description:
+      "进入岗位相关的真实问答训练，获取 AI 追问、复盘结论与后续改进任务清单。",
     href: "/dashboard/interviews",
     icon: Sparkles,
-  },
-  {
-    title: "个人信息",
-    description: "维护求职方向、目标城市和岗位偏好，为后续建议提供更准确的上下文。",
-    href: "/dashboard/profile",
-    icon: Settings,
-  },
-  {
-    title: "投递追踪",
-    description: "准备承接投递状态、跟进记录和时间线，入口已经统一到顶部导航。",
-    href: "/dashboard/applications",
-    icon: BriefcaseBusiness,
+    color: "bg-white",
+    textColor: "text-black",
   },
 ];
 
 export default function DashboardOverviewPage() {
   return (
-    <PageShell>
-      <PageHeader
-        description="管理简历、岗位匹配、优化建议与投递过程，统一的工作台界面让各功能模块清晰可见。"
-        eyebrow="Dashboard"
-        title="求职工作台"
-      />
-
-      <PaperSection title="功能模块" eyebrow="Modules" bodyClassName="p-0">
-        <div className="grid gap-0 md:grid-cols-2 lg:grid-cols-3">
-          {sections.map((section) => {
-            const Icon = section.icon;
-            return (
-              <Link
-                key={section.href}
-                href={section.href}
-                className="group border-b-2 border-r-0 border-black p-6 font-mono md:border-r-2"
-              >
-                <div className="mb-4 flex items-center gap-3 text-black">
-                  <Icon className="size-4" />
-                  <span className="text-xs font-bold uppercase">
-                    模块
-                  </span>
-                </div>
-
-                <h2 className="font-serif text-xl font-bold text-black">
-                  {section.title}
-                </h2>
-
-                <p className="mt-2 text-sm leading-6 text-black">
-                  {section.description}
-                </p>
-
-                <div className="mt-4 font-mono text-xs font-bold text-[#0000ff]">
-                  <span className="underline">进入模块</span>
-                  <ArrowRight className="ml-2 inline-block size-3" />
-                </div>
-              </Link>
-            );
-          })}
+    <div className="min-h-screen bg-white">
+      <BrutalSection className="py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="grid md:grid-cols-2 gap-8">
+            {modules.map((mod, i) => {
+              const Icon = mod.icon;
+              return (
+                <Link
+                  key={i}
+                  href={mod.href}
+                  className="block group no-underline"
+                >
+                  <BrutalCard
+                    className={`p-8 transition-all group-hover:-translate-y-1 group-hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] ${mod.color} ${mod.textColor} no-underline`}
+                  >
+                    <div className="flex items-start gap-6">
+                      <div
+                        className={`shrink-0 w-16 h-16 border-4 border-black flex items-center justify-center ${mod.color}`}
+                      >
+                        <span className={mod.textColor}>
+                          <Icon className="w-8 h-8" />
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-black mb-2">
+                          {mod.title}
+                        </h3>
+                        <p className="text-sm leading-relaxed opacity-80">
+                          {mod.description}
+                        </p>
+                        <div className="mt-4 inline-flex items-center gap-2 font-black text-xs uppercase">
+                          <span>进入模块</span>
+                          <span>→</span>
+                        </div>
+                      </div>
+                    </div>
+                  </BrutalCard>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      </PaperSection>
-    </PageShell>
+      </BrutalSection>
+
+      {/* <footer className="py-8 bg-black text-white border-t-4 border-[#ff006e]">
+        <div className="max-w-6xl mx-auto px-4 text-center">
+          <p className="font-mono text-sm">
+            CareerPilot — 让每一次求职都有迹可循
+          </p>
+        </div>
+      </footer> */}
+
+      <BrutalSection className="py-12 bg-black text-white border-y-4 border-black">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            {[
+              { value: "PDF", label: "简历解析" },
+              { value: "JD", label: "岗位匹配" },
+              { value: "Draft", label: "优化草案" },
+              { value: "Q&A", label: "模拟面试" },
+            ].map((stat, i) => (
+              <div key={i}>
+                <div className="text-4xl md:text-5xl font-black text-[#ccff00]">
+                  {stat.value}
+                </div>
+                <div className="text-sm mt-1">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </BrutalSection>
+    </div>
   );
 }

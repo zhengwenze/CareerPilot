@@ -10,13 +10,10 @@ import {
   PaperSection,
 } from "@/components/brutalist/page-shell";
 import {
-  PageEmptyState,
   PageErrorState,
   PageLoadingState,
 } from "@/components/page-state";
 import { ResumeDetailPanel } from "@/components/resume/resume-detail-panel";
-import { ResumeList } from "@/components/resume/resume-list";
-import { ResumeUploadCard } from "@/components/resume/resume-upload-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -512,54 +509,34 @@ export default function DashboardResumePage() {
         </Alert>
       ) : null}
 
-      <section className="grid gap-0 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="space-y-0">
-          <div className="pt-4">
-            <ResumeUploadCard
-              isUploading={isUploading}
-              onUpload={handleUpload}
-            />
-          </div>
-
-          <PaperSection className="border-t-0" title="简历列表" eyebrow="Resume List">
-            {resumes.length === 0 ? (
-              <PageEmptyState
-                description="先上传一份 PDF 简历，系统会自动进入解析流程。"
-                title="还没有简历"
-              />
-            ) : (
-              <ResumeList
-                items={resumes}
-                onSelect={handleSelectResume}
-                selectedResumeId={selectedResumeId}
-              />
-            )}
-          </PaperSection>
-        </div>
-
+      <section className="grid gap-0 xl:grid-cols-1">
         <PaperSection
-          bodyClassName="p-5 sm:p-6"
-          className="border-l-0 border-t-0"
+          bodyClassName="p-0"
+          className="border-0"
           title="简历详情与结构化编辑"
           eyebrow="Structured Resume Workspace"
         >
-            <ResumeDetailPanel
-              isDeleting={isDeleting}
-              isStructuredDirty={isStructuredDirty}
-              isRetrying={isRetrying}
-              isSaving={isSaving}
-              onChangeStructured={(value) => {
-                setStructuredValue(value);
-                setIsStructuredDirty(true);
-              }}
-              onDelete={handleDelete}
-              onDownload={handleDownload}
-              onRetry={handleRetryParse}
-              onSave={handleSaveStructured}
-              parseJobs={parseJobs}
-              resume={selectedResume}
-              structuredValue={structuredValue}
-            />
+          <ResumeDetailPanel
+            isDeleting={isDeleting}
+            isStructuredDirty={isStructuredDirty}
+            isRetrying={isRetrying}
+            isSaving={isSaving}
+            isUploading={isUploading}
+            onChangeStructured={(value) => {
+              setStructuredValue(value);
+              setIsStructuredDirty(true);
+            }}
+            onDelete={handleDelete}
+            onDownload={handleDownload}
+            onRetry={handleRetryParse}
+            onSave={handleSaveStructured}
+            onSelectResume={handleSelectResume}
+            onUpload={handleUpload}
+            parseJobs={parseJobs}
+            resume={selectedResume}
+            resumes={resumes}
+            structuredValue={structuredValue}
+          />
         </PaperSection>
       </section>
     </PageShell>

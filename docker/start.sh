@@ -71,17 +71,16 @@ start_middleware() {
 
     cd "$(dirname "$0")/.."
 
-    if ! docker compose -f docker-compose.middleware.yml ps &> /dev/null; then
+    if ! docker compose -f docker-compose.yml ps &> /dev/null; then
         log_info "正在启动中间件服务..."
-        docker compose -f docker-compose.middleware.yml up -d
-
-        log_info "等待中间件服务就绪..."
+        docker compose -f docker-compose.yml up -d
+        log_info "中间件服务启动命令已执行""等待中间件服务就绪..."
         sleep 5
 
         # 检查服务状态
         for service in postgres redis minio; do
             for i in {1..10}; do
-                if docker compose -f docker-compose.middleware.yml ps "$service" | grep -q "healthy"; then
+                if docker compose -f docker-compose.yml ps "$service" | grep -q "healthy"; then
                     log_info "服务 $service 已就绪"
                     break
                 fi
