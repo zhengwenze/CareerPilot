@@ -7,12 +7,8 @@ import { useState, useTransition } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
-import { dashboardNavSections, type NavItem } from "@/config/nav-config";
+import { dashboardNavItems, type NavItem } from "@/config/nav-config";
 import { cn } from "@/lib/utils";
-
-const dashboardNavItems = dashboardNavSections
-  .flatMap((section) => section.items)
-  .filter((item) => item.href && !item.disabled);
 
 function isItemActive(pathname: string, item: NavItem): boolean {
   if (!item.href) {
@@ -44,17 +40,17 @@ export function DashboardTopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[#1C1C1C]/10 bg-white/95 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-6 px-6 py-5 lg:px-10">
+    <header className="sticky top-0 z-40 border-b-2 border-black bg-white">
+      <div className="mx-auto flex w-full items-center justify-between gap-6 px-4 py-4 lg:px-8">
         <div className="flex items-center gap-5">
           <Link
             href="/dashboard/overview"
-            className="text-lg font-semibold tracking-[-0.03em] text-[#1C1C1C] transition-opacity hover:opacity-65"
+            className="font-serif text-xl font-bold tracking-[-0.03em] text-black transition-none hover:text-gray-600"
           >
             CareerPilot
           </Link>
 
-          <nav className="hidden items-center gap-2 lg:flex">
+          <nav className="hidden items-center gap-0 lg:flex">
             {dashboardNavItems.map((item) => {
               const active = isItemActive(pathname, item);
 
@@ -63,10 +59,10 @@ export function DashboardTopNav() {
                   key={item.href}
                   href={item.href!}
                   className={cn(
-                    "px-4 py-2 text-sm font-medium text-[#1C1C1C] transition-colors",
+                    "border-2 border-black px-4 py-2 font-mono text-sm font-bold uppercase transition-none",
                     active
-                      ? "border-b-2 border-[#1C1C1C]"
-                      : "hover:bg-[#F9F8F6]"
+                      ? "bg-black text-white"
+                      : "bg-white text-black hover:bg-gray-100"
                   )}
                 >
                   {item.title}
@@ -76,93 +72,89 @@ export function DashboardTopNav() {
           </nav>
         </div>
 
-        <div className="hidden items-center gap-3 lg:flex">
-          <div className="text-right">
-            <p className="text-sm font-medium text-[#1C1C1C]">
-              {user?.nickname || "CareerPilot Member"}
-            </p>
-            <p className="text-xs text-[#1C1C1C]/60">{user?.email}</p>
-          </div>
+        <div className="hidden items-center gap-4 lg:flex">
+          {user ? (
+            <div className="border-2 border-black bg-white px-4 py-2">
+              <p className="font-mono text-sm font-bold text-black">
+                {user.nickname || "CareerPilot Member"}
+              </p>
+              <p className="font-mono text-xs text-black">{user.email}</p>
+            </div>
+          ) : null}
 
           <Button
-            asChild
-            variant="outline"
-            className="h-10 border-[#1C1C1C]/20 bg-white px-5 text-[#1C1C1C] hover:bg-[#F9F8F6]"
-          >
-            <Link href="/">返回概览</Link>
-          </Button>
-
-          <Button
-            className="h-10 bg-[#1C1C1C] px-5 text-white hover:bg-[#1C1C1C]/90"
-            disabled={isLoggingOut}
             onClick={() => void handleLogout()}
+            size="sm"
+            disabled={isLoggingOut}
             type="button"
+            variant="secondary"
           >
-            {isLoggingOut ? "退出中..." : "退出"}
             <LogOut className="size-4" />
+            <span className="ml-2">LOGOUT</span>
           </Button>
         </div>
 
-        <Button
-          className="size-10 border-[#1C1C1C]/20 bg-white text-[#1C1C1C] hover:bg-[#F9F8F6] lg:hidden"
-          onClick={() => setIsMenuOpen((current) => !current)}
-          type="button"
-          variant="outline"
-        >
-          {isMenuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
-        </Button>
+        <div className="lg:hidden">
+          <Button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            size="icon-sm"
+            type="button"
+            variant="secondary"
+          >
+            {isMenuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+          </Button>
+        </div>
       </div>
 
-      {isMenuOpen ? (
-        <div className="border-t border-[#1C1C1C]/10 bg-white px-6 pb-5 pt-4 lg:hidden">
-          <div className="space-y-3">
-            {dashboardNavItems.map((item) => {
-              const active = isItemActive(pathname, item);
+      {isMenuOpen && (
+        <div className="border-t-2 border-black lg:hidden">
+          <div className="bg-white p-4">
+            <nav className="space-y-2">
+              {dashboardNavItems.map((item) => {
+                const active = isItemActive(pathname, item);
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href!}
-                  className={cn(
-                    "block px-4 py-3 text-sm font-medium text-[#1C1C1C] transition-colors",
-                    active
-                      ? "bg-[#F9F8F6] border-l-2 border-[#1C1C1C]"
-                      : "bg-[#F9F8F6] hover:bg-[#1C1C1C]/[0.05]"
-                  )}
-                  onClick={() => setIsMenuOpen(false)}
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href!}
+                    onClick={() => setIsMenuOpen(false)}
+                    className={cn(
+                      "block border-2 border-black px-4 py-3 font-mono text-sm font-bold uppercase transition-none",
+                      active
+                        ? "bg-black text-white"
+                        : "bg-white text-black hover:bg-gray-100"
+                    )}
+                  >
+                    {item.title}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {user && (
+              <div className="mt-4 border-t-2 border-black pt-4">
+                <div className="mb-4 border-2 border-black bg-white px-4 py-2">
+                  <p className="font-mono text-sm font-bold text-black">
+                    {user.nickname || "CareerPilot Member"}
+                  </p>
+                  <p className="font-mono text-xs text-black">{user.email}</p>
+                </div>
+                <Button
+                  onClick={() => void handleLogout()}
+                  size="sm"
+                  className="w-full"
+                  disabled={isLoggingOut}
+                  type="button"
+                  variant="secondary"
                 >
-                  {item.title}
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="mt-5 border border-[#1C1C1C]/10 bg-[#F9F8F6] p-4">
-            <p className="text-sm font-medium text-[#1C1C1C]">
-              {user?.nickname || "CareerPilot Member"}
-            </p>
-            <p className="mt-1 text-xs text-[#1C1C1C]/60">{user?.email}</p>
-
-            <div className="mt-4 flex gap-3">
-              <Button
-                asChild
-                variant="outline"
-                className="flex-1 border-[#1C1C1C]/20 bg-white text-[#1C1C1C] hover:bg-white"
-              >
-                <Link href="/">返回概览</Link>
-              </Button>
-              <Button
-                className="bg-[#1C1C1C] text-white hover:bg-[#1C1C1C]/90"
-                disabled={isLoggingOut}
-                onClick={() => void handleLogout()}
-                type="button"
-              >
-                {isLoggingOut ? "退出中..." : "退出"}
-              </Button>
-            </div>
+                  <LogOut className="size-4" />
+                  <span className="ml-2">LOGOUT</span>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
-      ) : null}
+      )}
     </header>
   );
 }

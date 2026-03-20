@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,35 +47,35 @@ function SidebarNavItem({
   const hasChildren = Boolean(item.children?.length);
 
   const itemClassName = cn(
-    "group flex w-full items-center gap-3 border border-transparent px-3 py-3 text-left transition-all duration-200",
-    collapsed ? "justify-center px-2.5" : "",
-    depth > 0 ? "py-2.5" : "",
+    "group flex w-full items-center gap-3 border-2 border-black px-3 py-3 text-left font-mono text-sm transition-none",
+    collapsed ? "justify-center px-2" : "",
+    depth > 0 ? "py-2" : "",
     item.disabled
       ? "cursor-not-allowed opacity-55"
       : active
-      ? "border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]"
-      : "text-[#1C1C1C]/60 hover:border-[#1C1C1C]/10 hover:bg-[#1C1C1C]/[0.02] hover:text-[#1C1C1C]"
+      ? "bg-black text-white"
+      : "bg-white text-black hover:bg-gray-100"
   );
 
   const itemBody = (
     <>
       <span
         className={cn(
-          "flex size-10 shrink-0 items-center justify-center border transition-colors",
+          "flex size-10 shrink-0 items-center justify-center border-2 border-black font-mono text-sm",
           active
-            ? "border-[#1C1C1C]/20 bg-[#1C1C1C]/[0.05] text-[#1C1C1C]"
-            : "border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]/60 group-hover:text-[#1C1C1C]"
+            ? "bg-white text-black"
+            : "bg-white text-black"
         )}
       >
-        <Icon className="size-4.5" />
+        <Icon className="size-4" />
       </span>
       {!collapsed && (
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">
+          <span className="block truncate font-mono text-sm font-bold uppercase">
             {item.title}
           </span>
           {item.description ? (
-            <span className="mt-0.5 block truncate text-xs text-[#1C1C1C]/60">
+            <span className="mt-0.5 block truncate font-mono text-xs">
               {item.description}
             </span>
           ) : null}
@@ -83,8 +83,8 @@ function SidebarNavItem({
       )}
       {!collapsed && item.badge ? (
         <Badge
-          className="shrink-0 bg-[#1C1C1C]/10 text-[#1C1C1C] hover:bg-[#1C1C1C]/10"
-          variant="secondary"
+          className="shrink-0 bg-black text-white"
+          variant="default"
         >
           {item.badge}
         </Badge>
@@ -128,16 +128,12 @@ function SidebarNavItem({
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isAuthenticated, isBootstrapping, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isLoggingOut, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
-  const activeSection = useMemo(() => {
-    return dashboardNavSections.find((section) =>
-      section.items.some((item) => isItemActive(pathname, item))
-    );
-  }, [pathname]);
+
 
   async function handleLogout() {
     await logout();
@@ -148,18 +144,18 @@ export function AppSidebar() {
   }
 
   const sidebarContent = (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-[#1C1C1C]/10 px-4 py-4">
+    <div className="flex h-full flex-col bg-white font-mono">
+      <div className="border-b-2 border-black px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center border border-[#1C1C1C]/20 bg-[#1C1C1C] text-[#F9F8F6]">
-            <PanelLeftOpen className="size-5" />
+          <div className="flex size-10 items-center justify-center border-2 border-black bg-black text-white">
+            <PanelLeftOpen className="size-4" />
           </div>
           {!collapsed ? (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-[#1C1C1C]">
+              <p className="truncate font-serif text-lg font-bold text-black">
                 CareerPilot
               </p>
-              <p className="truncate text-xs text-[#1C1C1C]/60">
+              <p className="truncate font-mono text-xs text-black">
                 AI 求职工作台
               </p>
             </div>
@@ -169,7 +165,7 @@ export function AppSidebar() {
             onClick={() => setCollapsed((value) => !value)}
             size="icon-sm"
             type="button"
-            variant="ghost"
+            variant="secondary"
           >
             {collapsed ? (
               <PanelLeftOpen className="size-4" />
@@ -182,162 +178,103 @@ export function AppSidebar() {
             onClick={() => setMobileOpen(false)}
             size="icon-sm"
             type="button"
-            variant="ghost"
+            variant="secondary"
           >
             <X className="size-4" />
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
-        {!collapsed ? (
-          <div className="border border-[#1C1C1C]/10 bg-[#F9F8F6] p-4">
-            <Badge className="mb-3 bg-[#1C1C1C]/10 text-[#1C1C1C] hover:bg-[#1C1C1C]/10">
-              Dashboard Shell
-            </Badge>
-            <p className="text-sm font-medium text-[#1C1C1C]">
-              左侧导航已经独立成组件，后续页面只需要填内容区。
-            </p>
-            {activeSection ? (
-              <p className="mt-2 text-xs leading-6 text-[#1C1C1C]/60">
-                当前定位到「{activeSection.title}
-                」分组，后续加页面时只需要补充对应路由。
-              </p>
-            ) : (
-              <p className="mt-2 text-xs leading-6 text-[#1C1C1C]/60">
-                当前 dashboard 路由还在搭建中，这里已经预留好统一菜单入口。
-              </p>
-            )}
-          </div>
-        ) : null}
-
+      <div className="flex-1 space-y-6 overflow-y-auto border-r-2 border-black px-3 py-4">
         {dashboardNavSections.map((section) => (
-          <section className="space-y-2" key={section.title}>
-            {!collapsed ? (
-              <div className="px-3 text-xs font-semibold tracking-[0.18em] text-[#1C1C1C]/60 uppercase">
-                {section.title}
+          <div key={section.title} className="space-y-2">
+            {!collapsed && (
+              <div className="border-b-2 border-black pb-2">
+                <span className="font-mono text-xs font-bold uppercase tracking-widest text-black">
+                  {section.title}
+                </span>
               </div>
-            ) : null}
-            <div className="space-y-2">
-              {section.items.map((item) => (
-                <SidebarNavItem
-                  collapsed={collapsed}
-                  item={item}
-                  key={item.title}
-                  onNavigate={() => setMobileOpen(false)}
-                  pathname={pathname}
-                />
-              ))}
-            </div>
-          </section>
+            )}
+            {section.items.map((item) => (
+              <SidebarNavItem
+                collapsed={collapsed}
+                item={item}
+                key={item.title}
+                onNavigate={() => setMobileOpen(false)}
+                pathname={pathname}
+              />
+            ))}
+          </div>
         ))}
       </div>
 
-      <div className="border-t border-[#1C1C1C]/10 px-3 py-3">
-        <div
-          className={cn(
-            "border border-[#1C1C1C]/10 bg-[#F9F8F6] p-3",
-            collapsed ? "flex justify-center px-2 py-3" : ""
-          )}
+      <div className="border-t-2 border-black p-4">
+        {!collapsed && user ? (
+          <div className="mb-4 border-b-2 border-black pb-4">
+            <p className="font-mono text-sm font-bold text-black">
+              {user.nickname || "CareerPilot Member"}
+            </p>
+            <p className="font-mono text-xs text-black">{user.email}</p>
+          </div>
+        ) : null}
+        <Button
+          className="w-full"
+          onClick={() => void handleLogout()}
+          size="sm"
+          type="button"
+          variant="secondary"
         >
-          {collapsed ? (
-            <Button
-              aria-label="退出登录"
-              className="size-10"
-              disabled={isLoggingOut}
-              onClick={() => void handleLogout()}
-              size="icon"
-              type="button"
-              variant="outline"
-            >
-              <LogOut className="size-4" />
-            </Button>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
-                  <Menu className="size-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-[#1C1C1C]">
-                    {isBootstrapping
-                      ? "正在恢复登录态"
-                      : isAuthenticated
-                      ? user?.nickname || user?.email
-                      : "未登录"}
-                  </p>
-                  <p className="truncate text-xs text-[#1C1C1C]/60">
-                    {isAuthenticated
-                      ? user?.email
-                      : "登录后可直接进入求职工作台"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  asChild
-                  className="flex-1"
-                  size="sm"
-                  variant="outline"
-                >
-                  <Link href="/">返回门户</Link>
-                </Button>
-                {isAuthenticated ? (
-                  <Button
-                    className=""
-                    disabled={isLoggingOut}
-                    onClick={() => void handleLogout()}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {isLoggingOut ? "退出中" : "退出"}
-                    <LogOut className="size-4" />
-                  </Button>
-                ) : (
-                  <Button asChild className="" size="sm">
-                    <Link href="/login">去登录</Link>
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+          <LogOut className="size-4" />
+          {!collapsed && <span className="ml-2">LOGOUT</span>}
+        </Button>
       </div>
     </div>
   );
 
+  if (mobileOpen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white">
+        <div className="flex items-center justify-between border-b-2 border-black px-4 py-4">
+          <span className="font-serif text-xl font-bold text-black">
+            CareerPilot
+          </span>
+          <Button
+            onClick={() => setMobileOpen(false)}
+            size="icon-sm"
+            type="button"
+            variant="secondary"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+        <div className="p-4">{sidebarContent}</div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <Button
-        className="fixed left-4 top-4 z-30 border-[#1C1C1C]/20 bg-white/90 md:hidden"
-        onClick={() => setMobileOpen(true)}
-        size="icon"
-        type="button"
-        variant="outline"
-      >
-        <Menu className="size-4" />
-      </Button>
+      <div className="hidden md:block">
+        <div
+          className={cn(
+            "h-screen border-r-2 border-black transition-all duration-0",
+            collapsed ? "w-16" : "w-64"
+          )}
+        >
+          {sidebarContent}
+        </div>
+      </div>
 
-      {mobileOpen ? (
-        <button
-          aria-label="关闭侧边栏蒙层"
-          className="fixed inset-0 z-40 bg-[#1C1C1C]/10 md:hidden"
-          onClick={() => setMobileOpen(false)}
+      <div className="fixed bottom-4 left-4 z-50 md:hidden">
+        <Button
+          onClick={() => setMobileOpen(true)}
+          size="icon-lg"
           type="button"
-        />
-      ) : null}
-
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 h-screen border-r border-[#1C1C1C]/10 bg-[#F9F8F6]/95 backdrop-blur transition-transform duration-300 md:sticky md:top-0 md:z-20 md:translate-x-0",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed ? "w-[88px]" : "w-[296px]"
-        )}
-      >
-        {sidebarContent}
-      </aside>
+          variant="primary"
+        >
+          <Menu className="size-5" />
+        </Button>
+      </div>
     </>
   );
 }

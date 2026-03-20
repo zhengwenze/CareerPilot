@@ -5,16 +5,16 @@ import { Slot } from "radix-ui"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden border border-transparent px-2 py-0.5 text-xs font-normal whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-6 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden border-2 border-black px-2 py-0.5 text-xs font-mono font-bold uppercase whitespace-nowrap transition-none focus-visible:outline-dotted focus-visible:outline-1 focus-visible:outline-black focus-visible:outline-offset-1 [&>svg]:pointer-events-none [&>svg]:shrink-0 [&>svg:not([class*='size-'])]:size-3!",
   {
     variants: {
       variant: {
-        default: "bg-[#1C1C1C]/10 text-[#1C1C1C]",
-        secondary: "bg-[#F9F8F6] text-[#1C1C1C]/60",
-        destructive: "bg-[#1C1C1C]/10 text-[#1C1C1C]",
-        outline: "border-[#1C1C1C]/20 text-[#1C1C1C]",
-        ghost: "text-[#1C1C1C]/40 hover:text-[#1C1C1C]/60",
-        link: "text-[#1C1C1C] underline-offset-4 hover:underline",
+        default: "bg-white text-black",
+        secondary: "bg-gray-100 text-black",
+        destructive: "bg-white text-red border-red",
+        outline: "bg-white text-black border-black",
+        ghost: "bg-transparent text-black border-transparent",
+        link: "bg-transparent text-blue-500 underline border-transparent hover:text-red",
       },
     },
     defaultVariants: {
