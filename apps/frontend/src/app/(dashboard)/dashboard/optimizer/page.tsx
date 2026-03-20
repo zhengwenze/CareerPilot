@@ -80,17 +80,17 @@ function PaperSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
-      <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+    <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
+      <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
         {eyebrow ? (
           <div className="mb-3 flex items-center gap-3">
             <span className={`size-2.5 ${accentClassName}`} />
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
               {eyebrow}
             </p>
           </div>
         ) : null}
-        <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+        <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
           {title}
         </h2>
       </div>
@@ -105,7 +105,7 @@ function PaperTextarea(
   return (
     <textarea
       {...props}
-      className={`min-h-[96px] w-full border-2 border-black bg-[#f9f7f0] px-4 py-3 text-sm leading-7 text-black outline-none shadow-[3px_3px_0_0_#000] placeholder:text-black/40 ${props.className ?? ""}`}
+      className={`min-h-[96px] w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 py-3 text-sm leading-relaxed text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
     />
   );
 }
@@ -223,7 +223,7 @@ export default function DashboardOptimizerPage() {
         />
         <Button
           asChild
-          className="border-2 border-black bg-white px-5 py-3 text-sm font-semibold text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000]"
+          className="border-b border-[#1C1C1C]/20 bg-white px-5 py-3 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5"
           type="button"
         >
           <Link href="/dashboard/jobs">
@@ -321,32 +321,32 @@ export default function DashboardOptimizerPage() {
 
   return (
     <div className="space-y-6">
-      <header className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
         <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="inline-flex items-center border-2 border-black bg-[#f9f7f0] px-5 py-3 shadow-[4px_4px_0_0_#000]">
-              <span className="mr-4 text-2xl leading-none text-[#10bf7a]">
+            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
+              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">
                 *
               </span>
-              <span className="text-[1.55rem] font-black uppercase tracking-[-0.06em] text-black sm:text-[1.8rem]">
+              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
                 Resume Optimizer
               </span>
             </div>
 
-            <div className="mt-6 inline-block border-2 border-black bg-[#10bf7a] px-4 py-2 shadow-[5px_5px_0_0_#000]">
-              <h1 className="text-3xl font-semibold tracking-[-0.08em] text-white sm:text-4xl">
+            <div className="mt-6">
+              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
                 简历优化
               </h1>
             </div>
 
-            <p className="mt-5 max-w-3xl text-base leading-8 text-[#38445a] sm:text-[1.05rem]">
+            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
               基于匹配报告生成改写草案，确认后应用到结构化简历。
             </p>
           </div>
 
           <Button
             asChild
-            className="border-2 border-black bg-white px-5 py-3 text-sm font-semibold text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000]"
+            className="border-b border-[#1C1C1C]/20 bg-white px-5 py-3 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5"
             type="button"
           >
             <Link href={`/dashboard/jobs?jobId=${session.jd_id}&staleHint=1`}>
@@ -358,19 +358,19 @@ export default function DashboardOptimizerPage() {
       </header>
 
       {pageError ? (
-        <Alert className="border-2 border-black bg-[#fff1f1] text-black shadow-[6px_6px_0_0_#000]">
-          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
             操作失败
           </AlertTitle>
-          <AlertDescription className="text-sm leading-7 text-black/72">
+          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
             {pageError}
           </AlertDescription>
         </Alert>
       ) : null}
 
       {session.is_stale ? (
-        <Alert className="border-2 border-black bg-[#fff7e6] text-black shadow-[6px_6px_0_0_#000]">
-          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
             当前岗位快照已过期
           </AlertTitle>
           <AlertDescription className="text-sm leading-7 text-black/72">
@@ -393,7 +393,7 @@ export default function DashboardOptimizerPage() {
             <div className="space-y-3">
               {selectedTasks.map((task) => (
                 <div
-                  className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]"
+                  className="border border-[#1C1C1C]/10 bg-white p-4"
                   key={task.key}
                 >
                   <PaperCheckbox
@@ -428,14 +428,14 @@ export default function DashboardOptimizerPage() {
 
         <div className="space-y-5">
           {missingInfoQuestions.length > 0 ? (
-            <PaperSection title="先补这些事实" eyebrow="Missing Info" accentClassName="bg-[#ff7a10]">
+            <PaperSection title="先补这些事实" eyebrow="Missing Info" accentClassName="bg-[#1C1C1C]">
               <div className="space-y-3">
                 {missingInfoQuestions.map((item, index) => (
                   <div
-                    className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[3px_3px_0_0_#000]"
+                    className="border border-[#1C1C1C]/10 bg-white px-4 py-4"
                     key={`${item.field}-${index}`}
                   >
-                    <p className="text-sm leading-7 text-black">{item.question}</p>
+                    <p className="text-sm leading-relaxed text-[#1C1C1C]">{item.question}</p>
                   </div>
                 ))}
               </div>
@@ -502,39 +502,39 @@ export default function DashboardOptimizerPage() {
           ))}
         </div>
 
-        <PaperSection title="应用与回流" eyebrow="Apply & Feedback" accentClassName="bg-[#f13798]">
+        <PaperSection title="应用与回流" eyebrow="Apply & Feedback" accentClassName="bg-[#1C1C1C]">
           <div className="space-y-4">
-            <div className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]">
-              <p className="text-sm font-semibold text-black">
+            <div className="border border-[#1C1C1C]/10 bg-white p-4">
+              <p className="text-sm font-medium text-[#1C1C1C]">
                 {session.optimizer_context.job_title}
               </p>
-              <p className="mt-2 text-sm leading-6 text-black/70">
+              <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                 {session.optimizer_context.company || "未填写公司"} ·{" "}
                 {getFitBandLabel(session.optimizer_context.fit_band)}
               </p>
-              <p className="mt-1 text-sm text-black/50">
+              <p className="mt-1 text-sm text-[#1C1C1C]/40">
                 简历 v{session.source_resume_version} / 岗位 v{session.source_job_version}
               </p>
             </div>
-            <div className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+            <div className="border border-[#1C1C1C]/10 bg-white p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                 岗位摘要
               </p>
-              <p className="mt-2 text-sm leading-6 text-black/70">
+              <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                 {session.optimizer_context.target_summary || "暂无"}
               </p>
             </div>
-            <div className="border-2 border-black bg-[#f9f7f0] p-4 shadow-[3px_3px_0_0_#000]">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+            <div className="border border-[#1C1C1C]/10 bg-white p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                 原始短板
               </p>
-              <p className="mt-2 text-sm leading-6 text-black/70">
+              <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                 {session.optimizer_context.gap_summary.join("、") || "暂无"}
               </p>
             </div>
             <div className="space-y-3">
               <Button
-                className="w-full border-2 border-black bg-[#2f55d4] px-5 py-3 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full border-b border-[#1C1C1C]/20 bg-[#1C1C1C] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1C1C1C]/90 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isGenerating}
                 onClick={handleGenerateSuggestions}
                 type="button"
@@ -543,7 +543,7 @@ export default function DashboardOptimizerPage() {
                 <WandSparkles className="ml-2 size-4" />
               </Button>
               <Button
-                className="w-full border-2 border-black bg-white px-5 py-3 text-sm font-semibold text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full border-b border-[#1C1C1C]/20 bg-white px-5 py-3 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isSaving}
                 onClick={handleSaveDraft}
                 type="button"
@@ -551,7 +551,7 @@ export default function DashboardOptimizerPage() {
                 {isSaving ? "保存中..." : "保存草案"}
               </Button>
               <Button
-                className="w-full border-2 border-black bg-[#10bf7a] px-5 py-3 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full border-b border-[#1C1C1C]/20 bg-[#1C1C1C] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1C1C1C]/90 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isApplying || session.is_stale}
                 onClick={handleApply}
                 type="button"
@@ -560,11 +560,11 @@ export default function DashboardOptimizerPage() {
                 <CheckCircle2 className="ml-2 size-4" />
               </Button>
               {statusMessage ? (
-                <p className="text-sm leading-6 text-black/70">{statusMessage}</p>
+                <p className="text-sm leading-relaxed text-[#1C1C1C]/60">{statusMessage}</p>
               ) : null}
             </div>
             {session.applied_resume_version ? (
-              <p className="text-sm text-black/50">
+              <p className="text-sm text-[#1C1C1C]/50">
                 最近已应用到简历 v{session.applied_resume_version}
               </p>
             ) : null}
