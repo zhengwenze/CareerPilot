@@ -20,10 +20,12 @@ from app.schemas.resume import ResumeStructuredData
 from app.schemas.resume_optimization import ResumeOptimizationSessionCreateRequest
 from app.services.job import create_job, process_job_parse_job
 from app.services.match_report import create_match_report, process_match_report
+from app.services.mock_interview import _compact_optimization_snapshot
 from app.services.resume_optimizer import (
     apply_resume_optimization_session,
     create_resume_optimization_session,
     generate_resume_optimization_suggestions,
+    get_resume_optimization_markdown_download,
     get_resume_optimization_session,
 )
 
@@ -62,6 +64,7 @@ def _mock_match_ai_payload() -> dict[str, object]:
             },
             "matched_jd_fields": {
                 "required_skills": ["Python", "SQL", "Tableau"],
+                "responsibilities": ["增长分析", "实验分析", "指标体系建设"],
             },
             "missing_items": ["量化结果"],
             "notes": ["AI 已根据岗位目标生成最终报告。"],
@@ -134,6 +137,62 @@ def _mock_match_ai_payload() -> dict[str, object]:
             ],
         },
     }
+
+
+def _mock_optimizer_ai_payload(
+    *,
+    summary: str,
+    work_bullet: str,
+    project_bullet: str,
+) -> dict[str, object]:
+    return {
+        "summary": summary,
+        "work_experience_items": [
+            {
+                "id": "work_1",
+                "bullets": [
+                    {
+                        "id": "work_1_b1",
+                        "text": work_bullet,
+                        "kind": "achievement",
+                        "metrics": [],
+                        "skills_used": ["Python", "SQL"],
+                        "source_refs": ["work_1"],
+                    }
+                ],
+            }
+        ],
+        "project_items": [
+            {
+                "id": "proj_1",
+                "bullets": [
+                    {
+                        "id": "proj_1_b1",
+                        "text": project_bullet,
+                        "kind": "achievement",
+                        "metrics": [],
+                        "skills_used": ["Python", "SQL", "Tableau"],
+                        "source_refs": ["proj_1"],
+                    }
+                ],
+            }
+        ],
+        "unresolved_items": [
+            {
+                "task_key": "task-1",
+                "reason": "量化结果仍缺少明确数字，因此保持为事实约束式表述。",
+            }
+        ],
+        "editor_notes": ["仅基于原始结构化简历与 match_report 证据进行改写。"],
+    }
+
+
+def _optimizer_settings() -> Settings:
+    return Settings(
+        resume_ai_api_key="test-key",
+        resume_ai_model="MiniMax-M2.5",
+        resume_ai_base_url="https://api.minimaxi.com/anthropic",
+    )
 
 
 def _resume_structured_data() -> ResumeStructuredData:
@@ -300,7 +359,7 @@ async def _override_optimizer_inputs(
 
 
 @pytest.mark.asyncio
-async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
+async def test_resume_optimizer_flow_generates_structured_outputs_applies_and_downloads(
     session_factory: async_sessionmaker[AsyncSession],
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
@@ -309,6 +368,18 @@ async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
         session_factory=session_factory,
         user=test_user,
         monkeypatch=monkeypatch,
+    )
+
+    async def fake_optimizer_completion(**_: object) -> dict[str, object]:
+        return _mock_optimizer_ai_payload(
+            summary="负责数据分析与实验复盘，目标岗位聚焦增长数据分析师。",
+            work_bullet="推进指标体系与增长分析，并沉淀实验分析复盘流程。",
+            project_bullet="从0到1搭建实验看板，支撑业务增长分析平台的持续复盘。",
+        )
+
+    monkeypatch.setattr(
+        "app.services.resume_optimizer_ai.request_json_completion",
+        fake_optimizer_completion,
     )
 
     async with session_factory() as session:
@@ -325,11 +396,29 @@ async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
             session,
             current_user=test_user,
             session_id=session_id,
+            settings=_optimizer_settings(),
         )
         assert generated.status == "ready"
-        assert generated.draft_sections["summary"].suggested_text.strip() != ""
-        assert "【" not in generated.draft_sections["work_experience"].suggested_text
-        assert "【" not in generated.draft_sections["projects"].suggested_text
+        assert generated.optimized_resume_json is not None
+        assert generated.optimized_resume_json.basic_info.summary == (
+            "负责数据分析与实验复盘，目标岗位聚焦增长数据分析师。"
+        )
+        assert generated.rewrite_tasks[0].target_requirement != ""
+        assert generated.rewrite_tasks[0].available_evidence
+        assert generated.fact_check_report_json["summary"]["high_risk_count"] == 0
+        assert generated.optimized_resume_md.startswith("# 郑文泽")
+        assert "## Work Experience" in generated.optimized_resume_md
+        assert generated.downstream_contract.prohibited_source == (
+            "resume_optimization_session.optimized_resume_md"
+        )
+
+        markdown_content, file_name = await get_resume_optimization_markdown_download(
+            session,
+            current_user=test_user,
+            session_id=session_id,
+        )
+        assert file_name.endswith(".md")
+        assert "## Projects" in markdown_content
 
         apply_result = await apply_resume_optimization_session(
             session,
@@ -338,6 +427,7 @@ async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
         )
         assert apply_result.resume_id == resume_id
         assert apply_result.applied_resume_version == 2
+        assert apply_result.downstream_fact_source == "resume.structured_json"
 
         refreshed = await get_resume_optimization_session(
             session,
@@ -366,17 +456,11 @@ async def test_resume_optimizer_flow_applies_changes_and_marks_report_stale(
         assert persisted_report.stale_status == "stale"
         assert persisted_session.status == "applied"
         assert persisted_session.applied_resume_version == 2
-        persisted_structured = ResumeStructuredData.model_validate(
-            persisted_resume.structured_json
-        )
-        assert all(
-            not item.startswith("原始证据：")
-            and not item.startswith("改写重点：")
-            and not item.startswith("建议草案：")
-            for item in [
-                *persisted_structured.work_experience,
-                *persisted_structured.projects,
-            ]
+        structured_resume = ResumeStructuredData.model_validate(persisted_resume.structured_json)
+        assert structured_resume.basic_info.summary == "负责数据分析与实验复盘，目标岗位聚焦增长数据分析师。"
+        assert (
+            structured_resume.work_experience_items[0].bullets[0].text
+            == "推进指标体系与增长分析，并沉淀实验分析复盘流程。"
         )
         assert len(list(readiness_events)) >= 1
 
@@ -391,6 +475,18 @@ async def test_resume_optimizer_routes_cross_section_task_to_projects(
         session_factory=session_factory,
         user=test_user,
         monkeypatch=monkeypatch,
+    )
+
+    async def fake_optimizer_completion(**_: object) -> dict[str, object]:
+        return _mock_optimizer_ai_payload(
+            summary="负责数据分析与实验复盘，聚焦实验分析场景。",
+            work_bullet="推进指标体系与增长分析。",
+            project_bullet="从0到1搭建实验看板，围绕实验分析与业务复盘沉淀项目表达。",
+        )
+
+    monkeypatch.setattr(
+        "app.services.resume_optimizer_ai.request_json_completion",
+        fake_optimizer_completion,
     )
 
     async with session_factory() as session:
@@ -419,18 +515,20 @@ async def test_resume_optimizer_routes_cross_section_task_to_projects(
             session,
             current_user=test_user,
             session_id=session_record.id,
+            settings=_optimizer_settings(),
         )
 
-        assert generated.selected_tasks[0].target_section == "work_experience_or_projects"
-        assert "原始证据：业务增长分析平台 从0到1搭建实验看板" in generated.draft_sections[
-            "projects"
-        ].suggested_text
-        assert "建议草案：" in generated.draft_sections["projects"].suggested_text
-        assert "【" not in generated.draft_sections["projects"].suggested_text
+        assert generated.rewrite_tasks[0].target_section == "projects"
+        assert generated.optimized_resume_json is not None
+        assert (
+            generated.optimized_resume_json.project_items[0].bullets[0].text
+            == "从0到1搭建实验看板，围绕实验分析与业务复盘沉淀项目表达。"
+        )
+        assert generated.fact_check_report_json["summary"]["high_risk_count"] == 0
 
 
 @pytest.mark.asyncio
-async def test_resume_optimizer_outputs_missing_evidence_without_placeholders(
+async def test_resume_optimizer_reports_missing_evidence_without_inventing_facts_when_ai_skipped(
     session_factory: async_sessionmaker[AsyncSession],
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
@@ -467,23 +565,40 @@ async def test_resume_optimizer_outputs_missing_evidence_without_placeholders(
             session,
             current_user=test_user,
             session_id=session_record.id,
+            settings=None,
         )
 
-        assert "缺失证据清单：" in generated.draft_sections["work_experience"].suggested_text
-        assert "建议草案：" not in generated.draft_sections["work_experience"].suggested_text
-        assert "【" not in generated.draft_sections["work_experience"].suggested_text
+        assert generated.status == "ready"
+        assert generated.diagnosis_json["ai_status"]["status"] == "skipped"
+        assert "禁止新增经历、技能、数字或时间" in generated.rewrite_tasks[0].risk_note
+        assert generated.fact_check_report_json["summary"]["passed"] is True
+        assert generated.optimized_resume_json is not None
+        assert generated.optimized_resume_json.work_experience_items[0].company.startswith("CareerPilot")
+        assert generated.optimized_resume_json.project_items[0].name.startswith("业务增长分析平台")
 
 
 @pytest.mark.asyncio
-async def test_resume_optimizer_apply_respects_replace_mode(
+async def test_resume_optimizer_snapshot_boundary_exposes_structured_object_not_markdown(
     session_factory: async_sessionmaker[AsyncSession],
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    resume_id, _job_id, report_id = await _create_ready_match_report(
+    _resume_id, _job_id, report_id = await _create_ready_match_report(
         session_factory=session_factory,
         user=test_user,
         monkeypatch=monkeypatch,
+    )
+
+    async def fake_optimizer_completion(**_: object) -> dict[str, object]:
+        return _mock_optimizer_ai_payload(
+            summary="负责数据分析与实验复盘，目标岗位聚焦增长数据分析师。",
+            work_bullet="推进指标体系与增长分析，并沉淀实验分析复盘流程。",
+            project_bullet="从0到1搭建实验看板，支撑业务增长分析平台的持续复盘。",
+        )
+
+    monkeypatch.setattr(
+        "app.services.resume_optimizer_ai.request_json_completion",
+        fake_optimizer_completion,
     )
 
     async with session_factory() as session:
@@ -492,36 +607,21 @@ async def test_resume_optimizer_apply_respects_replace_mode(
             current_user=test_user,
             payload=ResumeOptimizationSessionCreateRequest(match_report_id=report_id),
         )
-        draft_sections = session_record.draft_sections_json or {}
-        draft_sections["work_experience"] = {
-            **draft_sections["work_experience"],
-            "selected": True,
-            "mode": "replace",
-            "suggested_text": (
-                "原始证据：CareerPilot 数据分析实习生 推进指标体系与增长分析\n"
-                "改写重点：补充量化结果\n"
-                "建议草案：CareerPilot 数据分析实习生，负责指标体系与增长分析工作，建议补充业务结果表达。"
-            ),
-        }
-        draft_sections["projects"] = {
-            **draft_sections["projects"],
-            "selected": False,
-        }
-        session_record.draft_sections_json = draft_sections
-        session.add(session_record)
-        await session.commit()
-
-        apply_result = await apply_resume_optimization_session(
+        await generate_resume_optimization_suggestions(
             session,
             current_user=test_user,
             session_id=session_record.id,
+            settings=_optimizer_settings(),
         )
-        assert apply_result.applied_resume_version == 2
 
-    async with session_factory() as session:
-        persisted_resume = await session.get(Resume, resume_id)
-        assert persisted_resume is not None
-        structured_resume = ResumeStructuredData.model_validate(persisted_resume.structured_json)
-        assert structured_resume.work_experience == [
-            "CareerPilot 数据分析实习生，负责指标体系与增长分析工作，建议补充业务结果表达。"
-        ]
+        refreshed_session = await session.get(ResumeOptimizationSession, session_record.id)
+        assert refreshed_session is not None
+        snapshot = _compact_optimization_snapshot(refreshed_session)
+
+        assert snapshot["structured_fact_source"] == (
+            "resume_optimization_session.optimized_resume_json"
+        )
+        assert snapshot["markdown_is_fact_source"] is False
+        assert "optimized_resume_json" in snapshot
+        assert "draft_sections_json" not in snapshot
+        assert "selected_tasks_json" not in snapshot

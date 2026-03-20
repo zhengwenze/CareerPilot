@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, Index, Integer, String
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -48,6 +48,16 @@ class ResumeOptimizationSession(TimestampMixin, UserAuditMixin, Base):
         default="draft",
         server_default="draft",
     )
+    diagnosis_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     tailoring_plan_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    rewrite_tasks_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     draft_sections_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     selected_tasks_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    optimized_resume_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    fact_check_report_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    optimized_resume_md: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+    )

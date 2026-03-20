@@ -119,9 +119,15 @@ def _compact_optimization_snapshot(
     if optimization_session is None:
         return {}
     return {
-        "selected_tasks_json": optimization_session.selected_tasks_json or {},
-        "draft_sections_json": optimization_session.draft_sections_json or {},
         "status": optimization_session.status,
+        "structured_fact_source": (
+            "resume.structured_json"
+            if optimization_session.status == "applied"
+            else "resume_optimization_session.optimized_resume_json"
+        ),
+        "optimized_resume_json": optimization_session.optimized_resume_json or {},
+        "fact_check_report_json": optimization_session.fact_check_report_json or {},
+        "markdown_is_fact_source": False,
     }
 
 
@@ -554,6 +560,11 @@ async def create_mock_interview_session(
 
     provider = build_mock_interview_ai_provider(settings)
     resume_snapshot = ResumeStructuredData.model_validate(resume.structured_json)
+    if optimization_session is not None and optimization_session.status != "applied":
+        # Module 4 can only consume structured optimization snapshots before apply.
+        optimized_snapshot = optimization_session.optimized_resume_json or {}
+        if optimized_snapshot:
+            resume_snapshot = ResumeStructuredData.model_validate(optimized_snapshot)
     job_snapshot = JobStructuredData.model_validate(job.structured_json)
     plan = await provider.plan(
         AIInterviewPlanRequest(
