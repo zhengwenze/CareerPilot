@@ -127,33 +127,33 @@ function getPreferredResumeId(job: JobRecord | null, resumes: ResumeRecord[]) {
   );
 }
 
-function PaperPanel({
+function PaperSection({
   title,
   eyebrow,
-  accentClassName = "bg-[#2f55d4]",
   rightSlot,
+  accentClassName = "bg-[#1C1C1C]",
   children,
 }: {
   title: string;
   eyebrow?: string;
-  accentClassName?: string;
   rightSlot?: React.ReactNode;
+  accentClassName?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
-      <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+    <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
+      <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             {eyebrow ? (
               <div className="mb-3 flex items-center gap-3">
                 <span className={`size-2.5 ${accentClassName}`} />
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                   {eyebrow}
                 </p>
               </div>
             ) : null}
-            <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+            <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
               {title}
             </h2>
           </div>
@@ -169,7 +169,7 @@ function PaperInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`h-12 w-full border-2 border-black bg-[#f9f7f0] px-4 text-sm text-black outline-none shadow-[3px_3px_0_0_#000] placeholder:text-black/40 ${props.className ?? ""}`}
+      className={`h-12 w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 text-sm text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
     />
   );
 }
@@ -180,7 +180,7 @@ function PaperTextarea(
   return (
     <textarea
       {...props}
-      className={`min-h-[260px] w-full border-2 border-black bg-[#f9f7f0] px-4 py-3 text-sm leading-7 text-black outline-none shadow-[3px_3px_0_0_#000] placeholder:text-black/40 ${props.className ?? ""}`}
+      className={`min-h-[260px] w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 py-3 text-sm leading-relaxed text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
     />
   );
 }
@@ -191,7 +191,7 @@ function PaperSelect(
   return (
     <select
       {...props}
-      className={`h-12 w-full border-2 border-black bg-[#f9f7f0] px-4 text-sm text-black outline-none shadow-[3px_3px_0_0_#000] ${props.className ?? ""}`}
+      className={`h-12 w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 text-sm text-[#1C1C1C] outline-none ${props.className ?? ""}`}
     />
   );
 }
@@ -206,17 +206,17 @@ function PaperButton({
 }) {
   const variantClassName =
     variant === "primary"
-      ? "bg-[#2f55d4] text-white"
+      ? "bg-[#1C1C1C] text-white"
       : variant === "danger"
-        ? "bg-[#fff1f1] text-[#b42318]"
+        ? "bg-[#F9F8F6] text-[#1C1C1C]"
         : variant === "success"
-          ? "bg-[#10bf7a] text-white"
-          : "bg-[#f9f7f0] text-black";
+          ? "bg-[#1C1C1C] text-white"
+          : "bg-[#F9F8F6] text-[#1C1C1C]";
 
   return (
     <button
       {...props}
-      className={`border-2 border-black px-5 py-3 text-sm font-semibold shadow-[4px_4px_0_0_#000] transition-transform hover:-translate-x-px hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 ${variantClassName} ${className}`}
+      className={`border-b border-[#1C1C1C]/20 px-5 py-3 text-sm font-medium transition-colors hover:bg-[#1C1C1C]/5 disabled:cursor-not-allowed disabled:opacity-60 ${variantClassName} ${className}`}
     >
       {children}
     </button>
@@ -694,32 +694,32 @@ export default function DashboardJobsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
         <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="inline-flex items-center border-2 border-black bg-[#f9f7f0] px-5 py-3 shadow-[4px_4px_0_0_#000]">
-              <span className="mr-4 text-2xl leading-none text-[#f13798]">*</span>
-              <span className="text-[1.55rem] font-black uppercase tracking-[-0.06em] text-black sm:text-[1.8rem]">
+            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
+              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">*</span>
+              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
                 Job Matching
               </span>
             </div>
 
-            <div className="mt-6 inline-block border-2 border-black bg-[#f13798] px-4 py-2 shadow-[5px_5px_0_0_#000]">
-              <h1 className="text-3xl font-semibold tracking-[-0.08em] text-white sm:text-4xl">
+            <div className="mt-6">
+              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
                 岗位匹配
               </h1>
             </div>
 
-            <p className="mt-5 max-w-3xl text-base leading-8 text-[#38445a] sm:text-[1.05rem]">
+            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
               把 JD 转成岗位目标，并基于已解析简历生成一份可执行的匹配报告。
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <div className="border-2 border-black bg-[#10bf7a] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
               {jobs.length} 个岗位
             </div>
-            <div className="border-2 border-black bg-[#ff7a10] px-4 py-2 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000]">
+            <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]">
               {reports.length} 份报告
             </div>
           </div>
@@ -727,33 +727,33 @@ export default function DashboardJobsPage() {
       </header>
 
       {pageError ? (
-        <Alert className="border-2 border-black bg-[#fff1f1] text-black shadow-[6px_6px_0_0_#000]">
-          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
             操作失败
           </AlertTitle>
-          <AlertDescription className="text-sm leading-7 text-black/72">
+          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
             {pageError}
           </AlertDescription>
         </Alert>
       ) : null}
 
       {workflowStatus !== "idle" && workflowStatus !== "ready" ? (
-        <Alert className="border-2 border-black bg-[#eef4ff] text-black shadow-[6px_6px_0_0_#000]">
-          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
             {getWorkflowLabel(workflowStatus)}
           </AlertTitle>
-          <AlertDescription className="text-sm leading-7 text-black/72">
+          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
             当前流程会自动完成保存、结构化和 Minimax 报告生成，请不要重复点击。
           </AlertDescription>
         </Alert>
       ) : null}
 
       {statusMessage ? (
-        <Alert className="border-2 border-black bg-[#eef9f1] text-black shadow-[6px_6px_0_0_#000]">
-          <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
             当前状态
           </AlertTitle>
-          <AlertDescription className="text-sm leading-7 text-black/72">
+          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
             {statusMessage}
           </AlertDescription>
         </Alert>
@@ -761,7 +761,7 @@ export default function DashboardJobsPage() {
 
       <section className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
         <div className="space-y-6">
-          <PaperPanel
+          <PaperSection
             title="输入岗位目标"
             eyebrow="Job Input"
             accentClassName="bg-[#f13798]"
@@ -902,9 +902,9 @@ export default function DashboardJobsPage() {
                 </div>
               ) : null}
             </div>
-          </PaperPanel>
+          </PaperSection>
 
-          <PaperPanel
+          <PaperSection
             title="生成匹配报告"
             eyebrow="Matching Workflow"
             accentClassName="bg-[#2f55d4]"
@@ -930,23 +930,23 @@ export default function DashboardJobsPage() {
           >
             <div className="space-y-5">
               {availableResumes.length === 0 ? (
-                <div className="border-2 border-dashed border-black bg-[#f9f7f0] px-4 py-4 text-sm leading-7 text-black/62 shadow-[3px_3px_0_0_#000]">
+                <div className="border border-dashed border-[#1C1C1C]/20 bg-[#F9F8F6]/50 px-4 py-4 text-sm leading-relaxed text-[#1C1C1C]/60">
                   当前没有可用简历。请先到{" "}
-                  <Link className="font-semibold text-[#2f55d4]" href="/dashboard/resume">
+                  <Link className="font-medium text-[#1C1C1C] underline underline-offset-4" href="/dashboard/resume">
                     简历中心
                   </Link>{" "}
                   完成至少一份解析。
                 </div>
               ) : (
                 <>
-                  <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
-                    <p className="text-sm font-semibold text-black">默认使用的简历</p>
-                    <p className="mt-2 text-sm leading-7 text-black/68">
+                  <div className="border border-[#1C1C1C]/10 bg-white px-4 py-4">
+                    <p className="text-sm font-medium text-[#1C1C1C]">默认使用的简历</p>
+                    <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                       {availableResumes.find((item) => item.id === selectedResumeId)?.file_name ||
                         availableResumes[0]?.file_name}
                     </p>
                     <button
-                      className="mt-3 text-sm font-semibold text-[#2f55d4]"
+                      className="mt-3 text-sm font-medium text-[#1C1C1C] underline underline-offset-4"
                       onClick={() => setShowResumePicker((current) => !current)}
                       type="button"
                     >
@@ -1011,10 +1011,10 @@ export default function DashboardJobsPage() {
                 </>
               )}
             </div>
-          </PaperPanel>
+          </PaperSection>
 
           {showHistory && reports.length > 0 ? (
-            <PaperPanel
+            <PaperSection
               title="历史报告"
               eyebrow="Report Archive"
               accentClassName="bg-[#10bf7a]"
@@ -1024,8 +1024,8 @@ export default function DashboardJobsPage() {
                   const isActive = report.id === selectedReportId;
                   return (
                     <div
-                      className={`flex flex-wrap items-center justify-between gap-3 border-2 border-black px-4 py-4 shadow-[4px_4px_0_0_#000] ${
-                        isActive ? "bg-[#2f55d4] text-white" : "bg-[#f9f7f0] text-black"
+                      className={`flex flex-wrap items-center justify-between gap-3 border border-[#1C1C1C]/10 px-4 py-4 ${
+                        isActive ? "bg-[#1C1C1C] text-white" : "bg-white text-[#1C1C1C]"
                       }`}
                       key={report.id}
                     >
@@ -1063,7 +1063,7 @@ export default function DashboardJobsPage() {
                   );
                 })}
               </div>
-            </PaperPanel>
+            </PaperSection>
           ) : null}
         </div>
 
@@ -1075,7 +1075,7 @@ export default function DashboardJobsPage() {
             />
           ) : (
             <>
-              <PaperPanel
+              <PaperSection
                 title={
                   selectedReport.status === "success"
                     ? `${getFitBandLabel(selectedReport.fit_band)} · 总分 ${selectedReport.overall_score}`
@@ -1101,14 +1101,14 @@ export default function DashboardJobsPage() {
                       "",
                   )}
                 </p>
-              </PaperPanel>
+              </PaperSection>
 
               <section className="grid gap-4 md:grid-cols-3">
-                <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                <div className="border border-[#1C1C1C]/10 bg-white px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                     总体判断
                   </p>
-                  <p className="mt-2 text-sm leading-7 text-black/72">
+                  <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                     {String(
                       selectedReport.scorecard_json.reasoning ||
                         selectedReport.scorecard_json.summary ||
@@ -1117,29 +1117,29 @@ export default function DashboardJobsPage() {
                   </p>
                 </div>
 
-                <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                <div className="border border-[#1C1C1C]/10 bg-white px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                     置信度
                   </p>
-                  <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-black">
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-[#1C1C1C]">
                     {selectedReport.scorecard_json.confidence != null
                       ? `${Math.round(Number(selectedReport.scorecard_json.confidence) * 100)}%`
                       : "待补充"}
                   </p>
                 </div>
 
-                <div className="border-2 border-black bg-[#f9f7f0] px-4 py-4 shadow-[4px_4px_0_0_#000]">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                <div className="border border-[#1C1C1C]/10 bg-white px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                     生成时间
                   </p>
-                  <p className="mt-2 text-sm leading-7 text-black/72">
+                  <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
                     {formatDate(selectedReport.created_at)}
                   </p>
                 </div>
               </section>
 
               <section className="grid gap-5 md:grid-cols-2">
-                <PaperPanel
+                <PaperSection
                   title="匹配证据"
                   eyebrow="Evidence"
                   accentClassName="bg-[#2f55d4]"
@@ -1159,9 +1159,9 @@ export default function DashboardJobsPage() {
                   <p className="mt-2 text-sm leading-7 text-black/68">
                     {selectedReport.evidence_map_json.notes?.join("；") || "暂无"}
                   </p>
-                </PaperPanel>
+                </PaperSection>
 
-                <PaperPanel
+                <PaperSection
                   title="差距分析"
                   eyebrow="Gap Analysis"
                   accentClassName="bg-[#f13798]"
@@ -1196,10 +1196,10 @@ export default function DashboardJobsPage() {
                       </p>
                     ) : null}
                   </div>
-                </PaperPanel>
+                </PaperSection>
               </section>
 
-              <PaperPanel
+              <PaperSection
                 title="下一步动作"
                 eyebrow="Tailoring Plan"
                 accentClassName="bg-[#10bf7a]"
@@ -1226,7 +1226,7 @@ export default function DashboardJobsPage() {
                     </p>
                   ) : null}
                 </div>
-              </PaperPanel>
+              </PaperSection>
             </>
           )}
         </div>
