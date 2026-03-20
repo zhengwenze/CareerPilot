@@ -12,6 +12,8 @@ from app.schemas.match_report import MatchReportCreateRequest
 from app.schemas.resume import ResumeStructuredData
 from app.services.match_ai import build_ai_match_correction_provider
 from app.services.job import create_job, process_job_parse_job
+from app.services.job_parser import build_structured_job
+from app.services.match_engine import build_rule_match_result
 from app.services.match_report import create_match_report, process_match_report
 
 
@@ -273,10 +275,13 @@ async def test_jobs_match_flow_reaches_success_and_persists_actionable_report(
         assert persisted_report.stale_status == "fresh"
         assert persisted_report.fit_band == "strong"
         assert persisted_report.scorecard_json.get("overall_score") is not None
-        assert persisted_report.scorecard_json.get("generation_mode") == "ai_mandatory"
+        assert persisted_report.scorecard_json.get("generation_mode") == "hybrid_rule_semantic_llm"
+        assert persisted_report.scorecard_json.get("semantic_score") is not None
+        assert persisted_report.scorecard_json.get("llm_judge_score") == 82
         assert persisted_report.gap_json.get("actions")
         assert persisted_report.tailoring_plan_json.get("rewrite_tasks")
         assert persisted_report.interview_blueprint_json.get("question_pack")
+        assert persisted_report.evidence_map_json.get("requirement_matches")
         assert persisted_job.latest_match_report_id == persisted_report.id
         assert persisted_job.recommended_resume_id == resume_id
         assert persisted_job.status_stage in {"tailoring_needed", "interview_ready", "matched"}
@@ -502,23 +507,22 @@ async def test_jobs_match_flow_sends_compact_ai_payload(
     job_snapshot = captured_payload["job_snapshot"]
     rule_result = captured_payload["rule_result"]
 
-    assert resume_snapshot == {
-        "summary": "负责数据分析与业务增长。",
-        "location": "上海",
-        "education": ["新疆大学 软件工程 本科 2023.09-2027.06"],
-        "recent_roles": ["CareerPilot 数据分析实习生 负责指标体系搭建与实验复盘"],
-        "projects": ["增长分析平台 搭建核心看板并推动实验分析闭环"],
-        "skills": ["Python", "SQL", "Tableau", "English"],
-        "certifications": ["百度之星金奖"],
-    }
+    assert resume_snapshot["summary"] == "负责数据分析与业务增长。"
+    assert resume_snapshot["location"] == "上海"
+    assert resume_snapshot["education"] == ["新疆大学 软件工程 本科 2023.09-2027.06"]
+    assert resume_snapshot["recent_roles"] == ["CareerPilot 数据分析实习生 负责指标体系搭建与实验复盘"]
+    assert resume_snapshot["projects"] == ["增长分析平台 搭建核心看板并推动实验分析闭环"]
+    assert resume_snapshot["skills"] == ["Python", "SQL", "Tableau", "English"]
+    assert resume_snapshot["candidate_profile"]["estimated_years"] == 1.5
+    assert resume_snapshot["evidence_snippets"]
     assert "basic" not in job_snapshot
-    assert "must_have" not in job_snapshot
-    assert "nice_to_have" not in job_snapshot
     assert set(job_snapshot.keys()) == {
         "title",
         "company",
         "job_city",
         "summary",
+        "must_have",
+        "nice_to_have",
         "required_skills",
         "preferred_skills",
         "keywords",
@@ -526,7 +530,8 @@ async def test_jobs_match_flow_sends_compact_ai_payload(
         "responsibilities",
     }
     assert set(rule_result.keys()) == {
-        "overall_score",
+        "rule_score",
+        "semantic_score",
         "dimension_scores",
         "strengths",
         "gaps",
@@ -534,9 +539,11 @@ async def test_jobs_match_flow_sends_compact_ai_payload(
         "evidence",
     }
     assert set(rule_result["evidence"].keys()) == {
+        "candidate_profile",
         "matched_resume_fields",
         "matched_jd_fields",
         "missing_items",
+        "requirement_matches",
         "notes",
     }
 
@@ -673,12 +680,11 @@ async def test_jobs_match_flow_normalizes_loose_ai_payload_to_strict_schema(
         assert persisted_report.gap_taxonomy_json["should_fix"][0]["label"] == (
             "强化数据库设计优化相关表述"
         )
-        assert persisted_report.evidence_map_json["candidate_profile"]["skills"] == [
-            "分布式系统",
-            "API",
-            "Python",
-            "Java",
-        ]
+        candidate_skills = persisted_report.evidence_map_json["candidate_profile"]["skills"]
+        assert "Python" in candidate_skills
+        assert "Java" in candidate_skills
+        assert "分布式系统" in candidate_skills
+        assert "API" in candidate_skills
         assert persisted_report.action_pack_json["resume_tailoring_tasks"][0]["title"] == (
             "补充数据库设计与性能优化相关项目描述"
         )
@@ -771,7 +777,50 @@ async def test_jobs_match_flow_retries_when_ai_returns_null_core_fields(
         assert persisted_report is not None
         assert persisted_report.status == "success"
         assert persisted_report.fit_band == "strong"
-        assert persisted_report.scorecard_json.get("generation_mode") == "ai_mandatory"
+        assert persisted_report.scorecard_json.get("generation_mode") == "hybrid_rule_semantic_llm"
+
+
+def test_job_parser_and_match_engine_build_grounded_mvp_outputs() -> None:
+    resume = _resume_structured_data()
+    job = build_structured_job(
+        title="增长数据分析师",
+        company=None,
+        job_city=None,
+        employment_type=None,
+        jd_text=(
+            "公司：CareerPilot\n"
+            "工作地点：上海\n"
+            "岗位职责\n"
+            "- 负责增长分析与实验分析，搭建指标体系\n"
+            "- 与业务团队协作推进数据项目\n"
+            "任职要求\n"
+            "- 本科及以上，2年以上经验\n"
+            "- 熟练使用 Python、SQL、Tableau\n"
+            "- 有增长分析、实验分析经验优先"
+        ),
+    )
+
+    assert job.basic.company == "CareerPilot"
+    assert job.basic.job_city == "上海"
+    assert job.requirements.experience_min_years == 2
+    assert "Python" in job.requirements.required_skills
+    assert "增长分析" in job.domain_context.keywords
+    assert job.must_have
+
+    result = build_rule_match_result(
+        resume=resume,
+        resume_raw_text=(
+            "郑文泽 上海 数据分析 SQL Python 指标体系 实验分析 "
+            "增长分析 CareerPilot 数据分析实习生"
+        ),
+        job=job,
+    )
+
+    assert result.rule_score > 0
+    assert result.semantic_score > 0
+    assert result.evidence["candidate_profile"]["skills"]
+    assert result.evidence_map["requirement_matches"]
+    assert result.evidence_map["matched_resume_fields"]["skills"]
 
 
 def test_match_ai_settings_fall_back_to_resume_ai_configuration() -> None:

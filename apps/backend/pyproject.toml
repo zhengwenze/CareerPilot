@@ -12,6 +12,7 @@ dependencies = [
     "greenlet>=3.2.4",
     "httpx>=0.28.1",
     "minio>=7.2.18",
+    "Pillow>=11.3.0",
     "pypdf>=6.1.1",
     "pydantic-settings>=2.11.0",
     "PyJWT>=2.10.1",

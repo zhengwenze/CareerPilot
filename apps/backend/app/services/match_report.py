@@ -18,7 +18,7 @@ from app.services.match_ai import (
     AIMatchReportRequest,
     build_ai_match_correction_provider,
 )
-from app.services.match_engine import build_rule_match_result
+from app.services.match_engine import build_resume_evidence_profile, build_rule_match_result
 from app.services.resume import get_resume_for_user
 
 
@@ -84,14 +84,17 @@ def _sanitize_insight_items(items: list[dict[str, object]]) -> list[dict[str, ob
 
 def _sanitize_action_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
     sanitized: list[dict[str, object]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
     for raw_item in items:
         title = str(raw_item.get("title", "")).strip()
         description = str(raw_item.get("description", "")).strip()
+        target_section = str(
+            raw_item.get("target_section", "work_experience_or_projects")
+        ).strip() or "work_experience_or_projects"
         if not title or not description:
             continue
-        key = (title.lower(), description.lower())
+        key = (title.lower(), description.lower(), target_section.lower())
         if key in seen:
             continue
         seen.add(key)
@@ -105,6 +108,7 @@ def _sanitize_action_items(items: list[dict[str, object]]) -> list[dict[str, obj
                 "priority": priority,
                 "title": title,
                 "description": description,
+                "target_section": target_section,
             }
         )
 
@@ -114,12 +118,35 @@ def _sanitize_action_items(items: list[dict[str, object]]) -> list[dict[str, obj
     return sanitized[:5]
 
 
-def _compact_resume_snapshot(resume: ResumeStructuredData) -> dict[str, object]:
+def _compact_resume_snapshot(
+    resume: ResumeStructuredData,
+    *,
+    evidence_profile: object | None = None,
+) -> dict[str, object]:
     skills = [
         *resume.skills.technical[:8],
         *resume.skills.tools[:6],
         *resume.skills.languages[:4],
     ]
+    profile_payload = {}
+    if evidence_profile is not None:
+        profile_payload = {
+            "candidate_profile": {
+                "skills": getattr(evidence_profile, "skills", [])[:12],
+                "keywords": getattr(evidence_profile, "keywords", [])[:10],
+                "estimated_years": round(float(getattr(evidence_profile, "estimated_years", 0.0)), 2),
+                "education_level": getattr(evidence_profile, "education_label", None),
+                "locations": getattr(evidence_profile, "locations", [])[:4],
+            },
+            "evidence_snippets": [
+                {
+                    "source_type": item.source_type,
+                    "source_label": item.source_label,
+                    "text": item.text,
+                }
+                for item in getattr(evidence_profile, "evidence_snippets", [])[:8]
+            ],
+        }
     return {
         "summary": resume.basic_info.summary,
         "location": resume.basic_info.location,
@@ -128,6 +155,7 @@ def _compact_resume_snapshot(resume: ResumeStructuredData) -> dict[str, object]:
         "projects": resume.projects[:4],
         "skills": skills,
         "certifications": resume.certifications[:4],
+        **profile_payload,
     }
 
 
@@ -149,6 +177,8 @@ def _compact_job_snapshot(job: JobStructuredData) -> dict[str, object]:
         "company": job.basic.company,
         "job_city": job.basic.job_city,
         "summary": job.raw_summary or job.domain_context.summary,
+        "must_have": job.must_have[:6],
+        "nice_to_have": job.nice_to_have[:6],
         "required_skills": required_skills,
         "preferred_skills": preferred_skills,
         "keywords": keywords,
@@ -166,21 +196,135 @@ def _compact_job_snapshot(job: JobStructuredData) -> dict[str, object]:
 
 def _compact_rule_result(rule_result: object) -> dict[str, object]:
     evidence = getattr(rule_result, "evidence", {}) or {}
-    matched_resume_fields = evidence.get("matched_resume_fields", {})
-    matched_jd_fields = evidence.get("matched_jd_fields", {})
+    evidence_map = getattr(rule_result, "evidence_map", {}) or {}
     return {
-        "overall_score": getattr(rule_result, "overall_score", 0.0),
+        "rule_score": getattr(rule_result, "rule_score", getattr(rule_result, "overall_score", 0.0)),
+        "semantic_score": getattr(rule_result, "semantic_score", 0.0),
         "dimension_scores": getattr(rule_result, "dimension_scores", {}),
         "strengths": getattr(rule_result, "strengths", [])[:3],
         "gaps": getattr(rule_result, "gaps", [])[:3],
         "actions": getattr(rule_result, "actions", [])[:3],
         "evidence": {
-            "matched_resume_fields": matched_resume_fields,
-            "matched_jd_fields": matched_jd_fields,
-            "missing_items": evidence.get("missing_items", [])[:5],
-            "notes": evidence.get("notes", [])[:3],
+            "candidate_profile": evidence.get("candidate_profile", {}),
+            "matched_resume_fields": evidence_map.get("matched_resume_fields", {}),
+            "matched_jd_fields": evidence_map.get("matched_jd_fields", {}),
+            "missing_items": evidence_map.get("missing_items", [])[:5],
+            "requirement_matches": evidence_map.get("requirement_matches", [])[:8],
+            "notes": evidence_map.get("notes", [])[:3],
         },
     }
+
+
+def _merge_unique_strings(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for item in group:
+            cleaned = str(item).strip()
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            merged.append(cleaned)
+    return merged
+
+
+def _merge_dict_list_values(
+    base: dict[str, object],
+    overlay: dict[str, object],
+) -> dict[str, list[str]]:
+    keys = set(base.keys()) | set(overlay.keys())
+    result: dict[str, list[str]] = {}
+    for key in keys:
+        base_items = base.get(key, [])
+        overlay_items = overlay.get(key, [])
+        if not isinstance(base_items, list):
+            base_items = []
+        if not isinstance(overlay_items, list):
+            overlay_items = []
+        result[key] = _merge_unique_strings(
+            [str(item) for item in base_items],
+            [str(item) for item in overlay_items],
+        )
+    return result
+
+
+def _fit_band_from_score(score: float) -> str:
+    if score >= 85:
+        return "excellent"
+    if score >= 72:
+        return "strong"
+    if score >= 55:
+        return "partial"
+    return "weak"
+
+
+def _merge_candidate_profile(
+    base: dict[str, object],
+    overlay: dict[str, object],
+) -> dict[str, object]:
+    result = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, list):
+            current = result.get(key, [])
+            if not isinstance(current, list):
+                current = []
+            result[key] = _merge_unique_strings(
+                [str(item) for item in current],
+                [str(item) for item in value],
+            )
+        elif value not in (None, "", []):
+            result[key] = value
+    return result
+
+
+def _merge_evidence_map(
+    *,
+    base_map: dict[str, object],
+    overlay_map: dict[str, object],
+    resume_version: int,
+    job_version: int,
+) -> dict[str, object]:
+    merged = {
+        "matched_resume_fields": _merge_dict_list_values(
+            base_map.get("matched_resume_fields", {})
+            if isinstance(base_map.get("matched_resume_fields", {}), dict)
+            else {},
+            overlay_map.get("matched_resume_fields", {})
+            if isinstance(overlay_map.get("matched_resume_fields", {}), dict)
+            else {},
+        ),
+        "matched_jd_fields": _merge_dict_list_values(
+            base_map.get("matched_jd_fields", {})
+            if isinstance(base_map.get("matched_jd_fields", {}), dict)
+            else {},
+            overlay_map.get("matched_jd_fields", {})
+            if isinstance(overlay_map.get("matched_jd_fields", {}), dict)
+            else {},
+        ),
+        "missing_items": _merge_unique_strings(
+            list(base_map.get("missing_items", []) or []),
+            list(overlay_map.get("missing_items", []) or []),
+        )[:10],
+        "notes": _merge_unique_strings(
+            list(base_map.get("notes", []) or []),
+            list(overlay_map.get("notes", []) or []),
+        )[:8],
+        "candidate_profile": _merge_candidate_profile(
+            base_map.get("candidate_profile", {})
+            if isinstance(base_map.get("candidate_profile", {}), dict)
+            else {},
+            overlay_map.get("candidate_profile", {})
+            if isinstance(overlay_map.get("candidate_profile", {}), dict)
+            else {},
+        ),
+        "requirement_matches": base_map.get("requirement_matches", []),
+        "resume_version": resume_version,
+        "job_version": job_version,
+    }
+    return merged
 
 
 def _build_missing_user_inputs(
@@ -280,6 +424,7 @@ def _build_interview_blueprint(
             }
         )
     return {
+        "mode": "targeted_match_mvp",
         "fit_band": fit_band,
         "target_role": job_snapshot.basic.title,
         "focus_areas": focus_areas,
@@ -501,6 +646,10 @@ async def process_match_report(
                 resume.structured_json
             )
             job_snapshot = JobStructuredData.model_validate(job.structured_json)
+            evidence_profile = build_resume_evidence_profile(
+                resume=resume_snapshot,
+                resume_raw_text=resume.raw_text,
+            )
             rule_result = build_rule_match_result(
                 resume=resume_snapshot,
                 resume_raw_text=resume.raw_text,
@@ -510,7 +659,10 @@ async def process_match_report(
             ai_provider = build_ai_match_correction_provider(settings)
             ai_result = await ai_provider.correct(
                 AIMatchReportRequest(
-                    resume_snapshot=_compact_resume_snapshot(resume_snapshot),
+                    resume_snapshot=_compact_resume_snapshot(
+                        resume_snapshot,
+                        evidence_profile=evidence_profile,
+                    ),
                     job_snapshot=_compact_job_snapshot(job_snapshot),
                     rule_result=_compact_rule_result(rule_result),
                 )
@@ -519,65 +671,127 @@ async def process_match_report(
                 raise ValueError("Match AI did not return a structured report payload")
 
             ai_payload = ai_result.report_payload
-            overall_score = max(0.0, min(100.0, float(ai_payload.overall_score)))
-            fit_band = ai_payload.fit_band
-            dimension_scores = dict(rule_result.dimension_scores)
-            strengths = _sanitize_insight_items(
-                [item.model_dump() for item in ai_payload.strengths]
+            llm_judge_score = max(0.0, min(100.0, float(ai_payload.overall_score)))
+            semantic_score = round(rule_result.semantic_score, 2)
+            overall_score = round(
+                (rule_result.rule_score * 0.45)
+                + (semantic_score * 0.20)
+                + (llm_judge_score * 0.35),
+                2,
             )
-            must_fix = _sanitize_insight_items(
-                [item.model_dump() for item in ai_payload.must_fix]
+            fit_band = _fit_band_from_score(overall_score)
+            dimension_scores = {
+                "rule_dimensions": dict(rule_result.dimension_scores),
+                "rule_score": round(rule_result.rule_score, 2),
+                "semantic_score": semantic_score,
+                "llm_judge_score": round(llm_judge_score, 2),
+                "composite_overall_score": overall_score,
+            }
+            strengths = _sanitize_insight_items(
+                [
+                    *rule_result.strengths,
+                    *(item.model_dump() for item in ai_payload.strengths),
+                ]
             )
             should_fix = _sanitize_insight_items(
                 [item.model_dump() for item in ai_payload.should_fix]
             )
-            gaps = _sanitize_insight_items(
+            must_fix = _sanitize_insight_items(
                 [
+                    *rule_result.gaps,
                     *(item.model_dump() for item in ai_payload.must_fix),
-                    *(item.model_dump() for item in ai_payload.should_fix),
                 ]
             )
+            gaps = _sanitize_insight_items([*must_fix, *should_fix])
             rewrite_tasks = (
                 ai_payload.tailoring_plan_json.rewrite_tasks
                 or ai_payload.action_pack_json.resume_tailoring_tasks
             )
-            actions = _sanitize_action_items(
-                [
-                    {
-                        "priority": task.priority,
-                        "title": task.title,
-                        "description": task.instruction,
-                    }
-                    for task in rewrite_tasks
-                ]
-            )
-            resume_tailoring_tasks = [
+            action_candidates = [*rule_result.actions]
+            action_candidates.extend(
                 {
                     "priority": task.priority,
                     "title": task.title,
-                    "instruction": task.instruction,
+                    "description": task.instruction,
                     "target_section": task.target_section,
                 }
                 for task in rewrite_tasks
+            )
+            actions = _sanitize_action_items(
+                action_candidates
+            )
+            resume_tailoring_tasks = [
+                {
+                    "priority": task["priority"],
+                    "title": task["title"],
+                    "instruction": task["description"],
+                    "target_section": task["target_section"],
+                }
+                for task in actions
             ]
             interview_focus_areas = [
                 item.model_dump()
                 for item in ai_payload.interview_blueprint_json.focus_areas
             ]
+            if not interview_focus_areas:
+                interview_focus_areas = [
+                    item.model_dump()
+                    for item in ai_payload.action_pack_json.interview_focus_areas
+                ]
             missing_user_inputs = [
                 item.model_dump()
                 for item in ai_payload.action_pack_json.missing_user_inputs
             ]
-            evidence_map = ai_payload.evidence_map_json.model_dump()
-            evidence_map["resume_version"] = report.resume_version
-            evidence_map["job_version"] = report.job_version
+            if not missing_user_inputs:
+                missing_user_inputs = _build_missing_user_inputs(
+                    job_snapshot=job_snapshot,
+                    resume_snapshot=resume_snapshot,
+                    missing_items=list(rule_result.evidence_map.get("missing_items", [])),
+                )
+            if not interview_focus_areas:
+                interview_focus_areas = _build_interview_focus_areas(
+                    gaps=gaps,
+                    strengths=strengths,
+                )
+            evidence_map = _merge_evidence_map(
+                base_map=rule_result.evidence_map,
+                overlay_map=ai_payload.evidence_map_json.model_dump(),
+                resume_version=report.resume_version,
+                job_version=report.job_version,
+            )
             action_pack = ai_payload.action_pack_json.model_dump()
             if not action_pack["resume_tailoring_tasks"]:
                 action_pack["resume_tailoring_tasks"] = resume_tailoring_tasks
+            if not action_pack["interview_focus_areas"]:
+                action_pack["interview_focus_areas"] = interview_focus_areas
+            if not action_pack["missing_user_inputs"]:
+                action_pack["missing_user_inputs"] = missing_user_inputs
             tailoring_plan = ai_payload.tailoring_plan_json.model_dump()
             if not tailoring_plan["rewrite_tasks"]:
                 tailoring_plan["rewrite_tasks"] = resume_tailoring_tasks
+            tailoring_plan["must_add_evidence"] = _merge_unique_strings(
+                list(tailoring_plan.get("must_add_evidence", []) or []),
+                list(evidence_map.get("missing_items", []) or []),
+            )[:8]
+            if not tailoring_plan["missing_info_questions"]:
+                tailoring_plan["missing_info_questions"] = missing_user_inputs
+            if not tailoring_plan.get("target_summary"):
+                tailoring_plan["target_summary"] = job_snapshot.raw_summary or job_snapshot.basic.title
             interview_blueprint = ai_payload.interview_blueprint_json.model_dump()
+            if not interview_blueprint["focus_areas"]:
+                interview_blueprint["focus_areas"] = interview_focus_areas
+            if not interview_blueprint["question_pack"]:
+                interview_blueprint = _build_interview_blueprint(
+                    job_snapshot=job_snapshot,
+                    fit_band=fit_band,
+                    focus_areas=interview_focus_areas,
+                )
+            else:
+                interview_blueprint["target_role"] = (
+                    interview_blueprint.get("target_role")
+                    or job_snapshot.basic.title
+                )
+                interview_blueprint["mode"] = "targeted_match_mvp"
 
             stale_status = (
                 "stale"
@@ -587,27 +801,30 @@ async def process_match_report(
             )
             scorecard = {
                 "overall_score": round(overall_score, 2),
-                "rule_score": round(rule_result.overall_score, 2),
-                "ai_score": round(overall_score, 2),
+                "rule_score": round(rule_result.rule_score, 2),
+                "semantic_score": semantic_score,
+                "llm_judge_score": round(llm_judge_score, 2),
                 "fit_band": fit_band,
+                "llm_fit_band": ai_payload.fit_band,
                 "confidence": ai_payload.confidence,
                 "summary": ai_payload.summary,
                 "reasoning": ai_payload.reasoning,
-                "generation_mode": "ai_mandatory",
+                "generation_mode": "hybrid_rule_semantic_llm",
                 "dimension_scores": dimension_scores,
             }
             gap_taxonomy = {
-                "must_fix": must_fix[:4],
-                "should_fix": should_fix[:4],
+                "must_fix": must_fix[:5],
+                "should_fix": should_fix[:5],
                 "watchlist": missing_user_inputs,
+                "rule_gaps": rule_result.gaps[:5],
             }
 
             report.status = "success"
             report.fit_band = fit_band
             report.stale_status = stale_status
             report.overall_score = _to_decimal_score(overall_score)
-            report.rule_score = _to_decimal_score(rule_result.overall_score)
-            report.model_score = _to_decimal_score(overall_score)
+            report.rule_score = _to_decimal_score(rule_result.rule_score)
+            report.model_score = _to_decimal_score(llm_judge_score)
             report.dimension_scores_json = dimension_scores
             report.gap_json = {
                 "strengths": strengths,
@@ -616,7 +833,14 @@ async def process_match_report(
             }
             report.evidence_json = {
                 **rule_result.evidence,
+                "evidence_map": rule_result.evidence_map,
                 "final_evidence_map": evidence_map,
+                "scoring": {
+                    "rule_score": round(rule_result.rule_score, 2),
+                    "semantic_score": semantic_score,
+                    "llm_judge_score": round(llm_judge_score, 2),
+                    "overall_score": round(overall_score, 2),
+                },
                 "ai_generation": {
                     "provider": ai_result.provider,
                     "model": ai_result.model,

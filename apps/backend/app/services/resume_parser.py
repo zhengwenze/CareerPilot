@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import tempfile
 import unicodedata
+import zipfile
+from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
+from xml.etree import ElementTree
 
 from pypdf import PdfReader
 
 from app.core.errors import ApiException, ErrorCode
-from app.schemas.resume import ResumeStructuredData
+from app.schemas.resume import ResumeParseArtifactsData, ResumeStructuredData
 
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_PATTERN = re.compile(r"(?:\+?\d[\d\s-]{7,}\d)")
@@ -213,6 +219,42 @@ CERTIFICATION_HINTS = (
 )
 
 
+@dataclass(slots=True)
+class ResumeTextExtractionResult:
+    raw_text: str
+    source_type: str
+    ocr_used: bool = False
+    ocr_engine: str = "none"
+    ocr_avg_confidence: float | None = None
+
+
+def extract_text_from_resume_bytes(
+    *,
+    data: bytes,
+    file_name: str,
+) -> ResumeTextExtractionResult:
+    source_type = _detect_source_type(file_name)
+    if source_type == "pdf":
+        return extract_text_from_pdf_or_ocr_bytes(data)
+    if source_type == "docx":
+        return ResumeTextExtractionResult(
+            raw_text=extract_text_from_docx_bytes(data),
+            source_type="docx",
+        )
+    if source_type == "image":
+        return ResumeTextExtractionResult(
+            raw_text=extract_text_from_image_bytes(data),
+            source_type="image",
+            ocr_used=True,
+            ocr_engine="tesseract",
+        )
+    raise ApiException(
+        status_code=400,
+        code=ErrorCode.BAD_REQUEST,
+        message="Unsupported resume file type",
+    )
+
+
 def extract_text_from_pdf_bytes(data: bytes) -> str:
     try:
         reader = PdfReader(BytesIO(data))
@@ -239,6 +281,182 @@ def extract_text_from_pdf_bytes(data: bytes) -> str:
             message="No extractable text found in PDF. Scanned PDFs are not supported yet.",
         )
     return raw_text
+
+
+def extract_text_from_pdf_or_ocr_bytes(data: bytes) -> ResumeTextExtractionResult:
+    try:
+        raw_text = extract_text_from_pdf_bytes(data)
+        return ResumeTextExtractionResult(
+            raw_text=raw_text,
+            source_type="pdf",
+            ocr_used=False,
+            ocr_engine="none",
+        )
+    except ApiException as exc:
+        if "No extractable text found in PDF" not in exc.message:
+            raise
+
+    ocr_text = extract_text_from_scanned_pdf_bytes(data)
+    return ResumeTextExtractionResult(
+        raw_text=ocr_text,
+        source_type="pdf",
+        ocr_used=True,
+        ocr_engine="tesseract",
+    )
+
+
+def extract_text_from_docx_bytes(data: bytes) -> str:
+    try:
+        with zipfile.ZipFile(BytesIO(data)) as archive:
+            document_xml = archive.read("word/document.xml")
+    except Exception as exc:
+        raise ApiException(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="Failed to read DOCX file",
+            details={"reason": str(exc)},
+        ) from exc
+
+    try:
+        root = ElementTree.fromstring(document_xml)
+    except ElementTree.ParseError as exc:
+        raise ApiException(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="Failed to parse DOCX document XML",
+            details={"reason": str(exc)},
+        ) from exc
+
+    namespaces = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    paragraphs: list[str] = []
+    for paragraph in root.findall(".//w:p", namespaces):
+        texts = [
+            node.text or ""
+            for node in paragraph.findall(".//w:t", namespaces)
+            if (node.text or "").strip()
+        ]
+        joined = _normalize_text("".join(texts))
+        if joined:
+            paragraphs.append(joined)
+
+    raw_text = "\n".join(paragraphs).strip()
+    if not raw_text:
+        raise ApiException(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="No extractable text found in DOCX file",
+        )
+    return raw_text
+
+
+def extract_text_from_image_bytes(data: bytes) -> str:
+    try:
+        image_module = _load_pillow_image_module()
+        image = image_module.open(BytesIO(data))
+        image.load()
+    except Exception as exc:
+        raise ApiException(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="Failed to read image resume",
+            details={"reason": str(exc)},
+        ) from exc
+
+    return _ocr_pil_image(image)
+
+
+def extract_text_from_scanned_pdf_bytes(data: bytes) -> str:
+    image_module = _load_pillow_image_module()
+    try:
+        reader = PdfReader(BytesIO(data))
+    except Exception as exc:
+        raise ApiException(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="Failed to read PDF file",
+            details={"reason": str(exc)},
+        ) from exc
+
+    page_texts: list[str] = []
+    for page in reader.pages:
+        page_images = getattr(page, "images", []) or []
+        for page_image in page_images:
+            image_bytes = getattr(page_image, "data", None)
+            if not image_bytes:
+                continue
+            try:
+                image = image_module.open(BytesIO(image_bytes))
+                image.load()
+            except Exception:
+                continue
+            ocr_text = _ocr_pil_image(image)
+            if ocr_text:
+                page_texts.append(ocr_text)
+
+    raw_text = "\n\n".join(page_texts).strip()
+    if not raw_text:
+        raise ApiException(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="No extractable text found in scanned PDF after OCR",
+        )
+    return raw_text
+
+
+def _ocr_pil_image(image) -> str:
+    prepared = image.convert("L")
+    with tempfile.NamedTemporaryFile(suffix=".png") as temp_input:
+        prepared.save(temp_input.name, format="PNG")
+        raw_text = _run_tesseract(temp_input.name)
+    normalized = _normalize_text(raw_text)
+    if not normalized:
+        raise ApiException(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="OCR could not extract text from resume image",
+        )
+    return normalized
+
+
+def _run_tesseract(image_path: str) -> str:
+    candidate_commands = [
+        ["tesseract", image_path, "stdout", "-l", "chi_sim+eng"],
+        ["tesseract", image_path, "stdout", "-l", "eng"],
+        ["tesseract", image_path, "stdout"],
+    ]
+    for command in candidate_commands:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise ApiException(
+                status_code=500,
+                code=ErrorCode.INTERNAL_ERROR,
+                message="Tesseract OCR is not installed on the server",
+            ) from exc
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout
+    raise ApiException(
+        status_code=400,
+        code=ErrorCode.BAD_REQUEST,
+        message="OCR failed to extract text from resume file",
+    )
+
+
+def _load_pillow_image_module():
+    try:
+        from PIL import Image  # type: ignore
+    except ModuleNotFoundError as exc:
+        raise ApiException(
+            status_code=500,
+            code=ErrorCode.INTERNAL_ERROR,
+            message="Pillow is required for image OCR support",
+        ) from exc
+    return Image
 
 
 def _normalize_text(value: str) -> str:
@@ -548,3 +766,224 @@ def build_structured_resume(raw_text: str) -> ResumeStructuredData:
             message="Failed to extract structured resume fields from PDF text",
         )
     return structured
+
+
+def build_initial_resume_parse_artifacts(
+    *,
+    file_name: str,
+) -> ResumeParseArtifactsData:
+    return ResumeParseArtifactsData(
+        pipeline={
+            "current_stage": "uploaded",
+            "history": [
+                {
+                    "stage": "uploaded",
+                    "status": "success",
+                    "message": "文件已上传，等待解析",
+                }
+            ],
+        },
+        document_blocks=[],
+        ocr={"used": False, "engine": "none", "avg_confidence": None},
+        quality={
+            "text_extractable": False,
+            "layout_complexity": "unknown",
+            "parser_confidence": 0.0,
+        },
+        meta={
+            "source_type": _detect_source_type(file_name),
+            "parser_version": "resume-parser-v2",
+            "ai_correction_applied": False,
+        },
+    )
+
+
+def build_resume_parse_artifacts(
+    *,
+    file_name: str,
+    raw_text: str | None,
+    structured: ResumeStructuredData | None,
+    ai_status: str | None,
+    parse_status: str,
+    parse_error: str | None = None,
+    source_type: str | None = None,
+    ocr_used: bool = False,
+    ocr_engine: str = "none",
+) -> ResumeParseArtifactsData:
+    document_blocks = _build_document_blocks(raw_text)
+    history: list[dict[str, object]] = [
+        {
+            "stage": "uploaded",
+            "status": "success",
+            "message": "文件已上传",
+        }
+    ]
+
+    if raw_text:
+        history.append(
+            {
+                "stage": "extracting_text",
+                "status": "success",
+                "message": "文本提取成功",
+            }
+        )
+    else:
+        history.append(
+            {
+                "stage": "extracting_text",
+                "status": "failed",
+                "message": parse_error or "文本提取失败",
+            }
+        )
+
+    if structured is not None:
+        history.append(
+            {
+                "stage": "rule_parse",
+                "status": "success",
+                "message": "规则解析成功",
+            }
+        )
+    elif raw_text:
+        history.append(
+            {
+                "stage": "rule_parse",
+                "status": "failed",
+                "message": parse_error or "规则解析失败",
+            }
+        )
+
+    if ai_status == "applied":
+        history.append(
+            {
+                "stage": "ai_correction",
+                "status": "success",
+                "message": "AI 校准已应用",
+            }
+        )
+    elif ai_status == "fallback_rule":
+        history.append(
+            {
+                "stage": "ai_correction",
+                "status": "fallback",
+                "message": "AI 校准失败，已回退规则结果",
+            }
+        )
+    elif ai_status == "skipped":
+        history.append(
+            {
+                "stage": "ai_correction",
+                "status": "skipped",
+                "message": "AI 校准未启用",
+            }
+        )
+
+    if parse_status == "success":
+        history.append(
+            {
+                "stage": "validated",
+                "status": "success",
+                "message": "结构化结果校验通过",
+            }
+        )
+        history.append(
+            {
+                "stage": "completed",
+                "status": "success",
+                "message": "解析完成",
+            }
+        )
+        current_stage = "completed"
+    else:
+        history.append(
+            {
+                "stage": "failed",
+                "status": "failed",
+                "message": parse_error or "解析失败",
+            }
+        )
+        current_stage = "failed"
+
+    return ResumeParseArtifactsData(
+        pipeline={
+            "current_stage": current_stage,
+            "history": history,
+        },
+        document_blocks=document_blocks,
+        ocr={"used": ocr_used, "engine": ocr_engine, "avg_confidence": None},
+        quality={
+            "text_extractable": bool(raw_text),
+            "layout_complexity": _estimate_layout_complexity(document_blocks),
+            "parser_confidence": _estimate_parser_confidence(structured),
+        },
+        meta={
+            "source_type": source_type or _detect_source_type(file_name),
+            "parser_version": "resume-parser-v2",
+            "ai_correction_applied": ai_status == "applied",
+        },
+    )
+
+
+def _detect_source_type(file_name: str) -> str:
+    suffix = Path(file_name).suffix.lower()
+    if suffix == ".pdf":
+        return "pdf"
+    if suffix == ".docx":
+        return "docx"
+    if suffix in {".png", ".jpg", ".jpeg", ".webp"}:
+        return "image"
+    return "unknown"
+
+
+def _build_document_blocks(raw_text: str | None) -> list[dict[str, object]]:
+    if not raw_text:
+        return []
+
+    blocks: list[dict[str, object]] = []
+    for index, line in enumerate(_normalize_lines(raw_text), start=1):
+        block_type = "paragraph"
+        if _match_section(line) is not None:
+            block_type = "heading"
+        blocks.append(
+            {
+                "id": f"blk_{index}",
+                "page": 1,
+                "type": block_type,
+                "text": line,
+                "bbox": [],
+            }
+        )
+    return blocks
+
+
+def _estimate_layout_complexity(document_blocks: list[dict[str, object]]) -> str:
+    block_count = len(document_blocks)
+    if block_count >= 80:
+        return "high"
+    if block_count >= 30:
+        return "medium"
+    return "low"
+
+
+def _estimate_parser_confidence(structured: ResumeStructuredData | None) -> float:
+    if structured is None or not _has_meaningful_content(structured):
+        return 0.0
+
+    signals = [
+        bool(
+            structured.basic_info.name
+            or structured.basic_info.email
+            or structured.basic_info.phone
+        ),
+        bool(structured.education),
+        bool(structured.work_experience),
+        bool(structured.projects),
+        bool(
+            structured.skills.technical
+            or structured.skills.tools
+            or structured.skills.languages
+        ),
+        bool(structured.certifications),
+    ]
+    score = 0.35 + (sum(1 for signal in signals if signal) / len(signals)) * 0.6
+    return round(min(score, 0.98), 2)

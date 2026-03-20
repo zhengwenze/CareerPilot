@@ -64,8 +64,13 @@ async def test_process_resume_parse_job_persists_success_with_applied_ai(
     resume, parse_job = await _create_resume_and_parse_job(db_session, test_user)
 
     monkeypatch.setattr(
-        "app.services.resume.extract_text_from_pdf_bytes",
-        lambda _data: _raw_text(),
+        "app.services.resume.extract_text_from_resume_bytes",
+        lambda **_kwargs: SimpleNamespace(
+            raw_text=_raw_text(),
+            source_type="pdf",
+            ocr_used=False,
+            ocr_engine="none",
+        ),
     )
     monkeypatch.setattr(
         "app.services.resume.build_structured_resume",
@@ -93,6 +98,13 @@ async def test_process_resume_parse_job_persists_success_with_applied_ai(
     assert persisted_resume.parse_status == "success"
     assert persisted_resume.parse_error is None
     assert persisted_resume.structured_json is not None
+    assert persisted_resume.structured_json["meta"]["schema_version"] == 2
+    assert persisted_resume.structured_json["project_items"]
+    assert persisted_resume.structured_json["certification_items"]
+    assert persisted_resume.parse_artifacts_json["pipeline"]["current_stage"] == "completed"
+    assert persisted_resume.parse_artifacts_json["meta"]["source_type"] == "pdf"
+    assert persisted_resume.parse_artifacts_json["meta"]["ai_correction_applied"] is True
+    assert persisted_resume.parse_artifacts_json["quality"]["text_extractable"] is True
     assert persisted_resume.structured_json["projects"] == [
         "黑马点评 高可用秒杀系统 完成高可用秒杀系统从0到1的架构设计与实现。"
     ]
@@ -112,8 +124,13 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_invalid_ai(
     rule_result = _rule_structured_data()
 
     monkeypatch.setattr(
-        "app.services.resume.extract_text_from_pdf_bytes",
-        lambda _data: _raw_text(),
+        "app.services.resume.extract_text_from_resume_bytes",
+        lambda **_kwargs: SimpleNamespace(
+            raw_text=_raw_text(),
+            source_type="pdf",
+            ocr_used=False,
+            ocr_engine="none",
+        ),
     )
     monkeypatch.setattr(
         "app.services.resume.build_structured_resume",
@@ -141,10 +158,117 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_invalid_ai(
     assert persisted_job is not None
     assert persisted_resume.parse_status == "success"
     assert persisted_resume.structured_json == rule_result.model_dump()
+    assert persisted_resume.parse_artifacts_json["pipeline"]["current_stage"] == "completed"
+    assert persisted_resume.parse_artifacts_json["meta"]["ai_correction_applied"] is False
+    assert any(
+        item["status"] == "fallback"
+        for item in persisted_resume.parse_artifacts_json["pipeline"]["history"]
+        if item["stage"] == "ai_correction"
+    )
     assert persisted_job.status == "success"
     assert persisted_job.ai_status == "fallback_rule"
     assert persisted_job.ai_message == "AI 校准失败，已回退规则解析（模型返回格式非法）"
     assert job_count == 1
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_supports_docx_source_type(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume, parse_job = await _create_resume_and_parse_job(
+        db_session,
+        test_user,
+        file_name="resume.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+    monkeypatch.setattr(
+        "app.services.resume.extract_text_from_resume_bytes",
+        lambda **_kwargs: SimpleNamespace(
+            raw_text=_raw_text(),
+            source_type="docx",
+            ocr_used=False,
+            ocr_engine="none",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_structured_resume",
+        lambda _raw_text: _rule_structured_data(),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _settings: InvalidAIProvider(),
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=FakeStorage(),
+        session_factory=session_factory,
+        settings=Settings(),
+    )
+
+    async with session_factory() as session:
+        persisted_resume = await session.get(Resume, resume.id)
+
+    assert persisted_resume is not None
+    assert persisted_resume.parse_status == "success"
+    assert persisted_resume.parse_artifacts_json["meta"]["source_type"] == "docx"
+    assert persisted_resume.structured_json["meta"]["source_type"] == "docx"
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_marks_ocr_for_image_resume(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume, parse_job = await _create_resume_and_parse_job(
+        db_session,
+        test_user,
+        file_name="resume.png",
+        content_type="image/png",
+    )
+
+    monkeypatch.setattr(
+        "app.services.resume.extract_text_from_resume_bytes",
+        lambda **_kwargs: SimpleNamespace(
+            raw_text=_raw_text(),
+            source_type="image",
+            ocr_used=True,
+            ocr_engine="tesseract",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_structured_resume",
+        lambda _raw_text: _rule_structured_data(),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _settings: InvalidAIProvider(),
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=FakeStorage(),
+        session_factory=session_factory,
+        settings=Settings(),
+    )
+
+    async with session_factory() as session:
+        persisted_resume = await session.get(Resume, resume.id)
+
+    assert persisted_resume is not None
+    assert persisted_resume.parse_status == "success"
+    assert persisted_resume.parse_artifacts_json["meta"]["source_type"] == "image"
+    assert persisted_resume.parse_artifacts_json["ocr"]["used"] is True
+    assert persisted_resume.parse_artifacts_json["ocr"]["engine"] == "tesseract"
+    assert persisted_resume.structured_json["meta"]["source_type"] == "image"
 
 
 def _raw_text() -> str:
@@ -185,17 +309,21 @@ def _rule_structured_data() -> ResumeStructuredData:
 async def _create_resume_and_parse_job(
     session: AsyncSession,
     user: User,
+    *,
+    file_name: str = "resume.pdf",
+    content_type: str = "application/pdf",
 ) -> tuple[Resume, ResumeParseJob]:
     resume = Resume(
         id=uuid4(),
         user_id=user.id,
-        file_name="resume.pdf",
-        file_url="minio://career-pilot/resume.pdf",
+        file_name=file_name,
+        file_url=f"minio://career-pilot/{file_name}",
         storage_bucket="career-pilot",
-        storage_object_key=f"resumes/{user.id}/resume.pdf",
-        content_type="application/pdf",
+        storage_object_key=f"resumes/{user.id}/{file_name}",
+        content_type=content_type,
         file_size=1024,
         parse_status="pending",
+        parse_artifacts_json={},
         created_by=user.id,
         updated_by=user.id,
     )

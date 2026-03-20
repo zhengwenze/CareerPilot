@@ -39,6 +39,7 @@ class Resume(TimestampMixin, UserAuditMixin, Base):
     parse_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     structured_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    parse_artifacts_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     latest_version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

@@ -18,6 +18,7 @@ from app.models import Resume, ResumeParseJob, User
 from app.schemas.resume import (
     ResumeDeleteResponse,
     ResumeDownloadUrlResponse,
+    ResumeParseArtifactsData,
     ResumeParseJobResponse,
     ResumeResponse,
     ResumeStructuredData,
@@ -31,12 +32,15 @@ from app.services.resume_ai import (
     merge_resume_ai_correction,
 )
 from app.services.resume_parser import (
+    build_initial_resume_parse_artifacts,
+    build_resume_parse_artifacts,
     build_structured_resume,
-    extract_text_from_pdf_bytes,
+    extract_text_from_resume_bytes,
 )
 from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
+SUPPORTED_RESUME_SUFFIXES = {".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"}
 RESUME_PARSE_TIMEOUT_SECONDS = 120
 AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
@@ -109,6 +113,18 @@ def build_storage_object_key(*, user_id: UUID, resume_id: UUID, file_name: str) 
     return f"resumes/{user_id}/{resume_id}/{file_name}"
 
 
+def infer_resume_content_type(file_name: str) -> str:
+    suffix = Path(file_name).suffix.lower()
+    return {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }.get(suffix, "application/octet-stream")
+
+
 async def update_parse_job_progress(
     *,
     session_factory: async_sessionmaker[AsyncSession],
@@ -156,11 +172,11 @@ async def validate_resume_upload(
         )
 
     file_name = sanitize_file_name(file.filename)
-    if Path(file_name).suffix.lower() != ".pdf":
+    if Path(file_name).suffix.lower() not in SUPPORTED_RESUME_SUFFIXES:
         raise ApiException(
             status_code=400,
             code=ErrorCode.BAD_REQUEST,
-            message="Only PDF resumes are supported",
+            message="Only PDF, DOCX, PNG, JPG, JPEG, and WEBP resumes are supported",
         )
 
     max_file_size_bytes = settings.max_resume_file_size_mb * 1024 * 1024
@@ -178,7 +194,7 @@ async def validate_resume_upload(
             message=f"Resume file must be <= {settings.max_resume_file_size_mb} MB",
         )
 
-    content_type = file.content_type or "application/pdf"
+    content_type = file.content_type or infer_resume_content_type(file_name)
     return file_name, content_type, content
 
 
@@ -209,6 +225,9 @@ def serialize_resume(
             ResumeStructuredData.model_validate(resume.structured_json)
             if resume.structured_json
             else None
+        ),
+        parse_artifacts_json=ResumeParseArtifactsData.model_validate(
+            resume.parse_artifacts_json or {}
         ),
         latest_version=resume.latest_version,
         created_at=resume.created_at,
@@ -268,6 +287,9 @@ async def upload_resume(
         content_type=content_type,
         file_size=len(content),
         parse_status="pending",
+        parse_artifacts_json=build_initial_resume_parse_artifacts(
+            file_name=file_name
+        ).model_dump(),
         created_by=current_user.id,
         updated_by=current_user.id,
     )
@@ -335,6 +357,9 @@ async def process_resume_parse_job(
 
     raw_text: str | None = None
     final_structured: ResumeStructuredData | None = None
+    extraction_source_type = "pdf"
+    extraction_ocr_used = False
+    extraction_ocr_engine = "none"
     resume_parse_status = "failed"
     resume_parse_error: str | None = "Unexpected parse failure"
     parse_job_status = "failed"
@@ -361,7 +386,14 @@ async def process_resume_parse_job(
                 owner_user_id=owner_user_id,
                 message=PARSE_PROGRESS_EXTRACTING_TEXT,
             )
-            raw_text = extract_text_from_pdf_bytes(file_bytes)
+            extraction_result = extract_text_from_resume_bytes(
+                data=file_bytes,
+                file_name=resume.file_name,
+            )
+            raw_text = extraction_result.raw_text
+            extraction_source_type = extraction_result.source_type
+            extraction_ocr_used = extraction_result.ocr_used
+            extraction_ocr_engine = extraction_result.ocr_engine
 
             await update_parse_job_progress(
                 session_factory=session_maker,
@@ -370,6 +402,8 @@ async def process_resume_parse_job(
                 message=PARSE_PROGRESS_RULE_PARSING,
             )
             structured = build_structured_resume(raw_text)
+            structured.meta.source_type = extraction_source_type
+            structured.meta.ai_correction_applied = False
             final_structured = structured
             ai_provider = build_resume_ai_correction_provider(config)
             try:
@@ -397,6 +431,8 @@ async def process_resume_parse_job(
                         rule_result=structured,
                         ai_result=ai_result.structured_data,
                     )
+                    final_structured.meta.source_type = extraction_source_type
+                    final_structured.meta.ai_correction_applied = True
                     ai_status = AI_STATUS_APPLIED
                     ai_message = "已完成校准"
                 else:
@@ -449,6 +485,17 @@ async def process_resume_parse_job(
         if final_structured is not None and raw_text is not None:
             resume.raw_text = raw_text
             resume.structured_json = final_structured.model_dump()
+        resume.parse_artifacts_json = build_resume_parse_artifacts(
+            file_name=resume.file_name,
+            raw_text=raw_text,
+            structured=final_structured,
+            ai_status=ai_status,
+            parse_status=resume_parse_status,
+            parse_error=resume_parse_error,
+            source_type=extraction_source_type,
+            ocr_used=extraction_ocr_used,
+            ocr_engine=extraction_ocr_engine,
+        ).model_dump()
 
         resume.parse_status = resume_parse_status
         resume.parse_error = resume_parse_error
@@ -557,6 +604,9 @@ async def create_resume_parse_job(
     )
     resume.parse_status = "pending"
     resume.parse_error = None
+    resume.parse_artifacts_json = build_initial_resume_parse_artifacts(
+        file_name=resume.file_name
+    ).model_dump()
     resume.updated_by = current_user.id
 
     parse_job = ResumeParseJob(
