@@ -45,7 +45,7 @@ function PaperInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`h-12 w-full border-2 border-black bg-[#f9f7f0] px-4 text-sm text-black outline-none shadow-[3px_3px_0_0_#000] placeholder:text-black/40 ${props.className ?? ""}`}
+      className={`h-12 w-full border-b border-[#1C1C1C]/20 bg-transparent px-4 text-sm text-[#1C1C1C] outline-none placeholder:text-[#1C1C1C]/40 ${props.className ?? ""}`}
     />
   );
 }
@@ -157,44 +157,44 @@ export default function DashboardProfilePage() {
 
   return (
     <div className="space-y-6">
-      <header className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
+      <header className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
         <div className="flex flex-col gap-6 px-6 py-6 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="inline-flex items-center border-2 border-black bg-[#f9f7f0] px-5 py-3 shadow-[4px_4px_0_0_#000]">
-              <span className="mr-4 text-2xl leading-none text-[#ff7a10]">
+            <div className="inline-flex items-center border border-[#1C1C1C]/10 bg-white px-5 py-3">
+              <span className="mr-4 text-2xl leading-none text-[#1C1C1C]">
                 *
               </span>
-              <span className="text-[1.55rem] font-black uppercase tracking-[-0.06em] text-black sm:text-[1.8rem]">
+              <span className="text-[1.55rem] font-semibold uppercase tracking-tight text-[#1C1C1C] sm:text-[1.8rem]">
                 Profile
               </span>
             </div>
 
-            <div className="mt-6 inline-block border-2 border-black bg-[#ff7a10] px-4 py-2 shadow-[5px_5px_0_0_#000]">
-              <h1 className="text-3xl font-semibold tracking-[-0.08em] text-white sm:text-4xl">
+            <div className="mt-6">
+              <h1 className="text-3xl font-semibold tracking-tight text-[#1C1C1C] sm:text-4xl">
                 个人资料
               </h1>
             </div>
 
-            <p className="mt-5 max-w-3xl text-base leading-8 text-[#38445a] sm:text-[1.05rem]">
+            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#1C1C1C]/60 sm:text-[1.05rem]">
               这些字段会被后续简历、岗位匹配和面试模块直接复用。
             </p>
           </div>
 
-          <div className="border-2 border-black bg-[#f9f7f0] px-4 py-2 text-sm font-medium text-black/60 shadow-[3px_3px_0_0_#000]">
+          <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C]/60">
             {profile?.email}
           </div>
         </div>
       </header>
 
-      <section className="border-2 border-black bg-[#f4f1e8] shadow-[8px_8px_0_0_#000]">
-        <div className="border-b-2 border-black px-5 py-4 sm:px-6">
+      <section className="border-b border-[#1C1C1C]/10 bg-[#F9F8F6]">
+        <div className="border-b border-[#1C1C1C]/10 px-5 py-4 sm:px-6">
           <div className="mb-3 flex items-center gap-3">
-            <span className="size-2.5 bg-[#10bf7a]" />
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/45">
+            <span className="size-2.5 bg-[#1C1C1C]" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
               编辑资料
             </p>
           </div>
-          <h2 className="text-xl font-semibold tracking-[-0.05em] text-black">
+          <h2 className="text-xl font-semibold tracking-tight text-[#1C1C1C]">
             基本信息
           </h2>
         </div>
@@ -269,18 +269,18 @@ export default function DashboardProfilePage() {
             </div>
 
             {error ? (
-              <Alert className="border-2 border-black bg-[#fff1f1] text-black shadow-[6px_6px_0_0_#000]">
-                <AlertTitle className="text-base font-semibold tracking-[-0.03em] text-black">
+              <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+                <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
                   保存失败
                 </AlertTitle>
-                <AlertDescription className="text-sm leading-7 text-black/72">
+                <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
                   {error}
                 </AlertDescription>
               </Alert>
             ) : null}
 
             <Button
-              className="border-2 border-black bg-[#2f55d4] px-5 py-3 text-sm font-semibold text-white shadow-[4px_4px_0_0_#000] hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
+              className="border-b border-[#1C1C1C]/20 bg-[#1C1C1C] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1C1C1C]/90 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isSubmitting}
               type="submit"
             >
