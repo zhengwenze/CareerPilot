@@ -1,0 +1,126 @@
+/* Brutalist Web Global Styles */
+
+:root {
+  --bw-black: #000000;
+  --bw-white: #ffffff;
+  --bw-link: #0000ff;
+  --bw-visited: #551a8b;
+  --bw-red: #ff0000;
+  --bw-green: #008000;
+  --bw-gray: #808080;
+  --bw-silver: #dfdfdf;
+}
+
+/* System font stack */
+body {
+  font-family: monospace, "Courier New", Courier, monospace;
+  background: var(--bw-white);
+  color: var(--bw-black);
+  line-height: 1.4;
+}
+
+/* Headings use serif */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Times New Roman", Times, Georgia, serif;
+  font-weight: bold;
+}
+
+/* Classic link styles */
+a {
+  color: var(--bw-link);
+  text-decoration: underline;
+}
+
+a:visited {
+  color: var(--bw-visited);
+}
+
+a:hover {
+  color: var(--bw-red);
+}
+
+/* Thin borders only */
+hr {
+  border: none;
+  border-top: 1px solid var(--bw-black);
+}
+
+/* Remove all border-radius */
+*, *::before, *::after {
+  border-radius: 0 !important;
+}
+
+/* Plain table styles */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid var(--bw-black);
+  padding: 4px 8px;
+  text-align: left;
+  font-family: monospace;
+}
+
+/* Windows 95 raised button */
+.bw-btn {
+  background: var(--bw-silver);
+  border-width: 2px;
+  border-style: solid;
+  border-color: white var(--bw-gray) var(--bw-gray) white;
+  cursor: pointer;
+}
+
+/* Windows 95 pressed button */
+.bw-btn:active {
+  border-color: var(--bw-gray) white white var(--bw-gray);
+}
+
+/* Inset input field (Windows 95 style) */
+.bw-input {
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--bw-gray) white white var(--bw-gray);
+  background: var(--bw-white);
+}
+
+.bw-input:focus {
+  outline: 1px dotted var(--bw-black);
+  outline-offset: 1px;
+  background: #ffffcc;
+}
+@keyframes brutalist-web-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes brutalist-web-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.brutalist-web-gradient {
+  background: linear-gradient(135deg, #000000, #0000ff);
+}
+
+.brutalist-web-gradient-text {
+  background: linear-gradient(135deg, #000000, #0000ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brutalist-web-frosted {
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.brutalist-web-accent-corner {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 2rem), calc(100% - 2rem) 100%, 0 100%);
+}
+
+.brutalist-web-animate-in {
+  animation: brutalist-web-fade-in 0.5s ease-out both;
+}
