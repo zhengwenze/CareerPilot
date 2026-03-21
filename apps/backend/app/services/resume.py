@@ -45,7 +45,7 @@ from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 SUPPORTED_RESUME_SUFFIXES = {".pdf"}
-RESUME_PARSE_TIMEOUT_SECONDS = 120
+RESUME_PARSE_TIMEOUT_SECONDS = 180
 AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
 AI_STATUS_FALLBACK_RULE = "fallback_rule"
