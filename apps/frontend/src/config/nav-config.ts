@@ -1,9 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  FileText,
-  Settings,
-  Sparkles,
-} from "lucide-react";
+import { FileText, Settings, Sparkles } from "lucide-react";
 
 export type NavMatchMode = "exact" | "prefix";
 
@@ -45,8 +41,8 @@ export const dashboardNavSections: NavSection[] = [
     title: "设置",
     items: [
       {
-        title: "个人信息",
-        href: "/dashboard/profile",
+        title: "设置",
+        href: "/dashboard/setting",
         icon: Settings,
         match: "prefix",
       },

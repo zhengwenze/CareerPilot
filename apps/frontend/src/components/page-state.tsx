@@ -1,15 +1,15 @@
-import { AlertTriangle, Inbox, LoaderCircle } from "lucide-react"
+import { AlertTriangle, Inbox, LoaderCircle } from "lucide-react";
 
-import { PaperSection } from "@/components/brutalist/page-shell"
-import { Button } from "@/components/ui/button"
+import { PaperSection } from "@/components/brutalist/page-shell";
+import { Button } from "@/components/ui/button";
 
 type PageStateProps = {
-  title: string
-  description: string
-  actionLabel?: string
-  onAction?: () => void
-  tone?: "loading" | "empty" | "error"
-}
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  tone?: "loading" | "empty" | "error";
+};
 
 function PageStateCard({
   title,
@@ -25,12 +25,16 @@ function PageStateCard({
       <Inbox className="size-5 text-[#666666]" />
     ) : (
       <LoaderCircle className="size-5 text-[#666666] animate-spin" />
-    )
+    );
 
   return (
     <PaperSection
       eyebrow={
-        tone === "error" ? "Error State" : tone === "empty" ? "Empty State" : "Loading State"
+        tone === "error"
+          ? "Error State"
+          : tone === "empty"
+            ? "Empty State"
+            : "Loading State"
       }
       title={title}
     >
@@ -48,17 +52,19 @@ function PageStateCard({
         </div>
       </div>
     </PaperSection>
-  )
+  );
 }
 
 export function PageLoadingState({
   title = "页面正在加载",
   description = "我们正在恢复登录态并同步你需要的数据。",
 }: {
-  title?: string
-  description?: string
+  title?: string;
+  description?: string;
 }) {
-  return <PageStateCard description={description} title={title} tone="loading" />
+  return (
+    <PageStateCard description={description} title={title} tone="loading" />
+  );
 }
 
 export function PageEmptyState({
@@ -75,7 +81,7 @@ export function PageEmptyState({
       title={title}
       tone="empty"
     />
-  )
+  );
 }
 
 export function PageErrorState({
@@ -92,5 +98,5 @@ export function PageErrorState({
       title={title}
       tone="error"
     />
-  )
+  );
 }

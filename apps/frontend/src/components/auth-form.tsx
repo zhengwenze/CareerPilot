@@ -13,49 +13,49 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "./auth-provider";
 
 type AuthFormProps = {
-  mode: "login" | "register"
-}
+  mode: "login" | "register";
+};
 
-const DASHBOARD_ENTRY_PATH = "/dashboard/overview"
+const DASHBOARD_ENTRY_PATH = "/dashboard/overview";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
-    return error.message
+    return error.message;
   }
 
   if (error instanceof Error) {
-    return error.message
+    return error.message;
   }
 
-  return "操作失败，请稍后再试。"
+  return "操作失败，请稍后再试。";
 }
 
 export function AuthForm({ mode }: AuthFormProps) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { login, register, isAuthenticated, isBootstrapping } = useAuth()
-  const [isRouting, startTransition] = useTransition()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [nickname, setNickname] = useState("")
-  const [error, setError] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const redirectTarget = searchParams.get("next")
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { login, register, isAuthenticated, isBootstrapping } = useAuth();
+  const [isRouting, startTransition] = useTransition();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const redirectTarget = searchParams.get("next");
   const nextPath =
     redirectTarget && redirectTarget.startsWith("/")
       ? redirectTarget
-      : DASHBOARD_ENTRY_PATH
+      : DASHBOARD_ENTRY_PATH;
 
   useEffect(() => {
     if (!isBootstrapping && isAuthenticated) {
-      router.replace(nextPath)
+      router.replace(nextPath);
     }
-  }, [isAuthenticated, isBootstrapping, nextPath, router])
+  }, [isAuthenticated, isBootstrapping, nextPath, router]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError("")
-    setIsSubmitting(true)
+    event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
 
     try {
       if (mode === "register") {
@@ -63,28 +63,28 @@ export function AuthForm({ mode }: AuthFormProps) {
           email,
           password,
           nickname: nickname.trim() || undefined,
-        })
+        });
       } else {
-        await login({ email, password })
+        await login({ email, password });
       }
 
       startTransition(() => {
-        router.replace(nextPath)
-        router.refresh()
-      })
+        router.replace(nextPath);
+        router.refresh();
+      });
     } catch (submissionError) {
-      setError(getErrorMessage(submissionError))
+      setError(getErrorMessage(submissionError));
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
 
-  const isPending = isSubmitting || isRouting || isBootstrapping
-  const title = mode === "register" ? "创建账号" : "欢迎回来"
+  const isPending = isSubmitting || isRouting || isBootstrapping;
+  const title = mode === "register" ? "创建账号" : "欢迎回来";
   const description =
     mode === "register"
       ? "输入基础信息后即可创建账号，并自动进入你的求职工作台。"
-      : "输入邮箱与密码，继续访问你的简历解析和职位进展。"
+      : "输入邮箱与密码，继续访问你的简历解析和职位进展。";
 
   return (
     <div className="w-full">
@@ -95,7 +95,13 @@ export function AuthForm({ mode }: AuthFormProps) {
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-2xl font-semibold text-[#111111]" style={{ fontFamily: "var(--font-heading)", letterSpacing: "-0.02em" }}>
+            <h3
+              className="text-2xl font-semibold text-[#111111]"
+              style={{
+                fontFamily: "var(--font-heading)",
+                letterSpacing: "-0.02em",
+              }}
+            >
               {title}
             </h3>
             <p className="text-sm leading-6 text-[#666666]">{description}</p>
@@ -138,7 +144,10 @@ export function AuthForm({ mode }: AuthFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-sm font-medium text-[#111111]">
+          <Label
+            htmlFor="password"
+            className="text-sm font-medium text-[#111111]"
+          >
             密码
           </Label>
           <Input
@@ -156,23 +165,21 @@ export function AuthForm({ mode }: AuthFormProps) {
         {error && (
           <Alert variant="destructive" className="p-4">
             <AlertCircle className="size-4 text-[#111111]" />
-            <AlertTitle className="text-sm font-semibold text-[#111111]">提交失败</AlertTitle>
+            <AlertTitle className="text-sm font-semibold text-[#111111]">
+              提交失败
+            </AlertTitle>
             <AlertDescription className="text-sm text-[#666666]">
               {error}
             </AlertDescription>
           </Alert>
         )}
 
-        <Button
-          className="h-11 w-full"
-          disabled={isPending}
-          type="submit"
-        >
+        <Button className="h-11 w-full" disabled={isPending} type="submit">
           {isPending
             ? "处理中..."
             : mode === "register"
-            ? "注册并进入工作台"
-            : "登录并恢复工作台"}
+              ? "注册并进入工作台"
+              : "登录并恢复工作台"}
           <ArrowRight className="ml-2 size-4" />
         </Button>
 
@@ -181,5 +188,5 @@ export function AuthForm({ mode }: AuthFormProps) {
         </p>
       </form>
     </div>
-  )
+  );
 }
