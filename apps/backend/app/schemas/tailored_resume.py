@@ -58,3 +58,11 @@ class TailoredResumeGrammarErrorItem(BaseModel):
 
 class TailoredResumeGrammarResponse(BaseModel):
     errors: list[TailoredResumeGrammarErrorItem] = Field(default_factory=list)
+
+
+class TailoredResumePolishRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=30000)
+
+
+class TailoredResumePolishResponse(BaseModel):
+    text: str = Field(min_length=1)

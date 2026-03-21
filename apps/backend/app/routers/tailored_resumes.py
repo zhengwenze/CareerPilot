@@ -23,6 +23,8 @@ from app.schemas.tailored_resume import (
     TailoredResumeGrammarRequest,
     TailoredResumeGrammarResponse,
     TailoredResumeGenerateRequest,
+    TailoredResumePolishRequest,
+    TailoredResumePolishResponse,
     TailoredResumeWorkflowResponse,
 )
 from app.services.resume import upload_resume
@@ -34,6 +36,7 @@ from app.services.tailored_resume import (
     list_tailored_resume_workflows,
 )
 from app.services.tailored_resume_grammar import check_tailored_resume_grammar
+from app.services.tailored_resume_polish import polish_tailored_resume_markdown
 
 router = APIRouter(prefix="/tailored-resumes", tags=["tailored-resumes"])
 
@@ -97,6 +100,24 @@ async def check_tailored_resume_text_grammar(
 ) -> ApiSuccessResponse[TailoredResumeGrammarResponse]:
     del current_user
     result = await check_tailored_resume_grammar(
+        text=payload.text,
+        settings=settings,
+    )
+    return success_response(request, result)
+
+
+@router.post(
+    "/polish",
+    response_model=ApiSuccessResponse[TailoredResumePolishResponse],
+)
+async def polish_tailored_resume_text(
+    request: Request,
+    payload: TailoredResumePolishRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
+) -> ApiSuccessResponse[TailoredResumePolishResponse]:
+    del current_user
+    result = await polish_tailored_resume_markdown(
         text=payload.text,
         settings=settings,
     )

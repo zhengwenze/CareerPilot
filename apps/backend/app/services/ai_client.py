@@ -30,6 +30,81 @@ class AIClientError(Exception):
         self.detail = detail
 
 
+async def request_text_completion(
+    *,
+    config: AIProviderConfig,
+    instructions: str,
+    payload: object,
+    max_tokens: int = 4000,
+) -> str:
+    try:
+        total_attempts = 1 + MAX_AI_REQUEST_RETRIES
+        logger.info(
+            "AI text completion started provider=%s model=%s "
+            "base_url=%s timeout_seconds=%s payload_chars=%s attempts=%s",
+            config.provider,
+            config.model,
+            config.base_url,
+            config.timeout_seconds,
+            len(_serialize_payload(payload)),
+            total_attempts,
+        )
+        content = ""
+        for attempt in range(1, total_attempts + 1):
+            try:
+                content = await _request_anthropic_text(
+                    config=config,
+                    instructions=instructions,
+                    payload=payload,
+                    max_tokens=max_tokens,
+                )
+                if attempt > 1:
+                    logger.info(
+                        "AI text completion recovered after retry provider=%s model=%s attempt=%s",
+                        config.provider,
+                        config.model,
+                        attempt,
+                    )
+                break
+            except AIClientError as exc:
+                is_retryable = exc.category in RETRYABLE_AI_ERROR_CATEGORIES
+                has_next_attempt = attempt < total_attempts
+                if not is_retryable or not has_next_attempt:
+                    raise
+                backoff_seconds = AI_RETRY_BACKOFF_SECONDS * attempt
+                logger.warning(
+                    "AI text completion transient failure provider=%s model=%s "
+                    "category=%s attempt=%s/%s retry_in=%.2fs",
+                    config.provider,
+                    config.model,
+                    exc.category,
+                    attempt,
+                    total_attempts,
+                    backoff_seconds,
+                )
+                await asyncio.sleep(backoff_seconds)
+        normalized = content.strip()
+        if not normalized:
+            raise AIClientError(
+                category="invalid_response_format",
+                detail="AI response did not contain text content",
+            )
+        logger.info(
+            "AI text completion parsed successfully provider=%s model=%s text_chars=%s",
+            config.provider,
+            config.model,
+            len(normalized),
+        )
+        return normalized
+    except AIClientError:
+        logger.exception(
+            "AI text completion failed provider=%s model=%s",
+            config.provider,
+            config.model,
+        )
+        raise
+
+
 async def request_json_completion(
     *,
     config: AIProviderConfig,
