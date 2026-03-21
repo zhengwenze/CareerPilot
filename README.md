@@ -1,29 +1,112 @@
 # Career Pilot
 
-求职工作台，帮助您高效管理求职流程。
+**企业级智能求职工作台** | 面向中高级开发者的全链路求职管理平台
 
-## 快速启动
+Career Pilot 是一个面向中高级开发者的智能求职工作台，通过 AI 赋能实现简历智能解析、岗位精准匹配、能力短板分析与简历优化建议生成。项目采用企业级架构设计，支持高并发场景，帮助开发者系统化提升求职效率与成功率。
 
-### Docker 一键启动（推荐）
+**目标用户**：3-8 年工作经验的中高级开发者，正在寻求技术负责人、架构师或资深工程师岗位。
+
+---
+
+## 📑 目录导航
+
+- [核心功能](#-核心功能)
+- [技术架构](#-技术架构)
+- [快速开始](#-快速开始)
+- [项目结构](#-项目结构)
+- [环境配置](#-环境配置)
+- [开发指南](#-开发指南)
+- [部署指南](#-部署指南)
+- [常见问题](#-常见问题)
+
+---
+
+## 🎯 核心功能
+
+### 简历管理
+
+- **PDF 智能解析**：支持多格式 PDF 简历自动抽取与结构化
+- **AI 校正增强**：基于大模型的错误检测与信息补全
+- **可视化编辑**：结构化数据在线编辑与版本管理
+
+### 岗位匹配
+
+- **JD 智能解析**：岗位描述自动抽取关键能力要求
+- **精准匹配评分**：基于规则引擎与 AI 的双重匹配算法
+- **能力对比面板**：岗位要求与简历能力的一站式对比
+
+### 简历优化
+
+- **改写任务生成**：基于岗位快照的针对性优化建议
+- **可编辑草案**：支持逐段编辑与预览
+- **版本管理**：优化建议应用与简历版本演进
+
+### 模拟面试
+
+- **面试题生成**：基于岗位画像的定制化面试题
+- **AI 反馈**：答案质量评估与改进建议
+- **复盘记录**：面试表现追踪与能力成长曲线
+
+---
+
+## 🏗️ 技术架构
+
+### 前端技术栈
+
+| 技术         | 版本   | 说明              |
+| ------------ | ------ | ----------------- |
+| React        | 19.2.3 | 核心 UI 框架      |
+| Next.js      | 16.1.6 | SSR/静态生成/路由 |
+| TypeScript   | 5.x    | 类型安全          |
+| Tailwind CSS | 4.x    | 原子化 CSS        |
+| shadcn/ui    | 4.0.6  | 组件库基座        |
+
+### 后端技术栈
+
+| 技术       | 版本    | 说明       |
+| ---------- | ------- | ---------- |
+| Python     | 3.11.15 | 核心语言   |
+| FastAPI    | 0.116.1 | Web 框架   |
+| SQLAlchemy | 2.0.43  | ORM 框架   |
+| Alembic    | 1.16.5  | 数据库迁移 |
+| Pydantic   | 2.11.0  | 数据校验   |
+
+### 数据库与中间件
+
+| 服务       | 版本          | 用途                    |
+| ---------- | ------------- | ----------------------- |
+| PostgreSQL | 17 (pgvector) | 关系型数据库 + 向量检索 |
+| Redis      | 7.4-alpine    | 缓存、Token Blocklist   |
+| MinIO      | latest        | 对象存储（简历 PDF）    |
+
+### AI 服务集成
+
+| 服务      | 模型              | 说明                  |
+| --------- | ----------------- | --------------------- |
+| Anthropic | Claude 3.5 Sonnet | 简历解析、校正        |
+| MiniMax   | MiniMax-M2.5      | 替代方案，兼容 OpenAI |
+
+---
+
+## 🚀 快速开始
+
+### 方式一：Docker 一键启动（推荐）
 
 ```bash
+# 启动所有服务（后端、前端、数据库、中间件）
 docker compose -f docker-compose.yml up -d
+
+# 查看服务状态
+docker compose -f docker-compose.yml ps
 ```
 
-服务地址：
+**访问地址**：
 
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-- MinIO Console: http://localhost:9001
+- 前端应用：http://localhost:3000
+- 后端 API：http://localhost:8000
+- MinIO 控制台：http://localhost:9001
 
-中间件：
-
-- PostgreSQL: localhost:5432
-- Redis: localhost:6380
-- MinIO: localhost:9000
-
-### 本地开发模式
+### 方式二：本地开发模式
 
 #### 1. 启动依赖服务
 
@@ -35,68 +118,29 @@ docker compose -f docker-compose.yml up -d postgres redis minio
 
 ```bash
 cd apps/backend
+
+# 安装依赖（首次运行）
 uv sync --group dev
+
+# 执行数据库迁移
 uv run alembic upgrade head
+
+# 启动开发服务器
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-
-后端 API: http://127.0.0.1:8000
 
 #### 3. 启动前端
 
 ```bash
 cd apps/frontend
+
+# 安装依赖（首次运行）
 npm install
+
+# 启动开发服务器
 npm run dev
 ```
 
-前端: http://localhost:3000
+**访问地址**：http://localhost:3000
 
-## 当前项目结构
-
-```
-career-pilot/
-├── apps/
-│   ├── backend/          # FastAPI 后端服务
-│   │   ├── app/
-│   │   │   ├── core/     # 核心配置（config, errors, security, logging）
-│   │   │   ├── db/       # 数据库（base, session）
-│   │   │   ├── models/   # 数据模型（resume, user, job, match_report...）
-│   │   │   ├── routers/  # API 路由（auth, resumes, jobs, match_reports...）
-│   │   │   ├── schemas/  # Pydantic schemas（请求/响应模型）
-│   │   │   ├── services/ # 业务逻辑（resume_parser, resume_ai, match_engine...）
-│   │   │   └── prompts/  # AI prompt 模板
-│   │   ├── alembic/      # 数据库迁移
-│   │   │   └── versions/ # 迁移历史
-│   │   └── tests/        # 后端测试
-│   │
-│   ├── frontend/         # Next.js 前端
-│   │   └── src/
-│   │       ├── app/      # 页面路由（dashboard, login, register）
-│   │       ├── components/# UI 组件（resume, jobs, layout, ui...）
-│   │       └── lib/      # API 映射
-│   │
-│   └── miniprogram/      # 微信小程序
-│       ├── pages/        # 页面
-│       └── components/   # 组件
-│
-├── docker-compose.yml     # Docker 编排
-└── docker-compose.middleware.yml # 中间件编排
-```
-
-## Docker 相关
-
-```bash
-# 查看服务状态
-docker compose -f docker-compose.yml ps
-
-# 查看日志
-docker compose -f docker-compose.yml logs -f backend
-docker compose -f docker-compose.yml logs -f frontend
-
-# 停止服务
-docker compose -f docker-compose.yml down
-
-# 重新构建
-docker compose -f docker-compose.yml up -d --build
-```
+---
