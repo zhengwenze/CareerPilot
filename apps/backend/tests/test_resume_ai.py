@@ -300,7 +300,7 @@ async def test_resume_ai_normalizes_cn_punctuation_to_professional_style(
     assert result.structured_data is not None
     assert result.structured_data.basic_info.summary == "负责增长分析，实验分析；搭建指标体系。"
     assert result.structured_data.work_experience == [
-        "CareerPilot 负责数据分析，推动实验体系。"
+        "CareerPilot 负责数据分析,推动实验体系。"
     ]
-    assert result.structured_data.projects == ["增长平台：搭建看板，沉淀指标。"]
-    assert result.structured_data.certifications == ["百度之星金奖，竞赛。"]
+    assert result.structured_data.projects == ["增长平台:搭建看板,沉淀指标。"]
+    assert result.structured_data.certifications == ["百度之星金奖,竞赛。"]

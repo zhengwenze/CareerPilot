@@ -58,6 +58,50 @@ def render_resume_markdown(resume: ResumeStructuredData | dict[str, Any]) -> str
     return _cleanup_markdown(lines)
 
 
+def validate_resume_markdown_structure(
+    resume: ResumeStructuredData | dict[str, Any],
+    markdown: str,
+) -> list[str]:
+    structured = (
+        resume
+        if isinstance(resume, ResumeStructuredData)
+        else ResumeStructuredData.model_validate(resume)
+    )
+    errors: list[str] = []
+    content = markdown.strip()
+    if not content.startswith("# "):
+        errors.append("first_line_must_be_h1")
+    if "\n## " not in f"\n{content}":
+        errors.append("missing_h2_section")
+    if "\n- " not in f"\n{content}":
+        errors.append("missing_bullet_list")
+    if structured.work_experience_items and "\n### " not in f"\n{content}":
+        errors.append("missing_h3_for_work_items")
+    if structured.basic_info.email.strip() and "- 邮箱：" not in content:
+        errors.append("missing_email_bullet")
+    if structured.basic_info.phone.strip() and "- 电话：" not in content:
+        errors.append("missing_phone_bullet")
+    if (
+        structured.work_experience_items
+        and not any(bullet.text.strip() for item in structured.work_experience_items for bullet in item.bullets)
+    ) is False and "- " not in content:
+        errors.append("missing_description_bullets")
+    return errors
+
+
+def ensure_resume_markdown_structure(
+    resume: ResumeStructuredData | dict[str, Any],
+    markdown: str,
+) -> str:
+    errors = validate_resume_markdown_structure(resume, markdown)
+    if errors:
+        raise ValueError(
+            "Canonical resume markdown failed structure validation: "
+            + ",".join(errors)
+        )
+    return markdown
+
+
 def _render_header(resume: ResumeStructuredData) -> list[str]:
     basic = resume.basic_info
     lines: list[str] = []

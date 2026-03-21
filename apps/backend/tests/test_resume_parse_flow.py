@@ -206,6 +206,103 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_invalid_ai(
 
 
 @pytest.mark.asyncio
+async def test_process_resume_parse_job_fails_when_markdown_output_is_plain_text(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume, parse_job = await _create_resume_and_parse_job(db_session, test_user)
+
+    monkeypatch.setattr(
+        "app.services.resume.extract_text_from_resume_bytes",
+        lambda **_kwargs: SimpleNamespace(
+            raw_text=_raw_text(),
+            source_type="pdf",
+            ocr_used=False,
+            ocr_engine="none",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_structured_resume",
+        lambda _raw_text: _rule_structured_data(),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _settings: AppliedAIProvider(),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.render_resume_markdown",
+        lambda _structured: "郑文泽\nAI 应用开发\n字节跳动 工程师\n负责平台建设",
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=FakeStorage(),
+        session_factory=session_factory,
+        settings=Settings(),
+    )
+
+    async with session_factory() as session:
+        persisted_resume = await session.get(Resume, resume.id)
+        persisted_job = await session.get(ResumeParseJob, parse_job.id)
+
+    assert persisted_resume is not None
+    assert persisted_job is not None
+    assert persisted_resume.parse_status == "failed"
+    assert persisted_job.status == "failed"
+    assert (
+        "Canonical resume markdown failed structure validation"
+        in (persisted_job.error_message or "")
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_real_fixture_keeps_markdown_markers(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume, parse_job = await _create_resume_and_parse_job(db_session, test_user)
+
+    monkeypatch.setattr(
+        "app.services.resume.extract_text_from_resume_bytes",
+        lambda **_kwargs: SimpleNamespace(
+            raw_text=_failed_sample_raw_text(),
+            source_type="pdf",
+            ocr_used=False,
+            ocr_engine="none",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _settings: InvalidAIProvider(),
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=FakeStorage(),
+        session_factory=session_factory,
+        settings=Settings(),
+    )
+
+    async with session_factory() as session:
+        persisted_resume = await session.get(Resume, resume.id)
+
+    assert persisted_resume is not None
+    markdown = persisted_resume.parse_artifacts_json["canonical_resume_md"]
+    assert markdown.startswith("# 郑文泽")
+    assert "## 专业技能" in markdown or "## 工作经历" in markdown or "## 教育经历" in markdown
+    assert "- 邮箱：" in markdown
+    assert "- 电话：" in markdown
+    assert "\n- " in markdown
+    assert "### 职点迷津" in markdown or "### 黑马点评" in markdown
+
+
+@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_validate_resume_upload_rejects_non_pdf_files(
 ) -> None:
@@ -250,6 +347,30 @@ def _raw_text() -> str:
     完成高可用秒杀系统从0到1的架构设计与实现
     证书奖项
     百度之星金奖
+    """.strip()
+
+
+def _failed_sample_raw_text() -> str:
+    return """
+    郑文泽
+    17590522997 | 2017160177@qq.com | 北京
+    求职方向：AI 应用开发 | 立即到岗 | 可实习 6 个月
+    教育背景
+    新疆大学（211 / 双一流） 本科 / 软件工程 2023.09 – 2027.06
+    GPA 3.73，专业排名 50/800
+    项目经历
+    职点迷津 https://gitee.com/zwz050418/career-pilot.git
+    智能求职工作台；React + Next.js + TypeScript + Python + FastAPI + PostgreSQL + Redis + MinIO
+    • 负责简历解析、岗位匹配、优化建议生成等核心链路开发，完成“简历上传—结构化抽取—岗位对比—建议生成”闭环。
+    黑马点评 https://gitee.com/zwz050418/zwz-hmdp.git
+    本地生活服务平台；Spring Boot + MySQL + Redis + RocketMQ + Vue 3
+    • 负责用户认证、商铺查询、优惠券管理等核心模块开发，完成业务接口封装、数据交互与主流程落地。
+    专业技能
+    • 编程语言：Python、Java、TypeScript、JavaScript
+    • 后端开发：FastAPI、Spring Boot、RESTful API
+    • 前端基础：React、Next.js、Vue 3
+    • 数据库与中间件：PostgreSQL、MySQL、Redis、MinIO、RocketMQ
+    • 开发工具：Git、Linux、Trae、Cursor、Codex、OpenClaw
     """.strip()
 
 

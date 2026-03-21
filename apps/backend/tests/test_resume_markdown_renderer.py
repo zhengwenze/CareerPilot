@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from app.schemas.resume import ResumeStructuredData
-from app.services.resume_markdown_renderer import render_resume_markdown
+from app.services.resume_markdown_renderer import (
+    render_resume_markdown,
+    validate_resume_markdown_structure,
+)
 
 
 def test_render_resume_markdown_renders_header_and_contact_lines() -> None:
@@ -146,3 +149,32 @@ def test_render_resume_markdown_filters_empty_sections_and_is_stable() -> None:
     assert "## 奖项" in first
     assert "## 语言能力" in first
     assert first == second
+
+
+def test_validate_resume_markdown_structure_rejects_plain_text_output() -> None:
+    structured = ResumeStructuredData(
+        basic_info={
+            "name": "郑文泽",
+            "email": "zheng@example.com",
+            "phone": "13800138000",
+        },
+        work_experience_items=[
+            {
+                "company": "字节跳动",
+                "title": "工程师",
+                "bullets": [{"text": "负责平台建设"}],
+            }
+        ],
+    )
+
+    errors = validate_resume_markdown_structure(
+        structured,
+        "郑文泽\n字节跳动 工程师\n负责平台建设",
+    )
+
+    assert "first_line_must_be_h1" in errors
+    assert "missing_h2_section" in errors
+    assert "missing_bullet_list" in errors
+    assert "missing_h3_for_work_items" in errors
+    assert "missing_email_bullet" in errors
+    assert "missing_phone_bullet" in errors

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpRight,
@@ -30,6 +36,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
+import { cn } from "@/lib/utils";
 import {
   createEmptyJobDraft,
   toJobDraft,
@@ -125,6 +132,95 @@ function upsertWorkflow(
       item.tailored_resume.session_id !== next.tailored_resume.session_id,
   );
   return [next, ...filtered];
+}
+
+function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
+  const lines = markdown.split("\n");
+  const nodes: ReactNode[] = [];
+  let listItems: string[] = [];
+
+  const flushList = (key: string) => {
+    if (!listItems.length) {
+      return;
+    }
+    nodes.push(
+      <ul
+        key={key}
+        className="my-3 list-disc space-y-2 pl-5 text-sm leading-7 text-[#1C1C1C]"
+      >
+        {listItems.map((item, index) => (
+          <li key={`${key}-${index}`}>{item}</li>
+        ))}
+      </ul>,
+    );
+    listItems = [];
+  };
+
+  lines.forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList(`list-${index}`);
+      return;
+    }
+
+    if (line.startsWith("- ")) {
+      listItems.push(line.slice(2).trim());
+      return;
+    }
+
+    flushList(`list-${index}`);
+
+    if (line.startsWith("### ")) {
+      nodes.push(
+        <h3
+          key={`h3-${index}`}
+          className="mt-5 text-base font-semibold text-[#1C1C1C]"
+        >
+          {line.slice(4)}
+        </h3>,
+      );
+      return;
+    }
+
+    if (line.startsWith("## ")) {
+      nodes.push(
+        <h2
+          key={`h2-${index}`}
+          className="mt-6 border-t border-[#1C1C1C]/10 pt-6 text-lg font-semibold text-[#1C1C1C]"
+        >
+          {line.slice(3)}
+        </h2>,
+      );
+      return;
+    }
+
+    if (line.startsWith("# ")) {
+      nodes.push(
+        <h1 key={`h1-${index}`} className="text-2xl font-semibold text-[#1C1C1C]">
+          {line.slice(2)}
+        </h1>,
+      );
+      return;
+    }
+
+    nodes.push(
+      <p
+        key={`p-${index}`}
+        className={cn(
+          "text-sm leading-7 text-[#1C1C1C]/80",
+          /^\d{4}[./-]\d{1,2}\s*-\s*/.test(line) || /^\d{4}\s*-\s*\d{4}/.test(line)
+            ? "font-medium text-[#1C1C1C]"
+            : "",
+        )}
+      >
+        {line}
+      </p>,
+    );
+  });
+
+  flushList("list-final");
+
+  return <div className="space-y-1">{nodes}</div>;
 }
 
 export default function DashboardResumePage() {
@@ -507,9 +603,9 @@ export default function DashboardResumePage() {
                   <p className="mt-1 text-sm text-[#1C1C1C]/60">
                     这是规则解析和 AI 审查后的完整主简历成品。
                   </p>
-                  <pre className="mt-4 overflow-x-auto rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
-                    {canonicalResumeMd}
-                  </pre>
+                  <div className="mt-4 rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-5">
+                    <ResumeMarkdownPreview markdown={canonicalResumeMd} />
+                  </div>
                 </div>
               ) : null}
 

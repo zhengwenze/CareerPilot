@@ -31,7 +31,10 @@ from app.services.resume_ai import (
     build_resume_ai_correction_provider,
     merge_resume_ai_correction,
 )
-from app.services.resume_markdown_renderer import render_resume_markdown
+from app.services.resume_markdown_renderer import (
+    ensure_resume_markdown_structure,
+    render_resume_markdown,
+)
 from app.services.resume_parser import (
     build_initial_resume_parse_artifacts,
     build_resume_parse_artifacts,
@@ -68,6 +71,22 @@ def build_text_preview(value: str | None, *, limit: int = 160) -> str:
     if len(normalized) <= limit:
         return normalized
     return f"{normalized[:limit]}..."
+
+
+def log_renderer_snapshot(*, structured: ResumeStructuredData, markdown: str) -> None:
+    logger.info(
+        (
+            "resume_markdown.rendered "
+            "name=%s education_items=%s work_items=%s project_items=%s "
+            "certifications=%s markdown_preview=%s"
+        ),
+        structured.basic_info.name,
+        len(structured.education_items),
+        len(structured.work_experience_items),
+        len(structured.project_items),
+        len(structured.certification_items),
+        build_text_preview(markdown, limit=240),
+    )
 
 
 def sanitize_file_name(file_name: str) -> str:
@@ -446,7 +465,26 @@ async def process_resume_parse_job(
                 ai_message = build_ai_fallback_message(exc)
 
             if final_structured is not None:
-                canonical_resume_md = render_resume_markdown(final_structured)
+                logger.info(
+                    (
+                        "resume_markdown.render:start "
+                        "name=%s education_items=%s work_items=%s project_items=%s "
+                        "skills_technical=%s"
+                    ),
+                    final_structured.basic_info.name,
+                    len(final_structured.education_items),
+                    len(final_structured.work_experience_items),
+                    len(final_structured.project_items),
+                    len(final_structured.skills.technical),
+                )
+                canonical_resume_md = ensure_resume_markdown_structure(
+                    final_structured,
+                    render_resume_markdown(final_structured),
+                )
+                log_renderer_snapshot(
+                    structured=final_structured,
+                    markdown=canonical_resume_md,
+                )
 
         resume_parse_status = "success"
         resume_parse_error = None
