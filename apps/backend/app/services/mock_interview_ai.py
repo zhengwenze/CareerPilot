@@ -7,7 +7,10 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import Settings
-from app.prompts.mock_interview import render_mock_interview_prompt
+from app.prompts.mock_interview import (
+    render_mock_interview_prompt,
+    render_mock_interview_repair_prompt,
+)
 from app.schemas.mock_interview import (
     MockInterviewDecisionJson,
     MockInterviewEvaluationJson,
@@ -68,12 +71,7 @@ def _build_repair_instructions(
         contract_json_schema=contract_json_schema,
         **variables,
     )
-    return (
-        f"{base_instructions}\n\n"
-        "Your previous response violated the JSON contract.\n"
-        "Regenerate the full response as strict JSON only.\n"
-        "Do not add markdown, explanations, or extra keys."
-    )
+    return render_mock_interview_repair_prompt(base_instructions=base_instructions)
 
 
 class AIMockInterviewProvider:

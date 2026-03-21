@@ -5,71 +5,11 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import Settings
+from app.prompts.tailored_resume import get_tailored_resume_rewrite_prompt
 from app.schemas.resume import ResumeExperienceBullet
 from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
 
 EMPTY_PROVIDER_VALUES = {"", "disabled", "none", "off"}
-JSON_RESPONSE_INSTRUCTIONS = """
-You are a rewrite-only resume editor.
-You receive:
-- source_resume: canonical structured resume
-- job_snapshot
-- match_report_snapshot
-- rewrite_tasks
-
-Your scope is limited to:
-- basic_info.summary
-- work_experience_items[].bullets[].text
-- project_items[].bullets[].text
-
-Hard constraints:
-1. Output strict JSON only.
-2. Never add new companies, schools, project names, titles, dates, metrics, skills, certificates, or technologies.
-3. Never create new work/project items. Only rewrite items whose id already exists.
-4. Preserve company, title, role, start_date, end_date, source_refs, and all item ids.
-5. If evidence is insufficient, keep the original text and explain the unresolved gap.
-6. Do not use marketing fluff, unverifiable claims, or speculative language.
-7. summary must stay under 90 Chinese characters or 180 English characters.
-
-Return exactly this JSON shape:
-{
-  "summary": "string",
-  "work_experience_items": [
-    {
-      "id": "work_1",
-      "bullets": [
-        {
-          "id": "work_1_b1",
-          "text": "string",
-          "kind": "responsibility",
-          "metrics": ["string"],
-          "skills_used": ["string"],
-          "source_refs": ["work_1"]
-        }
-      ]
-    }
-  ],
-  "project_items": [
-    {
-      "id": "proj_1",
-      "bullets": [
-        {
-          "id": "proj_1_b1",
-          "text": "string",
-          "kind": "responsibility",
-          "metrics": ["string"],
-          "skills_used": ["string"],
-          "source_refs": ["proj_1"]
-        }
-      ]
-    }
-  ],
-  "unresolved_items": [
-    {"task_key": "task-1", "reason": "string"}
-  ],
-  "editor_notes": ["string"]
-}
-""".strip()
 
 
 @dataclass(slots=True)
@@ -159,7 +99,7 @@ class ConfiguredResumeOptimizationProvider(AIResumeOptimizationProvider):
                 model=self.model,
                 timeout_seconds=self.timeout_seconds,
             ),
-            instructions=JSON_RESPONSE_INSTRUCTIONS,
+            instructions=get_tailored_resume_rewrite_prompt(),
             payload=payload,
             max_tokens=2600,
         )

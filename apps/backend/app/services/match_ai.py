@@ -6,97 +6,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import Settings
+from app.prompts.match import (
+    get_match_report_generation_prompt,
+    get_match_report_repair_prompt,
+)
 from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
 
 FIT_BANDS = ("excellent", "strong", "partial", "weak")
 CORE_REQUIRED_FIELDS = ("overall_score", "fit_band", "summary", "reasoning")
-JSON_RESPONSE_INSTRUCTIONS = """
-Produce the final resume-job match report from:
-- resume_snapshot
-- job_snapshot
-- rule_result
-
-Hard constraints:
-- Output strict JSON only.
-- Do not invent experience, projects, skills, employers, dates, or metrics.
-- Ground all evidence in resume_snapshot and job_snapshot; rule_result is only a baseline.
-- overall_score: 0-100
-- fit_band: excellent | strong | partial | weak
-- strengths, must_fix, should_fix, rewrite_tasks, focus_areas, question_pack, rubric: arrays only
-- If evidence is weak, state that instead of guessing.
-- Keep output compact and factual.
-- Limits: strengths<=3, must_fix<=3, should_fix<=3, resume_tailoring_tasks<=3,
-  interview_focus_areas<=3, missing_user_inputs<=2, question_pack<=4, rubric<=4.
-- summary and reasoning should each stay under 80 Chinese characters or 160 English characters.
-
-Return exactly this JSON shape:
-{
-  "overall_score": 0,
-  "fit_band": "partial",
-  "summary": "一句最终判断",
-  "reasoning": "简短解释为何得出该判断",
-  "confidence": 0.0,
-  "strengths": [{"label": "string", "reason": "string", "severity": "medium"}],
-  "must_fix": [{"label": "string", "reason": "string", "severity": "high"}],
-  "should_fix": [{"label": "string", "reason": "string", "severity": "medium"}],
-  "evidence_map_json": {
-    "matched_resume_fields": {"skills": ["string"]},
-    "matched_jd_fields": {"required_skills": ["string"]},
-    "missing_items": ["string"],
-    "notes": ["string"],
-    "candidate_profile": {"skills": ["string"]}
-  },
-  "action_pack_json": {
-    "resume_tailoring_tasks": [
-      {
-        "priority": 1,
-        "title": "string",
-        "instruction": "string",
-        "target_section": "work_experience_or_projects"
-      }
-    ],
-    "interview_focus_areas": [
-      {"topic": "string", "reason": "string", "priority": "high"}
-    ],
-    "missing_user_inputs": [{"field": "string", "question": "string"}]
-  },
-  "tailoring_plan_json": {
-    "target_summary": "string",
-    "rewrite_tasks": [
-      {
-        "priority": 1,
-        "title": "string",
-        "instruction": "string",
-        "target_section": "work_experience_or_projects"
-      }
-    ],
-    "must_add_evidence": ["string"],
-    "missing_info_questions": [{"field": "string", "question": "string"}]
-  },
-  "interview_blueprint_json": {
-    "target_role": "string",
-    "focus_areas": [{"topic": "string", "reason": "string", "priority": "high"}],
-    "question_pack": [{"topic": "string", "question": "string", "intent": "string"}],
-    "follow_up_rules": ["string"],
-    "rubric": [{"dimension": "string", "weight": 25, "criteria": "string"}]
-  }
-}
-""".strip()
-JSON_REPAIR_INSTRUCTIONS = """
-Your previous JSON response was invalid because one or more required core fields were null or missing.
-
-Required core fields:
-- overall_score: number 0-100
-- fit_band: excellent | strong | partial | weak
-- summary: non-empty string
-- reasoning: non-empty string
-
-Regenerate the full strict JSON object.
-- Output JSON only.
-- Do not return null for any required core field.
-- Keep the same schema and field names.
-- Do not invent resume or job evidence.
-""".strip()
 
 
 @dataclass(slots=True)
@@ -572,12 +489,12 @@ class ConfiguredAIMatchReportProvider(AIMatchReportProvider):
 
     async def correct(self, payload: AIMatchReportRequest) -> AIMatchReportResult:
         response_json = await self._request_report_json(
-            instructions=JSON_RESPONSE_INSTRUCTIONS,
+            instructions=get_match_report_generation_prompt(),
             payload=payload,
         )
         if _has_null_required_core_fields(response_json):
             response_json = await self._request_report_json(
-                instructions=JSON_REPAIR_INSTRUCTIONS,
+                instructions=get_match_report_repair_prompt(),
                 payload={
                     "original_request": {
                         "resume_snapshot": payload.resume_snapshot,

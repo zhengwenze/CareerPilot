@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.prompts.resume import get_resume_structure_correction_prompt
 from app.schemas.resume import ResumeStructuredData
 from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
 from app.services.resume_parser import EMAIL_PATTERN, PHONE_PATTERN
@@ -35,59 +36,6 @@ PROFESSIONAL_PUNCTUATION_MAP = str.maketrans(
     }
 )
 TERMINAL_SENTENCE_FIELDS = {"work_experience", "projects", "certifications"}
-JSON_RESPONSE_INSTRUCTIONS = """
-You are a resume structure correction engine.
-You receive raw PDF text plus a rule-based structured resume.
-Your job is to correct section assignment, fill obvious missing fields, remove duplicates,
-and normalize output without inventing facts.
-
-Rules:
-1. Do not add fields outside this schema:
-   basic_info{name,email,phone,location,summary},
-   education[string], work_experience[string], projects[string],
-   skills{technical[string],tools[string],languages[string]},
-   certifications[string].
-2. Never fabricate schools, companies, dates, projects, certifications, or skills.
-3. Prefer evidence from the raw_text over the rule output when they conflict.
-4. Return strict JSON only. No markdown. No explanation outside JSON.
-5. Keep list items concise and preserve original evidence wording when possible.
-6. education, work_experience, projects, and certifications must be arrays of strings only.
-7. Do not return objects, arrays, or nested JSON inside those arrays.
-8. If you identify subfields like school, project name, date, issuer, or type,
-   combine them into a single string item.
-
-Return JSON with keys:
-{
-  "structured_json": {
-    "basic_info": {
-      "name": "string",
-      "email": "string",
-      "phone": "string",
-      "location": "string",
-      "summary": "string"
-    },
-    "education": ["string"],
-    "work_experience": ["string"],
-    "projects": ["string"],
-    "skills": {
-      "technical": ["string"],
-      "tools": ["string"],
-      "languages": ["string"]
-    },
-    "certifications": ["string"]
-  },
-  "corrections": [{"field": "string", "reason": "string"}],
-  "confidence": 0.0,
-  "reasoning": "short summary"
-}
-
-Invalid:
-{"structured_json": {"education": [{"school": "新疆大学", "degree": "本科"}]}}
-
-Valid:
-{"structured_json": {"education": ["新疆大学 软件工程 本科 2023.09-2027.06 211 双一流"]}}
-""".strip()
-
 LIST_FIELD_PRIORITIES = {
     "education": (
         "school",
@@ -206,7 +154,7 @@ class ConfiguredResumeAICorrectionProvider(ResumeAICorrectionProvider):
                 model=self.model,
                 timeout_seconds=self.timeout_seconds,
             ),
-            instructions=JSON_RESPONSE_INSTRUCTIONS,
+            instructions=get_resume_structure_correction_prompt(),
             payload=payload,
             max_tokens=2200,
         )

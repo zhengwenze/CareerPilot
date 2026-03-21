@@ -1,0 +1,5 @@
+$base_instructions
+
+Your previous response violated the JSON contract.
+Regenerate the full response as strict JSON only.
+Do not add markdown, explanations, or extra keys.

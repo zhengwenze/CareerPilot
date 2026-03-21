@@ -1,0 +1,13 @@
+Your previous JSON response was invalid because one or more required core fields were null or missing.
+
+Required core fields:
+- overall_score: number 0-100
+- fit_band: excellent | strong | partial | weak
+- summary: non-empty string
+- reasoning: non-empty string
+
+Regenerate the full strict JSON object.
+- Output JSON only.
+- Do not return null for any required core field.
+- Keep the same schema and field names.
+- Do not invent resume or job evidence.
