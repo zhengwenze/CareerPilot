@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
-from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
+from app.services.ai_client import (
+    AIClientError,
+    AIProviderConfig,
+    _build_anthropic_client_kwargs,
+    request_json_completion,
+)
 
 
 @pytest.mark.asyncio
@@ -129,3 +136,37 @@ async def test_request_json_completion_raises_after_retry_exhausted_on_timeout(
 
     assert attempts["count"] == 2
     assert exc_info.value.category == "timeout"
+
+
+def test_build_anthropic_client_kwargs_uses_auth_token_for_minimax() -> None:
+    kwargs = _build_anthropic_client_kwargs(
+        AIProviderConfig(
+            provider="minimax",
+            base_url="https://api.minimaxi.com/anthropic",
+            api_key="test-key",
+            model="MiniMax-M2.5",
+            timeout_seconds=30,
+        )
+    )
+
+    assert kwargs["base_url"] == "https://api.minimaxi.com/anthropic"
+    assert kwargs["auth_token"] == "test-key"
+    assert "api_key" not in kwargs
+
+
+def test_build_anthropic_client_kwargs_uses_env_base_url_when_config_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.minimaxi.com/anthropic")
+
+    kwargs = _build_anthropic_client_kwargs(
+        AIProviderConfig(
+            provider="minimax",
+            base_url="",
+            api_key="test-key",
+            model="MiniMax-M2.5",
+            timeout_seconds=30,
+        )
+    )
+
+    assert kwargs["base_url"] == os.environ["ANTHROPIC_BASE_URL"]

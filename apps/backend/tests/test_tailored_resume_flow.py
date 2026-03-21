@@ -18,6 +18,7 @@ from app.services.tailored_resume import (
 
 def _workflow_settings() -> Settings:
     return Settings(
+        match_ai_provider="minimax",
         resume_ai_api_key="test-key",
         resume_ai_model="MiniMax-M2.5",
         resume_ai_base_url="https://api.minimaxi.com/anthropic",
@@ -320,3 +321,70 @@ async def test_tailored_resume_workflow_runs_end_to_end_and_lists_workspace(
         assert persisted_session is not None
         assert persisted_session.status == "ready"
         assert persisted_session.optimized_resume_md.startswith("# 郑文泽")
+
+
+@pytest.mark.asyncio
+async def test_tailored_resume_workflow_falls_back_when_match_ai_is_unavailable(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_user: User,
+) -> None:
+    async with session_factory() as session:
+        resume = await _create_parsed_resume(session, user=test_user)
+        workflow = await generate_tailored_resume_workflow(
+            session,
+            current_user=test_user,
+            payload=TailoredResumeGenerateRequest(
+                resume_id=resume.id,
+                title="增长数据分析师",
+                company="CareerPilot",
+                job_city="上海",
+                employment_type="全职",
+                source_name="Boss直聘",
+                source_url="https://example.com/jobs/2",
+                priority=3,
+                jd_text=(
+                    "岗位职责\n"
+                    "- 负责增长分析与实验分析，搭建指标体系\n"
+                    "- 与业务团队协作推进数据项目\n"
+                    "任职要求\n"
+                    "- 本科及以上，2年以上经验\n"
+                    "- 熟练使用 Python、SQL、Tableau"
+                ),
+                force_refresh=True,
+            ),
+            session_factory=session_factory,
+            settings=Settings(
+                match_ai_provider="minimax",
+                match_ai_base_url="https://api.minimaxi.com/anthropic",
+                match_ai_api_key=None,
+                match_ai_model="MiniMax-M2.5",
+                resume_ai_provider="disabled",
+                resume_ai_base_url="https://api.minimaxi.com/anthropic",
+                resume_ai_api_key=None,
+                resume_ai_model="MiniMax-M2.5",
+            ),
+        )
+
+        assert workflow.resume.id == resume.id
+        assert workflow.target_job.parse_status == "success"
+        assert workflow.tailored_resume.status == "ready"
+        assert workflow.tailored_resume.has_downloadable_markdown is True
+
+    async with session_factory() as session:
+        persisted_report = await session.get(
+            MatchReport,
+            workflow.tailored_resume.match_report_id,
+        )
+        persisted_session = await session.get(
+            ResumeOptimizationSession,
+            workflow.tailored_resume.session_id,
+        )
+
+        assert persisted_report is not None
+        assert persisted_report.status == "success"
+        assert (
+            persisted_report.scorecard_json.get("generation_mode")
+            == "rule_semantic_fallback"
+        )
+        assert persisted_session is not None
+        assert persisted_session.status == "ready"

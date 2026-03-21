@@ -348,8 +348,12 @@ async def test_jobs_match_flow_fails_when_match_ai_key_is_missing(
     async with session_factory() as session:
         persisted_report = await session.get(MatchReport, report_id)
         assert persisted_report is not None
-        assert persisted_report.status == "failed"
-        assert "MATCH_AI_API_KEY" in (persisted_report.error_message or "")
+        assert persisted_report.status == "success"
+        assert persisted_report.scorecard_json["generation_mode"] == "rule_semantic_fallback"
+        assert persisted_report.evidence_json["ai_generation"]["status"] == "fallback"
+        assert "MATCH_AI_API_KEY" in (
+            persisted_report.evidence_json["ai_generation"]["reasoning"]
+        )
 
 
 @pytest.mark.asyncio
@@ -421,9 +425,10 @@ async def test_jobs_match_flow_fails_when_match_ai_payload_is_invalid(
     async with session_factory() as session:
         persisted_report = await session.get(MatchReport, report_id)
         assert persisted_report is not None
-        assert persisted_report.status == "failed"
+        assert persisted_report.status == "success"
+        assert persisted_report.scorecard_json["generation_mode"] == "rule_semantic_fallback"
         assert "structured payload validation failed" in (
-            persisted_report.error_message or ""
+            persisted_report.evidence_json["ai_generation"]["reasoning"]
         )
 
 
@@ -835,12 +840,10 @@ def test_match_ai_settings_fall_back_to_resume_ai_configuration() -> None:
         resume_ai_api_key="resume-key",
         resume_ai_model="MiniMax-M2.5",
     )
-
-    provider = build_ai_match_correction_provider(settings)
-
-    assert settings.match_ai_provider == "minimax"
+    assert settings.match_ai_provider == "disabled"
     assert settings.match_ai_base_url == "https://api.minimaxi.com/anthropic"
     assert settings.match_ai_api_key == "resume-key"
     assert settings.match_ai_model == "MiniMax-M2.5"
-    assert provider.__class__.__name__ == "ConfiguredAIMatchReportProvider"
-    assert getattr(provider, "timeout_seconds") == 90
+
+    with pytest.raises(ValueError, match="MATCH_AI_PROVIDER must be minimax"):
+        build_ai_match_correction_provider(settings)

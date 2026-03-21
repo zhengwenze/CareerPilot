@@ -656,26 +656,45 @@ async def process_match_report(
                 job=job_snapshot,
             )
 
-            ai_provider = build_ai_match_correction_provider(settings)
-            ai_result = await ai_provider.correct(
-                AIMatchReportRequest(
-                    resume_snapshot=_compact_resume_snapshot(
-                        resume_snapshot,
-                        evidence_profile=evidence_profile,
-                    ),
-                    job_snapshot=_compact_job_snapshot(job_snapshot),
-                    rule_result=_compact_rule_result(rule_result),
-                )
-            )
-            if ai_result.report_payload is None:
-                raise ValueError("Match AI did not return a structured report payload")
+            ai_payload = None
+            ai_provider_name = "rule_only"
+            ai_model_name = "rule_only"
+            ai_status = "fallback"
+            ai_reason = "AI correction did not run"
 
-            ai_payload = ai_result.report_payload
-            llm_judge_score = max(0.0, min(100.0, float(ai_payload.overall_score)))
+            try:
+                ai_provider = build_ai_match_correction_provider(settings)
+                ai_provider_name = ai_provider.provider
+                ai_model_name = ai_provider.model
+                ai_result = await ai_provider.correct(
+                    AIMatchReportRequest(
+                        resume_snapshot=_compact_resume_snapshot(
+                            resume_snapshot,
+                            evidence_profile=evidence_profile,
+                        ),
+                        job_snapshot=_compact_job_snapshot(job_snapshot),
+                        rule_result=_compact_rule_result(rule_result),
+                    )
+                )
+                ai_status = ai_result.status
+                ai_reason = "AI correction applied successfully"
+                if ai_result.report_payload is None:
+                    raise ValueError(
+                        "Match AI did not return a structured report payload"
+                    )
+                ai_payload = ai_result.report_payload
+            except Exception as exc:
+                ai_reason = str(exc)
+
+            llm_judge_score = (
+                max(0.0, min(100.0, float(ai_payload.overall_score)))
+                if ai_payload is not None
+                else 0.0
+            )
             semantic_score = round(rule_result.semantic_score, 2)
             overall_score = round(
-                (rule_result.rule_score * 0.45)
-                + (semantic_score * 0.20)
+                (rule_result.rule_score * (0.45 if ai_payload is not None else 0.7))
+                + (semantic_score * (0.20 if ai_payload is not None else 0.3))
                 + (llm_judge_score * 0.35),
                 2,
             )
@@ -687,25 +706,41 @@ async def process_match_report(
                 "llm_judge_score": round(llm_judge_score, 2),
                 "composite_overall_score": overall_score,
             }
+            ai_strengths = (
+                [item.model_dump() for item in ai_payload.strengths]
+                if ai_payload is not None
+                else []
+            )
             strengths = _sanitize_insight_items(
                 [
                     *rule_result.strengths,
-                    *(item.model_dump() for item in ai_payload.strengths),
+                    *ai_strengths,
                 ]
             )
             should_fix = _sanitize_insight_items(
                 [item.model_dump() for item in ai_payload.should_fix]
+                if ai_payload is not None
+                else []
+            )
+            ai_must_fix = (
+                [item.model_dump() for item in ai_payload.must_fix]
+                if ai_payload is not None
+                else []
             )
             must_fix = _sanitize_insight_items(
                 [
                     *rule_result.gaps,
-                    *(item.model_dump() for item in ai_payload.must_fix),
+                    *ai_must_fix,
                 ]
             )
             gaps = _sanitize_insight_items([*must_fix, *should_fix])
             rewrite_tasks = (
-                ai_payload.tailoring_plan_json.rewrite_tasks
-                or ai_payload.action_pack_json.resume_tailoring_tasks
+                (
+                    ai_payload.tailoring_plan_json.rewrite_tasks
+                    or ai_payload.action_pack_json.resume_tailoring_tasks
+                )
+                if ai_payload is not None
+                else []
             )
             action_candidates = [*rule_result.actions]
             action_candidates.extend(
@@ -729,19 +764,27 @@ async def process_match_report(
                 }
                 for task in actions
             ]
-            interview_focus_areas = [
-                item.model_dump()
-                for item in ai_payload.interview_blueprint_json.focus_areas
-            ]
-            if not interview_focus_areas:
+            interview_focus_areas = (
+                [
+                    item.model_dump()
+                    for item in ai_payload.interview_blueprint_json.focus_areas
+                ]
+                if ai_payload is not None
+                else []
+            )
+            if not interview_focus_areas and ai_payload is not None:
                 interview_focus_areas = [
                     item.model_dump()
                     for item in ai_payload.action_pack_json.interview_focus_areas
                 ]
-            missing_user_inputs = [
-                item.model_dump()
-                for item in ai_payload.action_pack_json.missing_user_inputs
-            ]
+            missing_user_inputs = (
+                [
+                    item.model_dump()
+                    for item in ai_payload.action_pack_json.missing_user_inputs
+                ]
+                if ai_payload is not None
+                else []
+            )
             if not missing_user_inputs:
                 missing_user_inputs = _build_missing_user_inputs(
                     job_snapshot=job_snapshot,
@@ -755,18 +798,39 @@ async def process_match_report(
                 )
             evidence_map = _merge_evidence_map(
                 base_map=rule_result.evidence_map,
-                overlay_map=ai_payload.evidence_map_json.model_dump(),
+                overlay_map=(
+                    ai_payload.evidence_map_json.model_dump()
+                    if ai_payload is not None
+                    else {}
+                ),
                 resume_version=report.resume_version,
                 job_version=report.job_version,
             )
-            action_pack = ai_payload.action_pack_json.model_dump()
+            action_pack = (
+                ai_payload.action_pack_json.model_dump()
+                if ai_payload is not None
+                else {
+                    "resume_tailoring_tasks": [],
+                    "interview_focus_areas": [],
+                    "missing_user_inputs": [],
+                }
+            )
             if not action_pack["resume_tailoring_tasks"]:
                 action_pack["resume_tailoring_tasks"] = resume_tailoring_tasks
             if not action_pack["interview_focus_areas"]:
                 action_pack["interview_focus_areas"] = interview_focus_areas
             if not action_pack["missing_user_inputs"]:
                 action_pack["missing_user_inputs"] = missing_user_inputs
-            tailoring_plan = ai_payload.tailoring_plan_json.model_dump()
+            tailoring_plan = (
+                ai_payload.tailoring_plan_json.model_dump()
+                if ai_payload is not None
+                else _build_tailoring_plan(
+                    job_snapshot=job_snapshot,
+                    tasks=resume_tailoring_tasks,
+                    missing_items=list(evidence_map.get("missing_items", []) or []),
+                    missing_user_inputs=missing_user_inputs,
+                )
+            )
             if not tailoring_plan["rewrite_tasks"]:
                 tailoring_plan["rewrite_tasks"] = resume_tailoring_tasks
             tailoring_plan["must_add_evidence"] = _merge_unique_strings(
@@ -777,7 +841,15 @@ async def process_match_report(
                 tailoring_plan["missing_info_questions"] = missing_user_inputs
             if not tailoring_plan.get("target_summary"):
                 tailoring_plan["target_summary"] = job_snapshot.raw_summary or job_snapshot.basic.title
-            interview_blueprint = ai_payload.interview_blueprint_json.model_dump()
+            interview_blueprint = (
+                ai_payload.interview_blueprint_json.model_dump()
+                if ai_payload is not None
+                else _build_interview_blueprint(
+                    job_snapshot=job_snapshot,
+                    fit_band=fit_band,
+                    focus_areas=interview_focus_areas,
+                )
+            )
             if not interview_blueprint["focus_areas"]:
                 interview_blueprint["focus_areas"] = interview_focus_areas
             if not interview_blueprint["question_pack"]:
@@ -805,11 +877,23 @@ async def process_match_report(
                 "semantic_score": semantic_score,
                 "llm_judge_score": round(llm_judge_score, 2),
                 "fit_band": fit_band,
-                "llm_fit_band": ai_payload.fit_band,
-                "confidence": ai_payload.confidence,
-                "summary": ai_payload.summary,
-                "reasoning": ai_payload.reasoning,
-                "generation_mode": "hybrid_rule_semantic_llm",
+                "llm_fit_band": ai_payload.fit_band if ai_payload is not None else None,
+                "confidence": ai_payload.confidence if ai_payload is not None else None,
+                "summary": (
+                    ai_payload.summary
+                    if ai_payload is not None
+                    else "AI 校正暂不可用，当前报告基于规则匹配结果生成。"
+                ),
+                "reasoning": (
+                    ai_payload.reasoning
+                    if ai_payload is not None
+                    else ai_reason
+                ),
+                "generation_mode": (
+                    "hybrid_rule_semantic_llm"
+                    if ai_payload is not None
+                    else "rule_semantic_fallback"
+                ),
                 "dimension_scores": dimension_scores,
             }
             gap_taxonomy = {
@@ -842,11 +926,19 @@ async def process_match_report(
                     "overall_score": round(overall_score, 2),
                 },
                 "ai_generation": {
-                    "provider": ai_result.provider,
-                    "model": ai_result.model,
-                    "status": ai_result.status,
-                    "summary": ai_payload.summary,
-                    "reasoning": ai_payload.reasoning,
+                    "provider": ai_provider_name,
+                    "model": ai_model_name,
+                    "status": ai_status,
+                    "summary": (
+                        ai_payload.summary
+                        if ai_payload is not None
+                        else "AI 校正未应用，已回退到规则匹配结果。"
+                    ),
+                    "reasoning": (
+                        ai_payload.reasoning
+                        if ai_payload is not None
+                        else ai_reason
+                    ),
                 },
             }
             report.scorecard_json = scorecard

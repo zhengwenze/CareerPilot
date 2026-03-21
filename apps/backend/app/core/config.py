@@ -36,6 +36,15 @@ def _normalize_localhost_endpoint(value: str) -> str:
     return value
 
 
+def _normalize_ai_base_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return normalized
+    return normalized.replace("api.minimax.io", "api.minimaxi.com")
+
+
 class Settings(BaseSettings):
     app_name: str = "career-pilot-api"
     app_version: str = "0.1.0"
@@ -102,11 +111,37 @@ class Settings(BaseSettings):
     def normalize_storage_endpoint(cls, value: str) -> str:
         return _normalize_localhost_endpoint(value)
 
+    @field_validator(
+        "match_ai_base_url",
+        "resume_ai_base_url",
+        "interview_ai_base_url",
+        mode="before",
+    )
+    @classmethod
+    def resolve_ai_base_url(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            value = os.getenv("ANTHROPIC_BASE_URL")
+        return _normalize_ai_base_url(value)
+
+    @field_validator("match_ai_api_key", mode="before")
+    @classmethod
+    def resolve_match_ai_api_key(cls, value: str | None) -> str | None:
+        if value is not None and value.strip():
+            return value
+        anthropic_auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
+        if anthropic_auth_token:
+            return anthropic_auth_token
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        return anthropic_api_key or None
+
     @field_validator("resume_ai_api_key", mode="before")
     @classmethod
     def resolve_resume_ai_api_key(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
+        anthropic_auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
+        if anthropic_auth_token:
+            return anthropic_auth_token
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         return anthropic_api_key or None
 
@@ -115,13 +150,16 @@ class Settings(BaseSettings):
     def resolve_interview_ai_api_key(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
+        anthropic_auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
+        if anthropic_auth_token:
+            return anthropic_auth_token
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         return anthropic_api_key or None
 
     @model_validator(mode="after")
     def resolve_match_ai_fallbacks(self) -> "Settings":
         match_provider = (self.match_ai_provider or "").strip().lower()
-        if match_provider in {"", "disabled", "none", "off"}:
+        if match_provider == "":
             self.match_ai_provider = (self.resume_ai_provider or "minimax").strip()
 
         if not (self.match_ai_base_url or "").strip():

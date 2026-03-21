@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpRight,
@@ -99,6 +99,25 @@ function summarizeText(value: string | null | undefined, limit = 120) {
   return `${normalized.slice(0, limit)}...`;
 }
 
+function getGenerateBlockedReason(
+  selectedResume: ResumeRecord | null,
+  jobDraft: JobDraft,
+) {
+  if (!selectedResume) {
+    return "请先选择一份主简历。";
+  }
+  if (selectedResume.parse_status !== "success") {
+    return "主简历尚未解析完成，暂时无法生成专属简历。";
+  }
+  if (!jobDraft.title.trim()) {
+    return "请先填写目标岗位标题。";
+  }
+  if (!jobDraft.jd_text.trim()) {
+    return "请先粘贴目标岗位 JD。";
+  }
+  return null;
+}
+
 function upsertResume(current: ResumeRecord[], next: ResumeRecord) {
   const existingIndex = current.findIndex((item) => item.id === next.id);
   if (existingIndex === -1) {
@@ -140,8 +159,13 @@ export default function DashboardResumePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const selectedResume =
     resumes.find((item) => item.id === selectedResumeId) ?? null;
+  const generateBlockedReason = getGenerateBlockedReason(
+    selectedResume,
+    jobDraft,
+  );
   const selectedWorkflow =
     workflows.find(
       (item) => item.tailored_resume.session_id === selectedWorkflowId,
@@ -306,17 +330,17 @@ export default function DashboardResumePage() {
     }
   }
 
+  function handleOpenUploadDialog() {
+    if (isUploading) {
+      return;
+    }
+
+    uploadInputRef.current?.click();
+  }
+
   async function handleGenerateTailoredResume() {
-    if (!token || !selectedResumeId) {
-      setPageError("请先选择一份主简历。");
-      return;
-    }
-    if (!selectedResume || selectedResume.parse_status !== "success") {
-      setPageError("主简历尚未解析完成，暂时无法生成专属简历。");
-      return;
-    }
-    if (!jobDraft.title.trim() || !jobDraft.jd_text.trim()) {
-      setPageError("请填写目标岗位标题和 JD 文本。");
+    if (!token || !selectedResumeId || generateBlockedReason) {
+      setPageError(generateBlockedReason ?? "请先选择一份主简历。");
       return;
     }
 
@@ -445,23 +469,26 @@ export default function DashboardResumePage() {
         eyebrow="Primary Resume"
         title="主简历"
         rightSlot={
-          <label
-            className="inline-flex cursor-pointer"
-            htmlFor="resume-upload-input"
-          >
+          <>
             <input
               id="resume-upload-input"
+              ref={uploadInputRef}
               className="hidden"
               disabled={isUploading}
               onChange={handleUploadResume}
               type="file"
               accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
             />
-            <Button disabled={isUploading} size="sm" type="button">
+            <Button
+              disabled={isUploading}
+              size="sm"
+              type="button"
+              onClick={handleOpenUploadDialog}
+            >
               <FileUp className="size-4" />
               {isUploading ? "上传中" : "上传简历"}
             </Button>
-          </label>
+          </>
         }
       >
         {resumes.length === 0 ? (
@@ -590,7 +617,7 @@ export default function DashboardResumePage() {
               新建岗位
             </Button>
             <Button
-              disabled={isGenerating}
+              disabled={isGenerating || Boolean(generateBlockedReason)}
               onClick={() => void handleGenerateTailoredResume()}
               size="sm"
               type="button"
@@ -603,6 +630,12 @@ export default function DashboardResumePage() {
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
+            {generateBlockedReason ? (
+              <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                {generateBlockedReason}
+              </div>
+            ) : null}
+
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
@@ -764,7 +797,7 @@ export default function DashboardResumePage() {
                 {isDownloading ? "下载中" : "下载 Markdown"}
               </Button>
               <Button
-                disabled={isGenerating}
+                disabled={isGenerating || Boolean(generateBlockedReason)}
                 onClick={() => void handleGenerateTailoredResume()}
                 size="sm"
                 type="button"

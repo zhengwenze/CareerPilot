@@ -1,17 +1,17 @@
 from __future__ import annotations
-
 import asyncio
 import json
 import logging
 from dataclasses import asdict, dataclass, is_dataclass
 from json import JSONDecodeError
-
+import os
 import anthropic
 
 logger = logging.getLogger(__name__)
 RETRYABLE_AI_ERROR_CATEGORIES = {"timeout", "connection_error"}
 MAX_AI_REQUEST_RETRIES = 1
 AI_RETRY_BACKOFF_SECONDS = 0.8
+DEFAULT_MINIMAX_ANTHROPIC_BASE_URL = "https://api.minimaxi.com/anthropic"
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,16 +145,12 @@ async def _request_anthropic_text(
         "base_url=%s has_api_key=%s timeout_seconds=%s max_tokens=%s",
         config.provider,
         config.model,
-        config.base_url or "https://api.minimaxi.com/anthropic",
+        _resolve_base_url(config),
         bool(config.api_key),
         config.timeout_seconds,
         max_tokens,
     )
-    client = anthropic.AsyncAnthropic(
-        api_key=config.api_key,
-        base_url=config.base_url or "https://api.minimaxi.com/anthropic",
-        timeout=config.timeout_seconds,
-    )
+    client = anthropic.AsyncAnthropic(**_build_anthropic_client_kwargs(config))
 
     try:
         logger.info(
@@ -287,3 +283,26 @@ def _anthropic_response_text(response: object) -> str:
     )
 
     return "".join(chunks)
+
+
+def _resolve_base_url(config: AIProviderConfig) -> str:
+    configured = (config.base_url or "").strip()
+    if configured:
+        return configured
+    env_base_url = os.getenv("ANTHROPIC_BASE_URL", "").strip()
+    if env_base_url:
+        return env_base_url
+    return DEFAULT_MINIMAX_ANTHROPIC_BASE_URL
+
+
+def _build_anthropic_client_kwargs(config: AIProviderConfig) -> dict[str, object]:
+    provider = (config.provider or "").strip().lower()
+    kwargs: dict[str, object] = {
+        "base_url": _resolve_base_url(config),
+        "timeout": config.timeout_seconds,
+    }
+    if provider == "minimax":
+        kwargs["auth_token"] = config.api_key
+    else:
+        kwargs["api_key"] = config.api_key
+    return kwargs
