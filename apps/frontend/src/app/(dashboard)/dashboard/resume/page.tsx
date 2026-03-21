@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState, type ChangeEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowUpRight, Download, FileUp, RefreshCcw, Sparkles } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
+import {
+  PaperInput,
+  PaperTextarea,
+} from "@/components/brutalist/form-controls";
 import {
   MetaChip,
   PageHeader,
@@ -10,26 +17,30 @@ import {
   PaperSection,
 } from "@/components/brutalist/page-shell";
 import {
+  PageEmptyState,
   PageErrorState,
   PageLoadingState,
 } from "@/components/page-state";
-import { ResumeDetailPanel } from "@/components/resume/resume-detail-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import {
-  createEmptyStructuredResume,
-  deleteResume,
+  createEmptyJobDraft,
+  toJobDraft,
+  type JobDraft,
+} from "@/lib/api/modules/jobs";
+import {
+  downloadTailoredResumeMarkdown,
+  fetchTailoredResumeWorkflows,
   fetchResumeDetail,
-  fetchResumeDownloadUrl,
   fetchResumeList,
-  fetchResumeParseJobs,
-  retryResumeParse,
-  updateResumeStructuredData,
-  uploadResume,
-  type ResumeParseJob,
+  generateTailoredResume,
   type ResumeRecord,
-  type ResumeStructuredData,
+  uploadPrimaryResume,
+  type TailoredResumeWorkflowRecord,
 } from "@/lib/api/modules/resume";
+
+const POLL_INTERVAL_MS = 2500;
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
@@ -41,136 +52,91 @@ function getErrorMessage(error: unknown) {
   return "操作失败，请稍后重试。";
 }
 
-function logResumePage(event: string, payload?: Record<string, unknown>) {
-  console.log(`[resume-page] ${event}`, payload ?? {});
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
-function normalizeStructuredResume(
-  value?: Partial<ResumeStructuredData> | null,
-): ResumeStructuredData {
-  const empty = createEmptyStructuredResume();
-
-  return {
-    basic_info: {
-      ...empty.basic_info,
-      ...(value?.basic_info ?? {}),
-    },
-    education: Array.isArray(value?.education) ? value.education : [],
-    work_experience: Array.isArray(value?.work_experience)
-      ? value.work_experience
-      : [],
-    projects: Array.isArray(value?.projects) ? value.projects : [],
-    skills: {
-      ...empty.skills,
-      ...(value?.skills ?? {}),
-      technical: Array.isArray(value?.skills?.technical)
-        ? value.skills.technical
-        : [],
-      tools: Array.isArray(value?.skills?.tools) ? value.skills.tools : [],
-      languages: Array.isArray(value?.skills?.languages)
-        ? value.skills.languages
-        : [],
-    },
-    certifications: Array.isArray(value?.certifications)
-      ? value.certifications
-      : [],
+function getResumeStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "待解析",
+    processing: "解析中",
+    success: "已完成",
+    failed: "解析失败",
   };
+  return labels[status] ?? status;
 }
 
-async function loadResumeListData(
-  token: string,
-  preferredResumeId?: string | null,
-) {
-  logResumePage("load-list:start", { preferredResumeId });
-  const items = await fetchResumeList(token);
-  const nextSelectedId =
-    preferredResumeId && items.some((item) => item.id === preferredResumeId)
-      ? preferredResumeId
-      : (items[0]?.id ?? null);
-
-  logResumePage("load-list:done", {
-    count: items.length,
-    nextSelectedId,
-  });
-  return { items, nextSelectedId };
+function getFitBandLabel(value: string) {
+  const labels: Record<string, string> = {
+    excellent: "强适配",
+    strong: "较强适配",
+    partial: "部分适配",
+    weak: "低适配",
+    unknown: "待评估",
+  };
+  return labels[value] ?? value;
 }
 
-async function loadResumeDetailData(token: string, resumeId: string) {
-  logResumePage("load-detail:start", { resumeId });
-  const resume = await fetchResumeDetail(token, resumeId);
-  const jobsResult = await Promise.allSettled([
-    fetchResumeParseJobs(token, resumeId),
-  ]);
-  const jobs = jobsResult[0].status === "fulfilled" ? jobsResult[0].value : [];
-
-  logResumePage("load-detail:done", {
-    resumeId,
-    parseStatus: resume.parse_status,
-    parseError: resume.parse_error,
-    hasStructuredJson: Boolean(resume.structured_json),
-    jobsCount: jobs.length,
-    parseJobsRequestOk: jobsResult[0].status === "fulfilled",
-  });
-  return { resume, jobs };
+function summarizeText(value: string | null | undefined, limit = 120) {
+  const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
+  if (!normalized) {
+    return "暂无摘要";
+  }
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+  return `${normalized.slice(0, limit)}...`;
 }
 
-function upsertResumeRecord(items: ResumeRecord[], resume: ResumeRecord) {
-  const index = items.findIndex((item) => item.id === resume.id);
-  if (index === -1) {
-    return [resume, ...items];
+function upsertResume(current: ResumeRecord[], next: ResumeRecord) {
+  const existingIndex = current.findIndex((item) => item.id === next.id);
+  if (existingIndex === -1) {
+    return [next, ...current];
   }
 
-  return items.map((item) => (item.id === resume.id ? resume : item));
+  return current.map((item) => (item.id === next.id ? next : item));
 }
 
-
+function upsertWorkflow(
+  current: TailoredResumeWorkflowRecord[],
+  next: TailoredResumeWorkflowRecord
+) {
+  const filtered = current.filter(
+    (item) => item.tailored_resume.session_id !== next.tailored_resume.session_id
+  );
+  return [next, ...filtered];
+}
 
 export default function DashboardResumePage() {
   const { token } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const preferredWorkflowId = searchParams.get("workflowId");
+
   const [resumes, setResumes] = useState<ResumeRecord[]>([]);
+  const [workflows, setWorkflows] = useState<TailoredResumeWorkflowRecord[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [selectedResume, setSelectedResume] = useState<ResumeRecord | null>(
-    null,
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(
+    null
   );
-  const [parseJobs, setParseJobs] = useState<ResumeParseJob[]>([]);
-  const [structuredValue, setStructuredValue] = useState<ResumeStructuredData>(
-    createEmptyStructuredResume(),
-  );
+  const [jobDraft, setJobDraft] = useState<JobDraft>(createEmptyJobDraft());
+  const [pageError, setPageError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isRetrying, setIsRetrying] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [pageError, setPageError] = useState("");
-  const [isStructuredDirty, setIsStructuredDirty] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  function applyResumeDetail(
-    detail: Awaited<ReturnType<typeof loadResumeDetailData>>,
-    options?: {
-      preserveDraft?: boolean;
-    },
-  ) {
-    logResumePage("apply-detail", {
-      resumeId: detail.resume.id,
-      parseStatus: detail.resume.parse_status,
-      parseError: detail.resume.parse_error,
-      hasRawText: Boolean(detail.resume.raw_text),
-      rawTextLength: detail.resume.raw_text?.length ?? 0,
-      hasStructuredJson: Boolean(detail.resume.structured_json),
-      preserveDraft: options?.preserveDraft ?? false,
-      jobsCount: detail.jobs.length,
-    });
-    setSelectedResume(detail.resume);
-    setParseJobs(detail.jobs);
-    setResumes((current) => upsertResumeRecord(current, detail.resume));
-
-    if (!options?.preserveDraft) {
-      setStructuredValue(
-        normalizeStructuredResume(detail.resume.structured_json),
-      );
-      setIsStructuredDirty(false);
-    }
-  }
+  const selectedResume =
+    resumes.find((item) => item.id === selectedResumeId) ?? null;
+  const selectedWorkflow =
+    workflows.find((item) => item.tailored_resume.session_id === selectedWorkflowId) ??
+    null;
 
   useEffect(() => {
     if (!token) {
@@ -183,31 +149,56 @@ export default function DashboardResumePage() {
     async function bootstrap() {
       setIsPageLoading(true);
       setPageError("");
-      logResumePage("bootstrap:start");
 
       try {
-        const result = await loadResumeListData(accessToken);
+        const [resumeResult, workflowResult] = await Promise.allSettled([
+          fetchResumeList(accessToken),
+          fetchTailoredResumeWorkflows(accessToken),
+        ]);
         if (cancelled) {
           return;
         }
 
-        setResumes(result.items);
-        setSelectedResumeId(result.nextSelectedId);
+        const nextResumes =
+          resumeResult.status === "fulfilled" ? resumeResult.value : [];
+        const nextWorkflows =
+          workflowResult.status === "fulfilled" ? workflowResult.value : [];
 
-        if (result.nextSelectedId) {
-          const detail = await loadResumeDetailData(
-            accessToken,
-            result.nextSelectedId,
-          );
-          if (!cancelled) {
-            applyResumeDetail(detail);
-          }
-        } else {
-          setSelectedResume(null);
-          setParseJobs([]);
-          setStructuredValue(createEmptyStructuredResume());
-          setIsStructuredDirty(false);
+        if (resumeResult.status === "rejected") {
+          throw resumeResult.reason;
         }
+
+        if (workflowResult.status === "rejected") {
+          setPageError(
+            `专属简历历史加载失败：${getErrorMessage(workflowResult.reason)}`
+          );
+        }
+
+        setResumes(nextResumes);
+        setWorkflows(nextWorkflows);
+
+        const nextWorkflow =
+          (preferredWorkflowId &&
+            nextWorkflows.find(
+              (item) => item.tailored_resume.session_id === preferredWorkflowId
+            )) ||
+          nextWorkflows[0] ||
+          null;
+
+        if (nextWorkflow) {
+          setSelectedWorkflowId(nextWorkflow.tailored_resume.session_id);
+          setSelectedResumeId(nextWorkflow.resume.id);
+          setJobDraft(toJobDraft(nextWorkflow.target_job));
+          return;
+        }
+
+        const nextResume =
+          nextResumes.find((item) => item.parse_status === "success") ??
+          nextResumes[0] ??
+          null;
+        setSelectedWorkflowId(null);
+        setSelectedResumeId(nextResume?.id ?? null);
+        setJobDraft(createEmptyJobDraft());
       } catch (error) {
         if (!cancelled) {
           setPageError(getErrorMessage(error));
@@ -224,44 +215,7 @@ export default function DashboardResumePage() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
-
-  useEffect(() => {
-    if (!token || !selectedResumeId) {
-      return;
-    }
-    if (selectedResume?.id === selectedResumeId) {
-      return;
-    }
-
-    const accessToken = token;
-    let cancelled = false;
-
-    async function syncDetail() {
-      if (!selectedResumeId) {
-        return;
-      }
-      try {
-        const detail = await loadResumeDetailData(
-          accessToken,
-          selectedResumeId,
-        );
-        if (!cancelled) {
-          applyResumeDetail(detail);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setPageError(getErrorMessage(error));
-        }
-      }
-    }
-
-    void syncDetail();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedResume?.id, selectedResumeId, token]);
+  }, [preferredWorkflowId, token]);
 
   useEffect(() => {
     if (!token || !selectedResumeId || !selectedResume) {
@@ -273,45 +227,28 @@ export default function DashboardResumePage() {
 
     const accessToken = token;
     let cancelled = false;
-    const timer = window.setInterval(() => {
-      void (async () => {
-        if (!selectedResumeId) {
+    const timer = window.setTimeout(async () => {
+      try {
+        const detail = await fetchResumeDetail(accessToken, selectedResumeId);
+        if (cancelled) {
           return;
         }
-        try {
-          const result = await loadResumeListData(
-            accessToken,
-            selectedResumeId,
-          );
-          if (cancelled) {
-            return;
-          }
-
-          setResumes(result.items);
-          setSelectedResumeId(result.nextSelectedId);
-
-          if (result.nextSelectedId) {
-            const detail = await loadResumeDetailData(
-              accessToken,
-              result.nextSelectedId,
-            );
-            if (!cancelled) {
-              applyResumeDetail(detail, { preserveDraft: isStructuredDirty });
-            }
-          }
-        } catch (error) {
-          if (!cancelled) {
-            setPageError(getErrorMessage(error));
-          }
+        setResumes((current) => upsertResume(current, detail));
+        if (detail.parse_status === "success") {
+          setStatusMessage("主简历解析完成，可以开始生成专属简历。");
         }
-      })();
-    }, 3000);
+      } catch (error) {
+        if (!cancelled) {
+          setPageError(getErrorMessage(error));
+        }
+      }
+    }, POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
-  }, [isStructuredDirty, selectedResume, selectedResumeId, token]);
+  }, [selectedResume, selectedResumeId, token]);
 
   if (!token) {
     return null;
@@ -320,41 +257,39 @@ export default function DashboardResumePage() {
   if (isPageLoading) {
     return (
       <PageLoadingState
-        title="正在加载简历中心"
-        description="我们正在同步你的简历列表、解析状态和结构化结果。"
+        title="正在加载专属简历"
+        description="我们正在同步主简历、目标岗位历史和最近生成的专属简历成品。"
       />
     );
   }
 
-  if (pageError && resumes.length === 0) {
+  if (pageError && resumes.length === 0 && workflows.length === 0) {
     return (
       <PageErrorState
-        actionLabel="重新加载"
+        title="专属简历加载失败"
         description={pageError}
-        onAction={() => window.location.reload()}
-        title="简历中心加载失败"
+        actionLabel="重新进入"
+        onAction={() => router.push("/dashboard/resume")}
       />
     );
   }
 
-  async function handleUpload(file: File) {
-    if (!token) {
+  async function handleUploadResume(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!token || !file) {
       return;
     }
 
     setIsUploading(true);
     setPageError("");
+    setStatusMessage("");
 
     try {
-      const uploadedResume = await uploadResume(token, file);
-      const result = await loadResumeListData(token, uploadedResume.id);
-      setResumes(result.items);
-      setSelectedResumeId(result.nextSelectedId);
-
-      if (result.nextSelectedId) {
-        const detail = await loadResumeDetailData(token, result.nextSelectedId);
-        applyResumeDetail(detail);
-      }
+      const uploaded = await uploadPrimaryResume(token, file);
+      setResumes((current) => upsertResume(current, uploaded));
+      setSelectedResumeId(uploaded.id);
+      setStatusMessage("主简历已上传，正在解析为 canonical resume。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -362,183 +297,495 @@ export default function DashboardResumePage() {
     }
   }
 
-  async function handleSelectResume(resumeId: string) {
-    if (resumeId === selectedResumeId) {
-      return;
-    }
-
-    if (isStructuredDirty) {
-      const confirmed = window.confirm(
-        "当前简历有未保存的人工修改，切换后会丢失这些内容。确认继续吗？",
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    setSelectedResumeId(resumeId);
-    setPageError("");
-  }
-
-  async function handleSaveStructured() {
+  async function handleGenerateTailoredResume() {
     if (!token || !selectedResumeId) {
+      setPageError("请先选择一份主简历。");
+      return;
+    }
+    if (!selectedResume || selectedResume.parse_status !== "success") {
+      setPageError("主简历尚未解析完成，暂时无法生成专属简历。");
+      return;
+    }
+    if (!jobDraft.title.trim() || !jobDraft.jd_text.trim()) {
+      setPageError("请填写目标岗位标题和 JD 文本。");
       return;
     }
 
-    setIsSaving(true);
+    setIsGenerating(true);
     setPageError("");
+    setStatusMessage("");
 
     try {
-      const updatedResume = await updateResumeStructuredData(
-        token,
-        selectedResumeId,
-        structuredValue,
+      const workflow = await generateTailoredResume(token, {
+        resume_id: selectedResumeId,
+        job_id: selectedWorkflow?.target_job.id,
+        title: jobDraft.title,
+        company: jobDraft.company,
+        job_city: jobDraft.job_city,
+        employment_type: jobDraft.employment_type,
+        source_name: jobDraft.source_name,
+        source_url: jobDraft.source_url,
+        priority: jobDraft.priority,
+        jd_text: jobDraft.jd_text,
+      });
+
+      setWorkflows((current) => upsertWorkflow(current, workflow));
+      setSelectedWorkflowId(workflow.tailored_resume.session_id);
+      setSelectedResumeId(workflow.resume.id);
+      setJobDraft(toJobDraft(workflow.target_job));
+      router.replace(
+        `/dashboard/resume?workflowId=${workflow.tailored_resume.session_id}`
       );
-      setSelectedResume(updatedResume);
-      setStructuredValue(
-        normalizeStructuredResume(updatedResume.structured_json),
-      );
-      setIsStructuredDirty(false);
-      const result = await loadResumeListData(token, selectedResumeId);
-      setResumes(result.items);
-      setSelectedResumeId(result.nextSelectedId);
+      setStatusMessage("岗位定制版简历已生成，可直接下载 Markdown。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleRetryParse() {
-    if (!token || !selectedResumeId) {
-      return;
-    }
-
-    setIsRetrying(true);
-    setPageError("");
-    setIsStructuredDirty(false);
-
-    try {
-      await retryResumeParse(token, selectedResumeId);
-      const result = await loadResumeListData(token, selectedResumeId);
-      setResumes(result.items);
-      setSelectedResumeId(result.nextSelectedId);
-
-      const detail = await loadResumeDetailData(token, selectedResumeId);
-      applyResumeDetail(detail);
-    } catch (error) {
-      setPageError(getErrorMessage(error));
-    } finally {
-      setIsRetrying(false);
+      setIsGenerating(false);
     }
   }
 
   async function handleDownload() {
-    if (!token || !selectedResumeId) {
+    if (!token || !selectedWorkflow) {
       return;
     }
 
-    try {
-      const payload = await fetchResumeDownloadUrl(token, selectedResumeId);
-      window.open(payload.download_url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      setPageError(getErrorMessage(error));
-    }
-  }
-
-  async function handleDelete() {
-    if (!token || !selectedResumeId || !selectedResume) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `确认删除简历《${selectedResume.file_name}》吗？这会同时删除 MinIO 中的原始文件。`,
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    setIsDeleting(true);
+    setIsDownloading(true);
     setPageError("");
+    setStatusMessage("");
 
     try {
-      await deleteResume(token, selectedResumeId);
-      const result = await loadResumeListData(token);
-
-      setResumes(result.items);
-      setSelectedResumeId(result.nextSelectedId);
-
-      if (result.nextSelectedId) {
-        const detail = await loadResumeDetailData(token, result.nextSelectedId);
-        applyResumeDetail(detail);
-      } else {
-        setSelectedResume(null);
-        setParseJobs([]);
-        setStructuredValue(createEmptyStructuredResume());
-        setIsStructuredDirty(false);
-      }
+      const result = await downloadTailoredResumeMarkdown(
+        token,
+        selectedWorkflow.tailored_resume.session_id
+      );
+      const objectUrl = window.URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download =
+        result.fileName ||
+        selectedWorkflow.tailored_resume.downloadable_file_name ||
+        "optimized_resume.md";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+      setStatusMessage("Markdown 已下载，可直接用于投递。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
-      setIsDeleting(false);
+      setIsDownloading(false);
     }
   }
 
+  function handleSelectWorkflow(workflow: TailoredResumeWorkflowRecord) {
+    setSelectedWorkflowId(workflow.tailored_resume.session_id);
+    setSelectedResumeId(workflow.resume.id);
+    setJobDraft(toJobDraft(workflow.target_job));
+    setPageError("");
+    setStatusMessage("");
+    router.replace(`/dashboard/resume?workflowId=${workflow.tailored_resume.session_id}`);
+  }
+
+  function handleCreateNewTargetJob() {
+    setSelectedWorkflowId(null);
+    setJobDraft(createEmptyJobDraft());
+    setPageError("");
+    setStatusMessage("");
+    router.replace("/dashboard/resume");
+  }
+
   return (
-    <PageShell>
+    <PageShell className="gap-6">
       <PageHeader
-        description="上传 PDF 简历、查看解析状态、修正结构化结果，并从同一工作台完成下载、重试解析与删除等操作。"
-        eyebrow="Resume Center"
+        eyebrow="Tailored Resume"
+        title="专属简历"
+        description="围绕一份主简历和目标岗位 JD，系统会自动复用解析、匹配和改写能力，输出可下载的岗位定制版 Markdown 简历。"
         meta={
           <>
-            <MetaChip>{resumes.length} 份简历</MetaChip>
-            <MetaChip>{selectedResume ? "已选中详情" : "等待选择"}</MetaChip>
+            <MetaChip>{resumes.length} 份主简历</MetaChip>
+            <MetaChip>{workflows.length} 份专属简历</MetaChip>
           </>
         }
-        title="简历中心"
       />
 
       {pageError ? (
-        <Alert className="border-2 border-black bg-white font-mono">
-          <AlertTitle className="font-serif text-lg font-bold text-black">
-            操作提示
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
+            操作失败
           </AlertTitle>
-          <AlertDescription className="font-mono text-sm leading-7 text-black">
+          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
             {pageError}
           </AlertDescription>
         </Alert>
       ) : null}
 
-      <section className="grid gap-0 xl:grid-cols-1">
-        <PaperSection
-          bodyClassName="p-0"
-          className="border-0"
-          title="简历详情与结构化编辑"
-          eyebrow="Structured Resume Workspace"
-        >
-          <ResumeDetailPanel
-            isDeleting={isDeleting}
-            isStructuredDirty={isStructuredDirty}
-            isRetrying={isRetrying}
-            isSaving={isSaving}
-            isUploading={isUploading}
-            onChangeStructured={(value) => {
-              setStructuredValue(value);
-              setIsStructuredDirty(true);
-            }}
-            onDelete={handleDelete}
-            onDownload={handleDownload}
-            onRetry={handleRetryParse}
-            onSave={handleSaveStructured}
-            onSelectResume={handleSelectResume}
-            onUpload={handleUpload}
-            parseJobs={parseJobs}
-            resume={selectedResume}
-            resumes={resumes}
-            structuredValue={structuredValue}
+      {statusMessage ? (
+        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
+          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
+            当前状态
+          </AlertTitle>
+          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
+            {statusMessage}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <PaperSection
+        eyebrow="Primary Resume"
+        title="主简历"
+        rightSlot={
+          <label className="inline-flex">
+            <input
+              className="hidden"
+              disabled={isUploading}
+              onChange={handleUploadResume}
+              type="file"
+              accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
+            />
+            <Button disabled={isUploading} size="sm" type="button">
+              <FileUp className="size-4" />
+              {isUploading ? "上传中" : "上传主简历"}
+            </Button>
+          </label>
+        }
+      >
+        {resumes.length === 0 ? (
+          <PageEmptyState
+            title="还没有主简历"
+            description="先上传一份 PDF 或 DOCX 简历，系统会自动解析成 canonical resume。"
           />
-        </PaperSection>
-      </section>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="space-y-3">
+              {resumes.map((resume) => {
+                const isActive = resume.id === selectedResumeId;
+                return (
+                  <button
+                    key={resume.id}
+                    type="button"
+                    onClick={() => setSelectedResumeId(resume.id)}
+                    className={`w-full rounded-3xl border px-4 py-4 text-left transition-colors ${
+                      isActive
+                        ? "border-[#1C1C1C] bg-white"
+                        : "border-[#1C1C1C]/10 bg-white hover:border-[#1C1C1C]/25"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[#1C1C1C]">
+                          {resume.structured_json?.basic_info.name ||
+                            resume.file_name}
+                        </p>
+                        <p className="mt-1 text-xs text-[#1C1C1C]/45">
+                          {resume.file_name}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-[#1C1C1C]/10 px-2 py-1 text-xs text-[#1C1C1C]/60">
+                        {getResumeStatusLabel(resume.parse_status)}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/60">
+                      {summarizeText(resume.structured_json?.basic_info.summary)}
+                    </p>
+                    <p className="mt-3 text-xs text-[#1C1C1C]/45">
+                      更新于 {formatDate(resume.updated_at)}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-5">
+              {selectedResume ? (
+                <div className="space-y-5">
+                  <div className="flex flex-wrap gap-2">
+                    <MetaChip>{getResumeStatusLabel(selectedResume.parse_status)}</MetaChip>
+                    <MetaChip>版本 v{selectedResume.latest_version}</MetaChip>
+                    <MetaChip>{formatDate(selectedResume.updated_at)}</MetaChip>
+                  </div>
+
+                  <div>
+                    <p className="text-lg font-semibold text-[#1C1C1C]">
+                      {selectedResume.structured_json?.basic_info.name || "未识别姓名"}
+                    </p>
+                    <p className="mt-1 text-sm text-[#1C1C1C]/60">
+                      {selectedResume.structured_json?.basic_info.location || "地点待补充"}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-[#1C1C1C]/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#1C1C1C]/45">
+                        联系方式
+                      </p>
+                      <p className="mt-3 text-sm text-[#1C1C1C]/70">
+                        {selectedResume.structured_json?.basic_info.email || "未识别邮箱"}
+                      </p>
+                      <p className="mt-1 text-sm text-[#1C1C1C]/70">
+                        {selectedResume.structured_json?.basic_info.phone || "未识别电话"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[#1C1C1C]/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#1C1C1C]/45">
+                        核心摘要
+                      </p>
+                      <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/70">
+                        {selectedResume.structured_json?.basic_info.summary || "解析完成后会显示摘要。"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedResume.parse_error ? (
+                    <div className="rounded-2xl border border-[#1C1C1C]/10 p-4 text-sm text-[#1C1C1C]/70">
+                      解析错误：{selectedResume.parse_error}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <PageEmptyState
+                  title="请选择主简历"
+                  description="左侧会展示你最近上传的主简历。"
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </PaperSection>
+
+      <PaperSection
+        eyebrow="Target Job"
+        title="目标岗位"
+        rightSlot={
+          <div className="flex gap-2">
+            <Button onClick={handleCreateNewTargetJob} size="sm" type="button" variant="secondary">
+              新建岗位
+            </Button>
+            <Button
+              disabled={isGenerating}
+              onClick={() => void handleGenerateTailoredResume()}
+              size="sm"
+              type="button"
+            >
+              <Sparkles className="size-4" />
+              {isGenerating ? "生成中" : "一键生成专属简历"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位标题</p>
+                <PaperInput
+                  value={jobDraft.title}
+                  onChange={(event) =>
+                    setJobDraft((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                  placeholder="例如：增长数据分析师"
+                />
+              </div>
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">公司名称</p>
+                <PaperInput
+                  value={jobDraft.company}
+                  onChange={(event) =>
+                    setJobDraft((current) => ({
+                      ...current,
+                      company: event.target.value,
+                    }))
+                  }
+                  placeholder="例如：CareerPilot"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位地点</p>
+                <PaperInput
+                  value={jobDraft.job_city}
+                  onChange={(event) =>
+                    setJobDraft((current) => ({
+                      ...current,
+                      job_city: event.target.value,
+                    }))
+                  }
+                  placeholder="例如：上海"
+                />
+              </div>
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">来源链接</p>
+                <PaperInput
+                  value={jobDraft.source_url}
+                  onChange={(event) =>
+                    setJobDraft((current) => ({
+                      ...current,
+                      source_url: event.target.value,
+                    }))
+                  }
+                  placeholder="可选"
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">目标岗位 JD</p>
+              <PaperTextarea
+                value={jobDraft.jd_text}
+                onChange={(event) =>
+                  setJobDraft((current) => ({
+                    ...current,
+                    jd_text: event.target.value,
+                  }))
+                }
+                placeholder="粘贴完整 JD，系统会自动结构化并生成 match report，再产出岗位定制版简历。"
+                className="min-h-[260px]"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-4">
+              <p className="text-sm font-semibold text-[#1C1C1C]">最近目标岗位</p>
+              <p className="mt-1 text-sm leading-relaxed text-[#1C1C1C]/60">
+                这里保留已生成过专属简历的岗位历史，可直接切换查看成品。
+              </p>
+            </div>
+
+            {workflows.length === 0 ? (
+              <PageEmptyState
+                title="还没有岗位历史"
+                description="填写 JD 并点击一键生成后，这里会保留每次岗位定制结果。"
+              />
+            ) : (
+              workflows.map((workflow) => {
+                const isActive =
+                  workflow.tailored_resume.session_id === selectedWorkflowId;
+                return (
+                  <button
+                    key={workflow.tailored_resume.session_id}
+                    type="button"
+                    onClick={() => handleSelectWorkflow(workflow)}
+                    className={`w-full rounded-3xl border px-4 py-4 text-left transition-colors ${
+                      isActive
+                        ? "border-[#1C1C1C] bg-white"
+                        : "border-[#1C1C1C]/10 bg-white hover:border-[#1C1C1C]/25"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[#1C1C1C]">
+                          {workflow.target_job.title}
+                        </p>
+                        <p className="mt-1 text-xs text-[#1C1C1C]/45">
+                          {workflow.target_job.company || "未填写公司"}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-[#1C1C1C]/10 px-2 py-1 text-xs text-[#1C1C1C]/60">
+                        {getFitBandLabel(workflow.tailored_resume.fit_band)}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/60">
+                      {summarizeText(workflow.target_job.jd_text)}
+                    </p>
+                    <p className="mt-3 text-xs text-[#1C1C1C]/45">
+                      生成于 {formatDate(workflow.tailored_resume.updated_at)}
+                    </p>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </PaperSection>
+
+      <PaperSection
+        eyebrow="Tailored Resume Output"
+        title="专属简历成品"
+        rightSlot={
+          selectedWorkflow ? (
+            <div className="flex gap-2">
+              <Button
+                disabled={isDownloading || !selectedWorkflow.tailored_resume.has_downloadable_markdown}
+                onClick={() => void handleDownload()}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                <Download className="size-4" />
+                {isDownloading ? "下载中" : "下载 Markdown"}
+              </Button>
+              <Button
+                disabled={isGenerating}
+                onClick={() => void handleGenerateTailoredResume()}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                <RefreshCcw className="size-4" />
+                重新生成
+              </Button>
+            </div>
+          ) : null
+        }
+      >
+        {selectedWorkflow ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <MetaChip>{getFitBandLabel(selectedWorkflow.tailored_resume.fit_band)}</MetaChip>
+              <MetaChip>评分 {selectedWorkflow.tailored_resume.overall_score}</MetaChip>
+              <MetaChip>{formatDate(selectedWorkflow.tailored_resume.updated_at)}</MetaChip>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-5">
+                <p className="text-sm font-semibold text-[#1C1C1C]">
+                  {selectedWorkflow.target_job.title}
+                  {selectedWorkflow.target_job.company
+                    ? ` · ${selectedWorkflow.target_job.company}`
+                    : ""}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
+                  这是当前岗位的定制版简历成品。后台仍然会生成 match report、rewrite tasks 和 fact check，但它们不再作为用户主交付物展示。
+                </p>
+                <pre className="mt-5 overflow-x-auto rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
+                  {selectedWorkflow.tailored_resume.optimized_resume_md}
+                </pre>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-4">
+                  <p className="text-sm font-semibold text-[#1C1C1C]">关联对象</p>
+                  <p className="mt-3 text-sm text-[#1C1C1C]/60">
+                    主简历：{selectedWorkflow.resume.structured_json?.basic_info.name || selectedWorkflow.resume.file_name}
+                  </p>
+                  <p className="mt-1 text-sm text-[#1C1C1C]/60">
+                    目标岗位：{selectedWorkflow.target_job.title}
+                  </p>
+                </div>
+
+                <Button asChild size="sm" type="button">
+                  <Link
+                    href={`/dashboard/interviews?reportId=${selectedWorkflow.tailored_resume.match_report_id}&optimizationSessionId=${selectedWorkflow.tailored_resume.session_id}&jobId=${selectedWorkflow.target_job.id}`}
+                  >
+                    去模拟面试
+                    <ArrowUpRight className="size-4" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <PageEmptyState
+            title="专属简历成品还未生成"
+            description="先选择主简历并填写目标岗位 JD，然后点击一键生成。"
+          />
+        )}
+      </PaperSection>
     </PageShell>
   );
 }

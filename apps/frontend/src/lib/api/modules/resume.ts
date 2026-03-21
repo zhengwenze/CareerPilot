@@ -1,4 +1,5 @@
-import { apiRequest } from "@/lib/api/client";
+import { apiRequest, apiRequestBlob } from "@/lib/api/client";
+import type { JobRecord } from "@/lib/api/modules/jobs";
 
 /**
  * 简历结构化数据类型
@@ -71,6 +72,25 @@ export type ResumeRecord = {
 export type ResumeDownloadUrlResponse = {
   download_url: string;
   expires_in: number;
+};
+
+export type TailoredResumeArtifactRecord = {
+  session_id: string;
+  match_report_id: string;
+  status: string;
+  fit_band: string;
+  overall_score: string;
+  optimized_resume_md: string;
+  has_downloadable_markdown: boolean;
+  downloadable_file_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TailoredResumeWorkflowRecord = {
+  resume: ResumeRecord;
+  target_job: JobRecord;
+  tailored_resume: TailoredResumeArtifactRecord;
 };
 
 /**
@@ -147,6 +167,85 @@ export async function uploadResume(
     latestParseJobId: response.latest_parse_job?.id ?? null,
   });
   return response;
+}
+
+function normalizeOptionalText(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+export async function uploadPrimaryResume(
+  token: string,
+  file: File
+): Promise<ResumeRecord> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return apiRequest<ResumeRecord>("/tailored-resumes/resumes/upload", {
+    method: "POST",
+    token,
+    body: formData,
+  });
+}
+
+export async function fetchTailoredResumeWorkflows(
+  token: string
+): Promise<TailoredResumeWorkflowRecord[]> {
+  return apiRequest<TailoredResumeWorkflowRecord[]>(
+    "/tailored-resumes/workflows",
+    {
+      method: "GET",
+      token,
+    }
+  );
+}
+
+export async function generateTailoredResume(
+  token: string,
+  payload: {
+    resume_id: string;
+    job_id?: string;
+    title: string;
+    company?: string;
+    job_city?: string;
+    employment_type?: string;
+    source_name?: string;
+    source_url?: string;
+    priority: number;
+    jd_text: string;
+    force_refresh?: boolean;
+  }
+): Promise<TailoredResumeWorkflowRecord> {
+  return apiRequest<TailoredResumeWorkflowRecord>("/tailored-resumes/workflows", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      resume_id: payload.resume_id,
+      job_id: payload.job_id,
+      title: payload.title.trim(),
+      company: normalizeOptionalText(payload.company),
+      job_city: normalizeOptionalText(payload.job_city),
+      employment_type: normalizeOptionalText(payload.employment_type),
+      source_name: normalizeOptionalText(payload.source_name),
+      source_url: normalizeOptionalText(payload.source_url),
+      priority: payload.priority,
+      jd_text: payload.jd_text.trim(),
+      force_refresh: payload.force_refresh ?? false,
+    }),
+  });
+}
+
+export async function downloadTailoredResumeMarkdown(
+  token: string,
+  sessionId: string
+): Promise<{ blob: Blob; fileName: string | null }> {
+  return apiRequestBlob(
+    `/tailored-resumes/workflows/${sessionId}/download-markdown`,
+    {
+      method: "GET",
+      token,
+    }
+  );
 }
 
 /**

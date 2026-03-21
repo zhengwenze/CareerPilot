@@ -45,13 +45,13 @@ export function DashboardTopNav() {
             <div className="flex items-center justify-between gap-4 lg:block">
               <div>
                 <Link
-                  href="/dashboard/overview"
+                  href="/dashboard/resume"
                   className="font-serif text-3xl font-bold text-black no-underline hover:text-[#0000ff]"
                 >
                   CareerPilot
                 </Link>
                 <p className="mt-1 font-mono text-xs uppercase">
-                  Resume / Matching / Optimization / Interview
+                  Tailored Resume / Interview
                 </p>
               </div>
 

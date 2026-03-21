@@ -29,12 +29,38 @@ export class ApiError extends Error {
 
 async function parseError(response: Response): Promise<never> {
   try {
-    const payload = (await response.json()) as ApiErrorResponse;
-    throw new ApiError(payload.error.message, {
+    const payload = (await response.json()) as
+      | ApiErrorResponse
+      | { detail?: string | { message?: string } };
+
+    if (
+      "error" in payload &&
+      payload.error &&
+      typeof payload.error.message === "string"
+    ) {
+      throw new ApiError(payload.error.message, {
+        status: response.status,
+        code: payload.error.code,
+        details: payload.error.details,
+        requestId: payload.meta?.request_id,
+      });
+    }
+
+    const detail =
+      typeof payload.detail === "string"
+        ? payload.detail
+        : payload.detail && typeof payload.detail.message === "string"
+          ? payload.detail.message
+          : null;
+
+    if (detail) {
+      throw new ApiError(detail, {
+        status: response.status,
+      });
+    }
+
+    throw new ApiError(`请求失败 (${response.status})`, {
       status: response.status,
-      code: payload.error.code,
-      details: payload.error.details,
-      requestId: payload.meta?.request_id,
     });
   } catch (error) {
     if (error instanceof ApiError) {

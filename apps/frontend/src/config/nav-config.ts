@@ -1,12 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BriefcaseBusiness,
   FileText,
-  LayoutDashboard,
   Settings,
   Sparkles,
-  Target,
-  WandSparkles,
 } from "lucide-react";
 
 export type NavMatchMode = "exact" | "prefix";
@@ -29,43 +25,13 @@ export type NavSection = {
 
 export const dashboardNavSections: NavSection[] = [
   {
-    title: "总览",
-    items: [
-      {
-        title: "概览",
-        href: "/dashboard/overview",
-        icon: LayoutDashboard,
-        match: "exact",
-      },
-    ],
-  },
-  {
     title: "流程",
     items: [
       {
-        title: "简历中心",
+        title: "专属简历",
         href: "/dashboard/resume",
         icon: FileText,
         match: "prefix",
-      },
-      {
-        title: "岗位匹配",
-        href: "/dashboard/jobs",
-        icon: Target,
-        match: "prefix",
-      },
-      {
-        title: "简历优化",
-        href: "/dashboard/optimizer",
-        icon: WandSparkles,
-        match: "prefix",
-      },
-      {
-        title: "投递追踪",
-        href: "/dashboard/applications",
-        icon: BriefcaseBusiness,
-        match: "prefix",
-        disabled: true,
       },
       {
         title: "模拟面试",

@@ -273,9 +273,9 @@ export default function DashboardInterviewsPage() {
   if (pageError && sessions.length === 0 && !selectedSession) {
     return (
       <PageErrorState
-        actionLabel="返回岗位工作台"
+        actionLabel="返回专属简历"
         description={pageError}
-        onAction={() => router.push("/dashboard/jobs")}
+        onAction={() => router.push("/dashboard/resume")}
         title="模拟面试加载失败"
       />
     );
@@ -399,12 +399,8 @@ export default function DashboardInterviewsPage() {
         eyebrow="Mock Interviews"
         meta={
           <Button asChild type="button" variant="secondary">
-            <Link
-              href={
-                jobId ? `/dashboard/jobs?jobId=${jobId}` : "/dashboard/jobs"
-              }
-            >
-              返回岗位工作台
+            <Link href="/dashboard/resume">
+              返回专属简历
               <ArrowUpRight className="ml-2 size-4" />
             </Link>
           </Button>
@@ -438,7 +434,7 @@ export default function DashboardInterviewsPage() {
         <PaperSection title="训练会话" eyebrow="Session History">
           {sessions.length === 0 ? (
             <PageEmptyState
-              description="先从岗位匹配或简历优化进入，这里会保留你的训练记录。"
+              description="先从专属简历进入，这里会保留你的训练记录。"
               title="还没有模拟面试"
             />
           ) : (
@@ -758,9 +754,9 @@ export default function DashboardInterviewsPage() {
                 type="button"
               >
                 <Link
-                  href={`/dashboard/optimizer?sessionId=${selectedSession.optimization_session_id}&reportId=${selectedSession.match_report_id}`}
+                  href={`/dashboard/resume?workflowId=${selectedSession.optimization_session_id}`}
                 >
-                  返回对应优化会话
+                  返回对应专属简历
                   <Sparkles className="ml-2 size-4" />
                 </Link>
               </Button>

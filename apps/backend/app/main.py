@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis, from_url
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.routers import api_router
 from app.core.config import Settings, get_settings
@@ -132,6 +133,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             message=str(exc.detail),
         )
         return JSONResponse(status_code=exc.status_code, content=payload.model_dump(mode="json"))
+
+    @app.exception_handler(StarletteHTTPException)
+    async def starlette_http_exception_handler(
+        request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
+        code = {
+            400: ErrorCode.BAD_REQUEST,
+            401: ErrorCode.UNAUTHORIZED,
+            403: ErrorCode.FORBIDDEN,
+            404: ErrorCode.NOT_FOUND,
+            409: ErrorCode.CONFLICT,
+            422: ErrorCode.VALIDATION_ERROR,
+            503: ErrorCode.SERVICE_UNAVAILABLE,
+        }.get(exc.status_code, ErrorCode.BAD_REQUEST)
+        payload = error_response(
+            request,
+            code=serialize_error_code(code),
+            message=str(exc.detail),
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=payload.model_dump(mode="json"),
+        )
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
