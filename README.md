@@ -52,6 +52,38 @@ npm run dev
 
 前端: http://localhost:3000
 
+## 当前项目结构
+
+```
+career-pilot/
+├── apps/
+│   ├── backend/          # FastAPI 后端服务
+│   │   ├── app/
+│   │   │   ├── core/     # 核心配置（config, errors, security, logging）
+│   │   │   ├── db/       # 数据库（base, session）
+│   │   │   ├── models/   # 数据模型（resume, user, job, match_report...）
+│   │   │   ├── routers/  # API 路由（auth, resumes, jobs, match_reports...）
+│   │   │   ├── schemas/  # Pydantic schemas（请求/响应模型）
+│   │   │   ├── services/ # 业务逻辑（resume_parser, resume_ai, match_engine...）
+│   │   │   └── prompts/  # AI prompt 模板
+│   │   ├── alembic/      # 数据库迁移
+│   │   │   └── versions/ # 迁移历史
+│   │   └── tests/        # 后端测试
+│   │
+│   ├── frontend/         # Next.js 前端
+│   │   └── src/
+│   │       ├── app/      # 页面路由（dashboard, login, register）
+│   │       ├── components/# UI 组件（resume, jobs, layout, ui...）
+│   │       └── lib/      # API 映射
+│   │
+│   └── miniprogram/      # 微信小程序
+│       ├── pages/        # 页面
+│       └── components/   # 组件
+│
+├── docker-compose.yml     # Docker 编排
+└── docker-compose.middleware.yml # 中间件编排
+```
+
 ## Docker 相关
 
 ```bash

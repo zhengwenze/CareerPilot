@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import re
 import subprocess
 import tempfile
@@ -9,9 +8,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree
-
 from pypdf import PdfReader
-
 from app.core.errors import ApiException, ErrorCode
 from app.schemas.resume import ResumeParseArtifactsData, ResumeStructuredData
 
@@ -19,11 +16,17 @@ EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_PATTERN = re.compile(r"(?:\+?\d[\d\s-]{7,}\d)")
 CJK_SPACING_PATTERN = re.compile(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])")
 SECTION_BREAK_PATTERN = re.compile(r"\s{2,}|[|｜]")
+URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
 BULLET_PREFIX = re.compile(r"^(?:[-*•·●▪■◆]|[0-9]+[.)、])\s*")
 DATE_SPAN_PATTERN = re.compile(
     r"(?:20\d{2}|19\d{2})\s*[./-]\s*(?:20\d{2}|19\d{2}|至今|present)",
     re.IGNORECASE,
 )
+DATE_RANGE_PATTERN = re.compile(
+    r"((?:19|20)\d{2}\s*[./-]\s*\d{1,2})\s*[–—-]\s*((?:19|20)\d{2}\s*[./-]\s*\d{1,2}|至今|present)",
+    re.IGNORECASE,
+)
+GPA_PATTERN = re.compile(r"GPA\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
 
 SECTION_PATTERNS = {
     "education": [
@@ -60,6 +63,13 @@ SECTION_PATTERNS = {
         "软件著作权",
         "certifications",
         "awards",
+    ],
+    "summary": [
+        "个人优势",
+        "个人评价",
+        "自我评价",
+        "个人总结",
+        "个人简介",
     ],
 }
 INLINE_SECTION_HEADINGS = (
@@ -106,6 +116,12 @@ TECHNICAL_KEYWORDS = [
     "PyTorch",
     "React",
     "Redis",
+    "MinIO",
+    "RocketMQ",
+    "SQLAlchemy",
+    "Spring Boot",
+    "RESTful API",
+    "Prompt Engineering",
     "scikit-learn",
     "Spark",
     "SQL",
@@ -182,7 +198,6 @@ WORK_HINTS = (
     "产品",
     "运营",
     "研发",
-    "负责",
     "intern",
 )
 PROJECT_HINTS = (
@@ -216,6 +231,25 @@ CERTIFICATION_HINTS = (
     "pmp",
     "cpa",
     "cet",
+)
+PROJECT_ACTION_PREFIXES = (
+    "负责",
+    "基于",
+    "使用",
+    "接入",
+    "扩展",
+    "完成",
+    "设计",
+    "搭建",
+    "开发",
+    "主导",
+    "优化",
+    "实现",
+    "参与",
+    "推动",
+    "支持",
+    "维护",
+    "协助",
 )
 
 
@@ -534,6 +568,10 @@ def _guess_summary(lines: list[str]) -> str:
             break
         if EMAIL_PATTERN.search(line) or PHONE_PATTERN.search(line):
             continue
+        if any(token in line for token in LOCATION_KEYWORDS):
+            continue
+        if any(token in line for token in ("到岗", "实习", "求职方向")):
+            continue
         if _looks_like_education_line(line) or _looks_like_work_line(line) or _looks_like_project_line(line):
             continue
         summary_lines.append(line)
@@ -562,6 +600,7 @@ def _split_sections(lines: list[str]) -> dict[str, list[str]]:
         "projects": [],
         "skills": [],
         "certifications": [],
+        "summary": [],
     }
     current_section: str | None = None
 
@@ -617,6 +656,241 @@ def _extract_keyword_tags(lines: list[str], raw_text: str, keywords: list[str]) 
     return _dedupe_preserve_order(found)
 
 
+def _extract_keyword_tags_from_text(text: str, keywords: list[str]) -> list[str]:
+    return _extract_keyword_tags([text], text, keywords)
+
+
+def _extract_objective_lines(lines: list[str]) -> list[str]:
+    objective_lines: list[str] = []
+    for line in lines[:8]:
+        if _match_section(line) is not None:
+            break
+        if "求职方向" in line:
+            objective_lines.append(line)
+    return objective_lines
+
+
+def _normalize_date_value(value: str) -> str:
+    compact = re.sub(r"\s+", "", value)
+    return compact.replace("-", ".").replace("/", ".")
+
+
+def _extract_date_range(line: str) -> tuple[str, str]:
+    match = DATE_RANGE_PATTERN.search(line)
+    if not match:
+        return "", ""
+    return _normalize_date_value(match.group(1)), _normalize_date_value(match.group(2))
+
+
+def _merge_wrapped_lines(lines: list[str]) -> list[str]:
+    merged: list[str] = []
+    for line in lines:
+        normalized = _clean_list_line(line)
+        if not normalized:
+            continue
+        if (
+            merged
+            and _match_section(normalized) is None
+            and not DATE_RANGE_PATTERN.search(normalized)
+            and (
+                normalized[:1] in {";", "；", "，", ",", "、", "）", ")"}
+                or len(normalized) <= 12
+                or normalized.startswith(("英", "软", "证"))
+            )
+        ):
+            merged[-1] = f"{merged[-1]}{normalized}"
+            continue
+        merged.append(normalized)
+    return merged
+
+
+def _build_education_items(lines: list[str]) -> list[dict[str, object]]:
+    merged_lines = _merge_wrapped_lines(lines)
+    items: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+
+    for line in merged_lines:
+        if (
+            current is None
+            or _extract_date_range(line) != ("", "")
+            or any(token in line for token in ("大学", "学院", "University", "College"))
+        ):
+            if current is not None:
+                items.append(current)
+            start_date, end_date = _extract_date_range(line)
+            school = ""
+            school_match = re.match(r"^([^\s(（]+(?:大学|学院|University|College))", line, re.IGNORECASE)
+            if school_match:
+                school = school_match.group(1).strip()
+            degree = ""
+            for candidate in ("本科", "硕士", "博士", "大专", "MBA", "Master", "Bachelor", "PhD"):
+                if candidate.lower() in line.lower():
+                    degree = candidate
+                    break
+            major = ""
+            major_match = re.search(
+                r"(?:本科|硕士|博士|大专|MBA|Master|Bachelor|PhD)\s*/\s*([^\d()（）]+?)(?=\s+(?:19|20)\d{2})",
+                line,
+                re.IGNORECASE,
+            )
+            if major_match:
+                major = major_match.group(1).strip(" /")
+            current = {
+                "id": f"edu_{len(items) + 1}",
+                "school": school or line,
+                "degree": degree,
+                "major": major,
+                "start_date": start_date,
+                "end_date": end_date,
+                "gpa": "",
+                "honors": _extract_parenthetical_tokens(line),
+                "source_refs": [],
+            }
+            continue
+
+        if current is None:
+            continue
+        gpa_match = GPA_PATTERN.search(line)
+        if gpa_match:
+            current["gpa"] = gpa_match.group(1)
+        current_honors = list(current["honors"])
+        for fragment in re.split(r"[；;，,]", line):
+            cleaned = fragment.strip(" 。")
+            if cleaned and cleaned not in current_honors:
+                current_honors.append(cleaned)
+        current["honors"] = current_honors
+
+    if current is not None:
+        items.append(current)
+    return items
+
+
+def _extract_parenthetical_tokens(line: str) -> list[str]:
+    honors: list[str] = []
+    for token in re.findall(r"[（(]([^()（）]+)[)）]", line):
+        for item in re.split(r"[/／]", token):
+            cleaned = item.strip()
+            if cleaned:
+                honors.append(cleaned)
+    return _dedupe_preserve_order(honors)
+
+
+def _looks_like_project_action_line(line: str) -> bool:
+    stripped = _clean_list_line(line)
+    return stripped.startswith(PROJECT_ACTION_PREFIXES)
+
+
+def _looks_like_project_header(line: str) -> bool:
+    stripped = _clean_list_line(line)
+    if not stripped:
+        return False
+    if _looks_like_project_action_line(stripped):
+        return False
+    if DATE_RANGE_PATTERN.search(stripped):
+        return True
+    if URL_PATTERN.search(stripped):
+        return True
+    if "项目" in stripped and len(stripped) <= 40:
+        return True
+    return len(stripped) <= 40 and all(token not in stripped for token in ("：", ";", "；", "。"))
+
+
+def _project_name_from_header(line: str) -> str:
+    return URL_PATTERN.sub("", line).strip(" -|")
+
+
+def _build_project_items(lines: list[str]) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+
+    for raw_line in lines:
+        line = _clean_list_line(raw_line)
+        if not line:
+            continue
+        if _looks_like_project_header(line) and (
+            current is None or current["bullets"] or current["summary"]
+        ):
+            if current is not None:
+                current["skills_used"] = _extract_keyword_tags_from_text(
+                    " ".join(
+                        [
+                            current["name"],
+                            current["role"],
+                            current["summary"],
+                            *[bullet["text"] for bullet in current["bullets"]],
+                        ]
+                    ),
+                    TECHNICAL_KEYWORDS + TOOL_KEYWORDS,
+                )
+                items.append(current)
+            start_date, end_date = _extract_date_range(line)
+            current = {
+                "id": f"proj_{len(items) + 1}",
+                "name": _project_name_from_header(line),
+                "role": "",
+                "start_date": start_date,
+                "end_date": end_date,
+                "summary": "",
+                "bullets": [],
+                "skills_used": [],
+                "source_refs": [],
+            }
+            continue
+
+        if current is None:
+            continue
+
+        if not current["summary"] and not _looks_like_project_action_line(line):
+            current["summary"] = line
+            continue
+
+        current["bullets"].append(
+            {
+                "id": f"{current['id']}_b{len(current['bullets']) + 1}",
+                "text": line,
+                "kind": "responsibility",
+                "metrics": [],
+                "skills_used": _extract_keyword_tags_from_text(line, TECHNICAL_KEYWORDS + TOOL_KEYWORDS),
+                "source_refs": [],
+            }
+        )
+
+    if current is not None:
+        current["skills_used"] = _extract_keyword_tags_from_text(
+            " ".join(
+                [
+                    current["name"],
+                    current["role"],
+                    current["summary"],
+                    *[bullet["text"] for bullet in current["bullets"]],
+                ]
+            ),
+            TECHNICAL_KEYWORDS + TOOL_KEYWORDS,
+        )
+        items.append(current)
+    return items
+
+
+def _build_certification_items(lines: list[str]) -> list[dict[str, object]]:
+    merged_lines = _merge_wrapped_lines(lines)
+    items: list[dict[str, object]] = []
+    for line in merged_lines:
+        for fragment in re.split(r"[；;]", line):
+            cleaned = fragment.strip(" 。")
+            if not cleaned:
+                continue
+            items.append(
+                {
+                    "id": f"cert_{len(items) + 1}",
+                    "name": cleaned,
+                    "issuer": "",
+                    "date": "",
+                    "source_refs": [],
+                }
+            )
+    return items
+
+
 def _looks_like_education_line(line: str) -> bool:
     lowered = line.lower()
     return any(token in lowered for token in EDUCATION_HINTS)
@@ -625,6 +899,8 @@ def _looks_like_education_line(line: str) -> bool:
 def _looks_like_work_line(line: str) -> bool:
     lowered = line.lower()
     if lowered.startswith("实习时间") or lowered.startswith("到岗时间"):
+        return False
+    if any(token in lowered for token in ("可实习", "立即到岗", "求职方向")):
         return False
     if any(token in lowered for token in EDUCATION_HINTS) and not any(
         token in lowered for token in ("有限公司", "公司", "intern", "工程师", "经理", "分析师", "产品", "运营", "研发")
@@ -685,10 +961,32 @@ def _has_meaningful_content(structured: ResumeStructuredData) -> bool:
 def build_structured_resume(raw_text: str) -> ResumeStructuredData:
     lines = _normalize_lines(raw_text)
     sections = _split_sections(lines)
-    education = _dedupe_preserve_order(sections["education"])
+    education_items = _build_education_items(sections["education"])
+    education = _dedupe_preserve_order(
+        [item["school"] if not item["major"] else f"{item['school']} {item['major']} {item['degree']} {item['start_date']} {item['end_date']}".strip() for item in education_items]
+        or sections["education"]
+    )
     work_experience = _dedupe_preserve_order(sections["work_experience"])
-    projects = _dedupe_preserve_order(sections["projects"])
-    certifications = _dedupe_preserve_order(sections["certifications"])
+    project_items = _build_project_items(sections["projects"])
+    projects = _dedupe_preserve_order(
+        [
+            " ".join(
+                part
+                for part in [
+                    item["name"],
+                    item["summary"],
+                    *[bullet["text"] for bullet in item["bullets"]],
+                ]
+                if part
+            ).strip()
+            for item in project_items
+        ]
+        or sections["projects"]
+    )
+    certification_items = _build_certification_items(sections["certifications"])
+    certifications = _dedupe_preserve_order(
+        [item["name"] for item in certification_items] or sections["certifications"]
+    )
 
     if not education:
         education = _fallback_section_lines(
@@ -735,11 +1033,18 @@ def build_structured_resume(raw_text: str) -> ResumeStructuredData:
             "email": _find_first_match(EMAIL_PATTERN, lines, raw_text),
             "phone": _find_first_match(PHONE_PATTERN, lines, raw_text),
             "location": _detect_location(lines),
-            "summary": _guess_summary(lines),
+            "summary": " ".join(
+                _dedupe_preserve_order(
+                    [*_extract_objective_lines(lines), *sections["summary"]]
+                )
+            ).strip()
+            or _guess_summary(lines),
         },
         education=education,
+        education_items=education_items,
         work_experience=work_experience,
         projects=projects,
+        project_items=project_items,
         skills={
             "technical": _extract_keyword_tags(
                 skill_lines,
@@ -758,6 +1063,7 @@ def build_structured_resume(raw_text: str) -> ResumeStructuredData:
             ),
         },
         certifications=certifications,
+        certification_items=certification_items,
     )
     if not _has_meaningful_content(structured):
         raise ApiException(
