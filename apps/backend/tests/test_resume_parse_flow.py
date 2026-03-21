@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
 from types import SimpleNamespace
 from uuid import uuid4
@@ -73,6 +74,12 @@ class InvalidAIProvider:
             category="invalid_response_format",
             detail="structured payload validation failed",
         )
+
+
+class SlowAIProvider:
+    async def correct(self, payload: object) -> SimpleNamespace:
+        await asyncio.sleep(2)
+        return SimpleNamespace(status="skipped", structured_data=None)
 
 
 @pytest.mark.asyncio
@@ -203,6 +210,59 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_invalid_ai(
     assert persisted_job.ai_status == "fallback_rule"
     assert persisted_job.ai_message == "AI 校准失败，已回退规则解析（模型返回格式非法）"
     assert job_count == 1
+
+
+@pytest.mark.asyncio
+async def test_process_resume_parse_job_falls_back_to_rule_result_on_ai_timeout(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume, parse_job = await _create_resume_and_parse_job(db_session, test_user)
+    rule_result = _rule_structured_data()
+
+    monkeypatch.setattr(
+        "app.services.resume.extract_text_from_resume_bytes",
+        lambda **_kwargs: SimpleNamespace(
+            raw_text=_raw_text(),
+            source_type="pdf",
+            ocr_used=False,
+            ocr_engine="none",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_structured_resume",
+        lambda _raw_text: rule_result,
+    )
+    monkeypatch.setattr(
+        "app.services.resume.build_resume_ai_correction_provider",
+        lambda _settings: SlowAIProvider(),
+    )
+
+    await process_resume_parse_job(
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=FakeStorage(),
+        session_factory=session_factory,
+        settings=Settings(resume_ai_timeout_seconds=1),
+    )
+
+    async with session_factory() as session:
+        persisted_resume = await session.get(Resume, resume.id)
+        persisted_job = await session.get(ResumeParseJob, parse_job.id)
+
+    assert persisted_resume is not None
+    assert persisted_job is not None
+    assert persisted_resume.parse_status == "success"
+    assert persisted_resume.parse_error is None
+    assert persisted_resume.structured_json == rule_result.model_dump()
+    assert persisted_resume.parse_artifacts_json["canonical_resume_md"].startswith(
+        "# 郑文泽"
+    )
+    assert persisted_job.status == "success"
+    assert persisted_job.ai_status == "fallback_rule"
+    assert persisted_job.ai_message == "AI 校准失败，已回退规则解析（请求超时）"
 
 
 @pytest.mark.asyncio

@@ -110,6 +110,8 @@ def set_parse_job_ai_result(
 
 
 def build_ai_fallback_message(exc: Exception) -> str:
+    if isinstance(exc, TimeoutError):
+        return "AI 校准失败，已回退规则解析（请求超时）"
     if isinstance(exc, AIClientError):
         category_messages = {
             "auth_error": "AI 校准失败，已回退规则解析（401 认证失败）",
@@ -421,70 +423,72 @@ async def process_resume_parse_job(
             structured.meta.source_type = extraction_source_type
             structured.meta.ai_correction_applied = False
             final_structured = structured
-            ai_provider = build_resume_ai_correction_provider(config)
-            try:
-                await update_parse_job_progress(
-                    session_factory=session_maker,
-                    parse_job_id=parse_job_id,
-                    owner_user_id=owner_user_id,
-                    message=PARSE_PROGRESS_AI_REQUESTING,
-                )
+
+        ai_provider = build_resume_ai_correction_provider(config)
+        try:
+            await update_parse_job_progress(
+                session_factory=session_maker,
+                parse_job_id=parse_job_id,
+                owner_user_id=owner_user_id,
+                message=PARSE_PROGRESS_AI_REQUESTING,
+            )
+            async with asyncio.timeout(max(1, config.resume_ai_timeout_seconds)):
                 ai_result = await ai_provider.correct(
                     ResumeAICorrectionRequest(
                         raw_text=raw_text,
                         rule_structured_json=structured.model_dump(),
                     )
                 )
-                if ai_result.status == "applied" and ai_result.structured_data is not None:
-                    await update_parse_job_progress(
-                        session_factory=session_maker,
-                        parse_job_id=parse_job_id,
-                        owner_user_id=owner_user_id,
-                        message=PARSE_PROGRESS_AI_MERGING,
-                    )
-                    final_structured = merge_resume_ai_correction(
-                        raw_text=raw_text,
-                        rule_result=structured,
-                        ai_result=ai_result.structured_data,
-                    )
-                    final_structured.meta.source_type = extraction_source_type
-                    final_structured.meta.ai_correction_applied = True
-                    ai_status = AI_STATUS_APPLIED
-                    ai_message = "已完成校准"
-                else:
-                    ai_status = AI_STATUS_SKIPPED
-                    ai_message = "AI 校准未启用"
-            except Exception as exc:
-                logger.exception(
-                    "Resume AI correction failed for resume_id=%s parse_job_id=%s: %s",
-                    resume_id,
-                    parse_job_id,
-                    exc,
+            if ai_result.status == "applied" and ai_result.structured_data is not None:
+                await update_parse_job_progress(
+                    session_factory=session_maker,
+                    parse_job_id=parse_job_id,
+                    owner_user_id=owner_user_id,
+                    message=PARSE_PROGRESS_AI_MERGING,
                 )
-                ai_status = AI_STATUS_FALLBACK_RULE
-                ai_message = build_ai_fallback_message(exc)
+                final_structured = merge_resume_ai_correction(
+                    raw_text=raw_text,
+                    rule_result=structured,
+                    ai_result=ai_result.structured_data,
+                )
+                final_structured.meta.source_type = extraction_source_type
+                final_structured.meta.ai_correction_applied = True
+                ai_status = AI_STATUS_APPLIED
+                ai_message = "已完成校准"
+            else:
+                ai_status = AI_STATUS_SKIPPED
+                ai_message = "AI 校准未启用"
+        except Exception as exc:
+            logger.exception(
+                "Resume AI correction failed for resume_id=%s parse_job_id=%s: %s",
+                resume_id,
+                parse_job_id,
+                exc,
+            )
+            ai_status = AI_STATUS_FALLBACK_RULE
+            ai_message = build_ai_fallback_message(exc)
 
-            if final_structured is not None:
-                logger.info(
-                    (
-                        "resume_markdown.render:start "
-                        "name=%s education_items=%s work_items=%s project_items=%s "
-                        "skills_technical=%s"
-                    ),
-                    final_structured.basic_info.name,
-                    len(final_structured.education_items),
-                    len(final_structured.work_experience_items),
-                    len(final_structured.project_items),
-                    len(final_structured.skills.technical),
-                )
-                canonical_resume_md = ensure_resume_markdown_structure(
-                    final_structured,
-                    render_resume_markdown(final_structured),
-                )
-                log_renderer_snapshot(
-                    structured=final_structured,
-                    markdown=canonical_resume_md,
-                )
+        if final_structured is not None:
+            logger.info(
+                (
+                    "resume_markdown.render:start "
+                    "name=%s education_items=%s work_items=%s project_items=%s "
+                    "skills_technical=%s"
+                ),
+                final_structured.basic_info.name,
+                len(final_structured.education_items),
+                len(final_structured.work_experience_items),
+                len(final_structured.project_items),
+                len(final_structured.skills.technical),
+            )
+            canonical_resume_md = ensure_resume_markdown_structure(
+                final_structured,
+                render_resume_markdown(final_structured),
+            )
+            log_renderer_snapshot(
+                structured=final_structured,
+                markdown=canonical_resume_md,
+            )
 
         resume_parse_status = "success"
         resume_parse_error = None

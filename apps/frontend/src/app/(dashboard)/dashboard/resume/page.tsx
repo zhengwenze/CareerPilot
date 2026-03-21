@@ -196,7 +196,10 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
 
     if (line.startsWith("# ")) {
       nodes.push(
-        <h1 key={`h1-${index}`} className="text-2xl font-semibold text-[#1C1C1C]">
+        <h1
+          key={`h1-${index}`}
+          className="text-2xl font-semibold text-[#1C1C1C]"
+        >
           {line.slice(2)}
         </h1>,
       );
@@ -208,7 +211,8 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
         key={`p-${index}`}
         className={cn(
           "text-sm leading-7 text-[#1C1C1C]/80",
-          /^\d{4}[./-]\d{1,2}\s*-\s*/.test(line) || /^\d{4}\s*-\s*\d{4}/.test(line)
+          /^\d{4}[./-]\d{1,2}\s*-\s*/.test(line) ||
+            /^\d{4}\s*-\s*\d{4}/.test(line)
             ? "font-medium text-[#1C1C1C]"
             : "",
         )}
@@ -799,18 +803,6 @@ export default function DashboardResumePage() {
       >
         {selectedWorkflow ? (
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <MetaChip>
-                {getFitBandLabel(selectedWorkflow.tailored_resume.fit_band)}
-              </MetaChip>
-              <MetaChip>
-                评分 {selectedWorkflow.tailored_resume.overall_score}
-              </MetaChip>
-              <MetaChip>
-                {formatDate(selectedWorkflow.tailored_resume.updated_at)}
-              </MetaChip>
-            </div>
-
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
               <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-5">
                 <p className="text-sm font-semibold text-[#1C1C1C]">
