@@ -20,6 +20,8 @@ from app.routers.resumes import schedule_resume_parse_job
 from app.schemas.common import ApiSuccessResponse
 from app.schemas.resume import ResumeResponse
 from app.schemas.tailored_resume import (
+    TailoredResumeGrammarRequest,
+    TailoredResumeGrammarResponse,
     TailoredResumeGenerateRequest,
     TailoredResumeWorkflowResponse,
 )
@@ -31,6 +33,7 @@ from app.services.tailored_resume import (
     get_tailored_resume_workflow,
     list_tailored_resume_workflows,
 )
+from app.services.tailored_resume_grammar import check_tailored_resume_grammar
 
 router = APIRouter(prefix="/tailored-resumes", tags=["tailored-resumes"])
 
@@ -80,6 +83,24 @@ async def get_tailored_resume_workflow_list(
 ) -> ApiSuccessResponse[list[TailoredResumeWorkflowResponse]]:
     payload = await list_tailored_resume_workflows(session, current_user=current_user)
     return success_response(request, payload)
+
+
+@router.post(
+    "/grammar",
+    response_model=ApiSuccessResponse[TailoredResumeGrammarResponse],
+)
+async def check_tailored_resume_text_grammar(
+    request: Request,
+    payload: TailoredResumeGrammarRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
+) -> ApiSuccessResponse[TailoredResumeGrammarResponse]:
+    del current_user
+    result = await check_tailored_resume_grammar(
+        text=payload.text,
+        settings=settings,
+    )
+    return success_response(request, result)
 
 
 @router.post(

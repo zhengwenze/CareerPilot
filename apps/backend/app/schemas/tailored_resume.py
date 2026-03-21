@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -41,3 +42,19 @@ class TailoredResumeWorkflowResponse(BaseModel):
     resume: ResumeResponse
     target_job: JobResponse
     tailored_resume: TailoredResumeArtifactResponse
+
+
+class TailoredResumeGrammarRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class TailoredResumeGrammarErrorItem(BaseModel):
+    context: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    suggestion: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    type: Literal["spelling", "punctuation"]
+
+
+class TailoredResumeGrammarResponse(BaseModel):
+    errors: list[TailoredResumeGrammarErrorItem] = Field(default_factory=list)
