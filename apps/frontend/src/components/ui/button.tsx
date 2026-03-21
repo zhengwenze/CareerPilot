@@ -1,30 +1,32 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Slot } from "radix-ui"
+import { Slot } from "@radix-ui/react-slot"
 
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 cursor-pointer items-center justify-center border-2 border-black font-mono font-bold uppercase text-sm whitespace-nowrap transition-none outline-none select-none pointer-events-auto focus-visible:outline-dotted focus-visible:outline-1 focus-visible:outline-black focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default:
-          "bg-[#dfdfdf] text-black hover:text-[#0000ff] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
+          "bg-[#111111] text-white hover:bg-[#333333] border border-[#111111]",
         primary:
-          "bg-[#dfdfdf] text-black hover:text-[#0000ff] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
+          "bg-[#111111] text-white hover:bg-[#333333] border border-[#111111]",
         secondary:
-          "bg-white text-black hover:text-[#0000ff] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
-        destructive:
-          "bg-white text-[#ff0000] hover:text-[#ff0000] border-t-white border-l-white border-r-[#808080] border-b-[#808080] active:border-t-[#808080] active:border-l-[#808080] active:border-r-white active:border-b-white",
-        link:
-          "border-0 bg-transparent p-0 text-[#0000ff] underline hover:text-[#ff0000]",
+          "bg-[#fafafa] text-[#111111] hover:bg-[#e5e5e5] border border-[#e5e5e5]",
         ghost:
-          "bg-transparent text-black hover:text-[#0000ff] border border-transparent",
+          "bg-transparent text-[#111111] hover:bg-[#fafafa] border border-transparent",
+        destructive:
+          "bg-[#111111] text-white hover:bg-[#333333] border border-[#111111]",
+        link:
+          "bg-transparent text-[#111111] underline hover:text-[#666666] border border-transparent p-0 h-auto",
+        outline:
+          "bg-transparent text-[#111111] hover:bg-[#fafafa] border border-[#e5e5e5]",
       },
       size: {
-        default: "h-10 px-4 py-2 gap-2",
-        xs: "h-6 px-2 py-1 text-xs gap-1",
+        default: "h-10 px-5 py-2",
+        xs: "h-7 px-2.5 py-1 text-xs gap-1.5",
         sm: "h-8 px-3 py-1.5 text-sm gap-1.5",
         lg: "h-12 px-6 py-3 text-base gap-2",
         icon: "size-10",
@@ -50,7 +52,7 @@ function Button({
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
   }) {
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot : "button"
 
   return (
     <Comp

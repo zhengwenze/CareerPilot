@@ -4,13 +4,12 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const alertVariants = cva(
-  "group/alert relative grid w-full gap-0.5 border-2 border-black px-4 py-3 text-left text-sm font-mono",
+  "relative grid w-full gap-2 p-4 text-sm",
   {
     variants: {
       variant: {
-        default: "bg-white text-black border-black",
-        destructive:
-          "bg-white text-red border-red",
+        default: "bg-[#fafafa] text-[#111111] border border-[#e5e5e5]",
+        destructive: "bg-[#fafafa] text-[#111111] border border-[#111111]",
       },
     },
     defaultVariants: {
@@ -39,7 +38,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="alert-title"
       className={cn(
-        "font-bold uppercase text-sm mb-1",
+        "font-semibold text-sm",
         className
       )}
       {...props}
@@ -54,10 +53,10 @@ function AlertDescription({
   return (
     <div
       data-slot="alert-description"
-      className={cn("text-sm", className)}
+      className={cn("text-sm text-[#666666]", className)}
       {...props}
     />
   )
 }
 
-export { Alert, AlertTitle, AlertDescription, alertVariants }
+export { Alert, AlertTitle, AlertDescription }

@@ -1,7 +1,7 @@
 STYLEKIT_STYLE_REFERENCE
-style_name: 网页粗野主义
-style_slug: brutalist-web
-style_source: /styles/brutalist-web
+style_name: 单色极简
+style_slug: monochrome
+style_source: /styles/monochrome
 
 # Hard Prompt
 
@@ -13,25 +13,27 @@ style_source: /styles/brutalist-web
 - 输出前自检：颜色、排版、间距、交互是否仍属于该风格。
 
 ## Style Rules
-# Brutalist Web (网页粗野主义) Design System
+# Monochrome (单色极简) Design System
 
-> 回归90年代早期互联网的原始HTML美学，系统字体、蓝色下划线链接、纯白背景、无装饰，内容优先于形式。
+> 纯黑白灰的极致单色设计，通过精确的灰阶层次、字重对比和负空间构建视觉层次，不依赖任何色彩即达到高级感。适合摄影、建筑和高端品牌。
 
 ## 核心理念
 
-Brutalist Web embraces the raw aesthetics of the early 1990s internet. Content is king; decoration is irrelevant.
+单色极简（Monochrome）是对色彩的彻底放弃，仅凭黑、白、灰三者的精确调度构建完整的视觉层次。
 
-Core principles:
-- Content over decoration - every element serves an informational purpose
-- System fonts and monospace stacks - no custom web fonts needed
-- Unstyled HTML feel - as if CSS barely exists
-- Intentional lo-fi appearance - the roughness is the design
-- Blue underlined links, purple visited links - classic browser defaults
-- Times New Roman or Georgia for headings, system sans-serif or monospace for body
-- Pure white backgrounds with black text - maximum readability
-- Thin 1px borders only - no thick borders, no decorative frames
-- Minimal or zero padding - content touches edges
-- No visual hierarchy tricks - the document structure IS the hierarchy
+核心理念：
+- 零色相依赖：不使用任何带有色相（hue）的颜色，所有视觉信息由灰阶传达
+- 灰阶层次：通过 #111111 到 #fafafa 之间的精确灰度梯度建立信息优先级
+- 字重对比：以 font-light 与 font-bold 的差异替代色彩区分
+- 负空间构图：大量留白不是空白，是设计的一部分
+- 网格秩序：严格的网格系统确保每一个元素都有精确的位置
+
+设计原则：
+- 视觉一致性：所有组件必须遵循统一的视觉语言，从色彩到字体到间距保持谐调
+- 层次分明：通过颜色深浅、字号大小、留白空间建立清晰的信息层级
+- 交互反馈：每个可交互元素都必须有明确的 hover、active、focus 状态反馈
+- 响应式适配：设计必须在移动端、平板、桌面端上保持一致的体验
+- 无障碍性：确保色彩对比度符合 WCAG 2.1 AA 标准，所有交互元素可键盘访问
 
 ---
 
@@ -40,47 +42,47 @@ Core principles:
 ### 边框
 ```
 宽度: border
-颜色: border-black
-圆角: rounded-none
+颜色: border-[#e5e5e5]
+圆角: rounded-sm
 ```
 
 ### 阴影
 ```
-小:   shadow-none
-中:   shadow-none
-大:   shadow-none
-悬停: shadow-none
-聚焦: shadow-none
+小:   shadow-sm
+中:   shadow-sm
+大:   shadow-md
+悬停: shadow-sm
+聚焦: ring-1 ring-[#cccccc]
 ```
 
 ### 交互效果
 ```
-悬停位移: 
-过渡动画: 
-
+悬停位移: undefined
+过渡动画: transition-colors duration-200
+按下状态: active:opacity-70
 ```
 
 ### 字体
 ```
-标题: font-serif font-bold
-正文: font-mono text-sm
+标题: font-bold tracking-tight
+正文: font-light
 ```
 
 ### 字号
 ```
-Hero:  text-3xl md:text-5xl
-H1:    text-2xl md:text-4xl
-H2:    text-xl md:text-2xl
+Hero:  text-4xl md:text-6xl lg:text-8xl
+H1:    text-3xl md:text-5xl
+H2:    text-2xl md:text-4xl
 H3:    text-lg md:text-xl
 正文:  text-sm md:text-base
-小字:  text-xs md:text-sm
+小字:  text-xs
 ```
 
 ### 间距
 ```
-Section: py-6 md:py-8
-容器:    px-4
-卡片:    p-4
+Section: py-16 md:py-24
+容器:    px-6 md:px-8
+卡片:    p-6
 ```
 
 ---
@@ -90,43 +92,41 @@ Section: py-6 md:py-8
 以下 class 在本风格中**绝对禁止使用**，生成时必须检查并避免：
 
 ### 禁止的 Class
-- `rounded-sm`
-- `rounded`
-- `rounded-md`
-- `rounded-lg`
-- `rounded-xl`
-- `rounded-2xl`
-- `rounded-3xl`
+- `bg-blue-500`
+- `bg-red-500`
+- `bg-green-500`
+- `bg-pink-500`
+- `bg-purple-500`
+- `bg-yellow-500`
+- `bg-orange-500`
+- `bg-cyan-500`
+- `bg-indigo-500`
+- `bg-teal-500`
+- `bg-emerald-500`
+- `bg-rose-500`
+- `text-blue-500`
+- `text-red-500`
+- `text-green-500`
+- `text-pink-500`
 - `rounded-full`
-- `shadow-sm`
-- `shadow`
-- `shadow-md`
 - `shadow-lg`
 - `shadow-xl`
 - `shadow-2xl`
-- `backdrop-blur`
-- `backdrop-blur-sm`
-- `backdrop-blur-md`
-- `backdrop-blur-lg`
-- `transition`
-- `transition-all`
 
 ### 禁止的模式
-- 匹配 `^rounded-(?!none)`
-- 匹配 `^shadow-(?!none)`
+- 匹配 `^bg-(?:blue|red|green|pink|purple|yellow|orange|cyan|indigo|teal|emerald|rose|violet|amber|lime|sky|fuchsia)-`
+- 匹配 `^text-(?:blue|red|green|pink|purple|yellow|orange|cyan|indigo|teal|emerald|rose|violet|amber|lime|sky|fuchsia)-`
+- 匹配 `^border-(?:blue|red|green|pink|purple|yellow|orange|cyan|indigo|teal|emerald|rose|violet|amber|lime|sky|fuchsia)-`
+- 匹配 `^rounded-full$`
+- 匹配 `^shadow-(?:xl|2xl)$`
 - 匹配 `^bg-gradient-`
-- 匹配 `^backdrop-blur`
-- 匹配 `^animate-`
-- 匹配 `^transition-`
-- 匹配 `^duration-`
 
 ### 禁止原因
-- `rounded-lg`: Brutalist Web uses zero border-radius. Everything is sharp and unstyled.
-- `shadow-lg`: Brutalist Web uses no shadows at all. Raw HTML has no shadows.
-- `bg-gradient-to-r`: Brutalist Web uses flat white backgrounds only. No gradients.
-- `backdrop-blur`: Brutalist Web rejects all modern visual effects. Plain and raw.
-- `transition-all`: Brutalist Web uses no CSS transitions or animations. Static pages only.
-- `animate-pulse`: Brutalist Web forbids all animations. The page is static like 90s HTML.
+- `bg-blue-500`: Monochrome style forbids any color with hue; use grayscale only
+- `text-red-500`: Monochrome style forbids any color with hue; use grayscale only
+- `rounded-full`: Monochrome style uses sharp corners only (rounded-sm or rounded-none)
+- `shadow-xl`: Monochrome style uses minimal shadows only (shadow-sm max)
+- `bg-gradient-to-r`: Monochrome style forbids gradients entirely
 
 > WARNING: 如果你的代码中包含以上任何 class，必须立即替换。
 
@@ -136,28 +136,22 @@ Section: py-6 md:py-8
 
 ### 按钮必须包含
 ```
-rounded-none
-border
-border-black
-font-mono
-bg-white
+rounded-sm
+transition-colors
+font-medium
 ```
 
 ### 卡片必须包含
 ```
-rounded-none
+rounded-sm
 border
-border-black
-bg-white
 ```
 
 ### 输入框必须包含
 ```
-rounded-none
-border
-border-black
-font-mono
-bg-white
+border-b
+focus:outline-none
+bg-transparent
 ```
 
 ---
@@ -175,7 +169,7 @@ bg-white
 
 [CORRECT] **正确示例**（使用硬边缘、无圆角、位移效果）：
 ```html
-<button class="rounded-none border border-black font-mono bg-white bg-[#ff006e] text-white px-4 py-2 md:px-6 md:py-3">
+<button class="rounded-sm transition-colors font-medium bg-[#ff006e] text-white px-4 py-2 md:px-6 md:py-3">
   点击我
 </button>
 ```
@@ -191,8 +185,8 @@ bg-white
 
 [CORRECT] **正确示例**（纯色背景、硬边缘阴影）：
 ```html
-<div class="rounded-none border border-black bg-white p-4">
-  <h3 class="font-serif font-bold text-lg md:text-xl">标题</h3>
+<div class="rounded-sm border p-6">
+  <h3 class="font-bold tracking-tight text-lg md:text-xl">标题</h3>
 </div>
 ```
 
@@ -205,7 +199,7 @@ bg-white
 
 [CORRECT] **正确示例**（黑色粗边框、聚焦阴影）：
 ```html
-<input class="rounded-none border border-black font-mono bg-white px-3 py-2 md:px-4 md:py-3" placeholder="请输入..." />
+<input class="border-b focus:outline-none bg-transparent px-3 py-2 md:px-4 md:py-3" placeholder="请输入..." />
 ```
 
 ---
@@ -323,51 +317,18 @@ bg-white
 
 ## [EXAMPLES] 示例 Prompt
 
-### 1. 90年代个人主页
+### 1. SaaS 着陆页
 
-纯白背景、蓝色下划线链接的朴素个人主页
-
-```
-Use Brutalist Web style to create a personal homepage:
-1. White background, no decoration
-2. Large serif heading with the person's name
-3. Horizontal rule separator
-4. Monospace body text with a brief bio
-5. Blue underlined links section: "My Projects", "My Blog", "Contact"
-6. Simple 1px border table listing recent updates with dates
-7. Footer with "Last updated" date and webmaster email link
-8. No shadows, no rounded corners, no gradients, no animations
-9. Buttons: Windows 95 bevel border style, transition-none
-10. Inputs: inset bevel border, focus:bg-[#ffffcc] yellow highlight
-```
-
-### 2. 学术论文索引
-
-类似早期学术网站的纯文本论文列表页
+生成 单色极简风格的 SaaS 产品着陆页
 
 ```
-Use Brutalist Web style to create an academic paper index:
-1. Serif heading: "Publications"
-2. Numbered list of papers with titles as blue underlined links
-3. Author names in monospace, dates in plain text
-4. Thin 1px horizontal rules between sections
-5. Navigation at top: simple blue links separated by " | "
-6. No cards, no shadows, no visual decoration
-7. Dense text layout with minimal spacing
+Create a SaaS landing page using Monochrome style with hero section, feature grid, testimonials, pricing table, and footer.
 ```
 
-### 3. 极简博客
+### 2. 作品集展示
 
-回归互联网本质的纯内容博客
+生成 单色极简风格的作品集页面
 
 ```
-Use Brutalist Web style to create a minimalist blog:
-1. Site title in large serif font at the top
-2. Navigation as plain blue underlined links below title
-3. Blog posts listed with serif titles, monospace dates, plain text excerpts
-4. "Read more" as a simple blue underlined link
-5. 1px black border separating posts
-6. Sidebar (if any) is just a list of links
-7. Footer: plain text copyright and a link to RSS feed
-8. Maximum readability, zero decoration
+Create a portfolio showcase page using Monochrome style with project grid, about section, contact form, and consistent visual language.
 ```

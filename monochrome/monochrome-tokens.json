@@ -1,28 +1,28 @@
 {
   "colors": {
     "primary": {
-      "value": "#000000",
+      "value": "#111111",
       "type": "color"
     },
     "secondary": {
-      "value": "#ffffff",
+      "value": "#fafafa",
       "type": "color"
     },
     "accent": {
       "accent-1": {
-        "value": "#0000ff",
+        "value": "#666666",
         "type": "color"
       },
       "accent-2": {
-        "value": "#ff0000",
+        "value": "#999999",
         "type": "color"
       },
       "accent-3": {
-        "value": "#008000",
+        "value": "#cccccc",
         "type": "color"
       },
       "accent-4": {
-        "value": "#d60099",
+        "value": "#666666",
         "type": "color"
       }
     },

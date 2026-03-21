@@ -1,25 +1,25 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from "react"
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
 
 export function PageShell({
   className,
   children,
 }: {
-  className?: string;
-  children: ReactNode;
+  className?: string
+  children: ReactNode
 }) {
-  return <div className={cn("bw-page", className)}>{children}</div>;
+  return <div className={cn("bw-page", className)}>{children}</div>
 }
 
 export function MetaChip({
   className,
   children,
 }: {
-  className?: string;
-  children: ReactNode;
+  className?: string
+  children: ReactNode
 }) {
-  return <div className={cn("bw-meta-chip", className)}>{children}</div>;
+  return <div className={cn("bw-meta-chip", className)}>{children}</div>
 }
 
 export function PageHeader({
@@ -30,28 +30,30 @@ export function PageHeader({
   children,
   className,
 }: {
-  eyebrow: string;
-  title: ReactNode;
-  description?: ReactNode;
-  meta?: ReactNode;
-  children?: ReactNode;
-  className?: string;
+  eyebrow: string
+  title: ReactNode
+  description?: ReactNode
+  meta?: ReactNode
+  children?: ReactNode
+  className?: string
 }) {
   return (
     <header className={cn("bw-page-header", className)}>
       <div className="bw-page-header-inner">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="bw-kicker">{eyebrow}</div>
-            <h1 className="bw-page-title mt-6">{title}</h1>
-            {description ? <p className="bw-page-lead mt-4">{description}</p> : null}
+            <h1 className="bw-page-title mt-2">{title}</h1>
+            {description ? (
+              <p className="bw-page-lead mt-3">{description}</p>
+            ) : null}
           </div>
-          {meta ? <div className="bw-meta-row">{meta}</div> : null}
+          {meta ? <div className="bw-meta-row mt-4 lg:mt-0">{meta}</div> : null}
         </div>
         {children}
       </div>
     </header>
-  );
+  )
 }
 
 export function PaperSection({
@@ -62,12 +64,12 @@ export function PaperSection({
   bodyClassName,
   children,
 }: {
-  title: ReactNode;
-  eyebrow?: ReactNode;
-  rightSlot?: ReactNode;
-  className?: string;
-  bodyClassName?: string;
-  children: ReactNode;
+  title: ReactNode
+  eyebrow?: ReactNode
+  rightSlot?: ReactNode
+  className?: string
+  bodyClassName?: string
+  children: ReactNode
 }) {
   return (
     <section className={cn("bw-panel", className)}>
@@ -82,5 +84,5 @@ export function PaperSection({
       </div>
       <div className={cn("bw-panel-body", bodyClassName)}>{children}</div>
     </section>
-  );
+  )
 }

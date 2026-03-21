@@ -38,7 +38,7 @@ export function DashboardTopNav() {
   }
 
   return (
-    <header className="border-b-2 border-black bg-white">
+    <header className="border-b border-[#e5e5e5] bg-white">
       <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -46,11 +46,12 @@ export function DashboardTopNav() {
               <div>
                 <Link
                   href="/dashboard/resume"
-                  className="font-serif text-3xl font-bold text-black no-underline hover:text-[#0000ff]"
+                  className="text-2xl font-semibold text-[#111111] no-underline hover:text-[#666666]"
+                  style={{ fontFamily: "var(--font-heading)", letterSpacing: "-0.02em" }}
                 >
                   CareerPilot
                 </Link>
-                <p className="mt-1 font-mono text-xs uppercase">
+                <p className="mt-1 text-xs text-[#666666]">
                   Tailored Resume / Interview
                 </p>
               </div>
@@ -60,17 +61,17 @@ export function DashboardTopNav() {
                 onClick={() => setIsMenuOpen((current) => !current)}
                 size="icon-sm"
                 type="button"
-                variant="secondary"
+                variant="ghost"
               >
                 {isMenuOpen ? (
-                  <X className="size-4" />
+                  <X className="size-5" />
                 ) : (
-                  <Menu className="size-4" />
+                  <Menu className="size-5" />
                 )}
               </Button>
             </div>
 
-            <nav className="mt-4 hidden flex-col gap-2 lg:flex lg:flex-row lg:gap-2">
+            <nav className="mt-4 hidden flex-col gap-1 lg:flex lg:flex-row lg:gap-1">
               {dashboardNavItems.map((item) => {
                 const active = isItemActive(pathname, item);
 
@@ -83,8 +84,8 @@ export function DashboardTopNav() {
                     }}
                     size="sm"
                     type="button"
-                    variant={active ? "default" : "secondary"}
-                    className="font-mono text-xs hover:font-black"
+                    variant={active ? "default" : "ghost"}
+                    className="text-xs"
                   >
                     {item.title}
                   </Button>
@@ -95,11 +96,11 @@ export function DashboardTopNav() {
 
           <div className="flex flex-col gap-3 lg:items-end">
             {user ? (
-              <div className="border-2 border-black px-3 py-2 font-mono text-sm">
-                <p className="font-bold">
+              <div className="px-3 py-2">
+                <p className="text-sm font-medium text-[#111111]">
                   {user.nickname || "CareerPilot Member"}
                 </p>
-                <p>{user.email}</p>
+                <p className="text-xs text-[#666666]">{user.email}</p>
               </div>
             ) : null}
 
@@ -108,9 +109,9 @@ export function DashboardTopNav() {
               onClick={() => void handleLogout()}
               size="sm"
               type="button"
-              variant="secondary"
+              variant="ghost"
             >
-              {isLoggingOut ? "LOGGING OUT" : "LOGOUT"}
+              {isLoggingOut ? "Logging out" : "Logout"}
             </Button>
           </div>
         </div>

@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, Download, FileUp, RefreshCcw, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  Download,
+  FileUp,
+  RefreshCcw,
+  Sparkles,
+} from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -104,10 +110,11 @@ function upsertResume(current: ResumeRecord[], next: ResumeRecord) {
 
 function upsertWorkflow(
   current: TailoredResumeWorkflowRecord[],
-  next: TailoredResumeWorkflowRecord
+  next: TailoredResumeWorkflowRecord,
 ) {
   const filtered = current.filter(
-    (item) => item.tailored_resume.session_id !== next.tailored_resume.session_id
+    (item) =>
+      item.tailored_resume.session_id !== next.tailored_resume.session_id,
   );
   return [next, ...filtered];
 }
@@ -119,10 +126,12 @@ export default function DashboardResumePage() {
   const preferredWorkflowId = searchParams.get("workflowId");
 
   const [resumes, setResumes] = useState<ResumeRecord[]>([]);
-  const [workflows, setWorkflows] = useState<TailoredResumeWorkflowRecord[]>([]);
+  const [workflows, setWorkflows] = useState<TailoredResumeWorkflowRecord[]>(
+    [],
+  );
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(
-    null
+    null,
   );
   const [jobDraft, setJobDraft] = useState<JobDraft>(createEmptyJobDraft());
   const [pageError, setPageError] = useState("");
@@ -131,12 +140,12 @@ export default function DashboardResumePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-
   const selectedResume =
     resumes.find((item) => item.id === selectedResumeId) ?? null;
   const selectedWorkflow =
-    workflows.find((item) => item.tailored_resume.session_id === selectedWorkflowId) ??
-    null;
+    workflows.find(
+      (item) => item.tailored_resume.session_id === selectedWorkflowId,
+    ) ?? null;
 
   useEffect(() => {
     if (!token) {
@@ -170,7 +179,7 @@ export default function DashboardResumePage() {
 
         if (workflowResult.status === "rejected") {
           setPageError(
-            `专属简历历史加载失败：${getErrorMessage(workflowResult.reason)}`
+            `专属简历历史加载失败：${getErrorMessage(workflowResult.reason)}`,
           );
         }
 
@@ -180,7 +189,7 @@ export default function DashboardResumePage() {
         const nextWorkflow =
           (preferredWorkflowId &&
             nextWorkflows.find(
-              (item) => item.tailored_resume.session_id === preferredWorkflowId
+              (item) => item.tailored_resume.session_id === preferredWorkflowId,
             )) ||
           nextWorkflows[0] ||
           null;
@@ -334,7 +343,7 @@ export default function DashboardResumePage() {
       setSelectedResumeId(workflow.resume.id);
       setJobDraft(toJobDraft(workflow.target_job));
       router.replace(
-        `/dashboard/resume?workflowId=${workflow.tailored_resume.session_id}`
+        `/dashboard/resume?workflowId=${workflow.tailored_resume.session_id}`,
       );
       setStatusMessage("岗位定制版简历已生成，可直接下载 Markdown。");
     } catch (error) {
@@ -356,7 +365,7 @@ export default function DashboardResumePage() {
     try {
       const result = await downloadTailoredResumeMarkdown(
         token,
-        selectedWorkflow.tailored_resume.session_id
+        selectedWorkflow.tailored_resume.session_id,
       );
       const objectUrl = window.URL.createObjectURL(result.blob);
       const link = document.createElement("a");
@@ -383,7 +392,9 @@ export default function DashboardResumePage() {
     setJobDraft(toJobDraft(workflow.target_job));
     setPageError("");
     setStatusMessage("");
-    router.replace(`/dashboard/resume?workflowId=${workflow.tailored_resume.session_id}`);
+    router.replace(
+      `/dashboard/resume?workflowId=${workflow.tailored_resume.session_id}`,
+    );
   }
 
   function handleCreateNewTargetJob() {
@@ -434,8 +445,12 @@ export default function DashboardResumePage() {
         eyebrow="Primary Resume"
         title="主简历"
         rightSlot={
-          <label className="inline-flex">
+          <label
+            className="inline-flex cursor-pointer"
+            htmlFor="resume-upload-input"
+          >
             <input
+              id="resume-upload-input"
               className="hidden"
               disabled={isUploading}
               onChange={handleUploadResume}
@@ -444,7 +459,7 @@ export default function DashboardResumePage() {
             />
             <Button disabled={isUploading} size="sm" type="button">
               <FileUp className="size-4" />
-              {isUploading ? "上传中" : "上传主简历"}
+              {isUploading ? "上传中" : "上传简历"}
             </Button>
           </label>
         }
@@ -485,7 +500,9 @@ export default function DashboardResumePage() {
                       </span>
                     </div>
                     <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/60">
-                      {summarizeText(resume.structured_json?.basic_info.summary)}
+                      {summarizeText(
+                        resume.structured_json?.basic_info.summary,
+                      )}
                     </p>
                     <p className="mt-3 text-xs text-[#1C1C1C]/45">
                       更新于 {formatDate(resume.updated_at)}
@@ -499,17 +516,21 @@ export default function DashboardResumePage() {
               {selectedResume ? (
                 <div className="space-y-5">
                   <div className="flex flex-wrap gap-2">
-                    <MetaChip>{getResumeStatusLabel(selectedResume.parse_status)}</MetaChip>
+                    <MetaChip>
+                      {getResumeStatusLabel(selectedResume.parse_status)}
+                    </MetaChip>
                     <MetaChip>版本 v{selectedResume.latest_version}</MetaChip>
                     <MetaChip>{formatDate(selectedResume.updated_at)}</MetaChip>
                   </div>
 
                   <div>
                     <p className="text-lg font-semibold text-[#1C1C1C]">
-                      {selectedResume.structured_json?.basic_info.name || "未识别姓名"}
+                      {selectedResume.structured_json?.basic_info.name ||
+                        "未识别姓名"}
                     </p>
                     <p className="mt-1 text-sm text-[#1C1C1C]/60">
-                      {selectedResume.structured_json?.basic_info.location || "地点待补充"}
+                      {selectedResume.structured_json?.basic_info.location ||
+                        "地点待补充"}
                     </p>
                   </div>
 
@@ -519,10 +540,12 @@ export default function DashboardResumePage() {
                         联系方式
                       </p>
                       <p className="mt-3 text-sm text-[#1C1C1C]/70">
-                        {selectedResume.structured_json?.basic_info.email || "未识别邮箱"}
+                        {selectedResume.structured_json?.basic_info.email ||
+                          "未识别邮箱"}
                       </p>
                       <p className="mt-1 text-sm text-[#1C1C1C]/70">
-                        {selectedResume.structured_json?.basic_info.phone || "未识别电话"}
+                        {selectedResume.structured_json?.basic_info.phone ||
+                          "未识别电话"}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-[#1C1C1C]/10 p-4">
@@ -530,7 +553,8 @@ export default function DashboardResumePage() {
                         核心摘要
                       </p>
                       <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/70">
-                        {selectedResume.structured_json?.basic_info.summary || "解析完成后会显示摘要。"}
+                        {selectedResume.structured_json?.basic_info.summary ||
+                          "解析完成后会显示摘要。"}
                       </p>
                     </div>
                   </div>
@@ -557,7 +581,12 @@ export default function DashboardResumePage() {
         title="目标岗位"
         rightSlot={
           <div className="flex gap-2">
-            <Button onClick={handleCreateNewTargetJob} size="sm" type="button" variant="secondary">
+            <Button
+              onClick={handleCreateNewTargetJob}
+              size="sm"
+              type="button"
+              variant="secondary"
+            >
               新建岗位
             </Button>
             <Button
@@ -576,7 +605,9 @@ export default function DashboardResumePage() {
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位标题</p>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                  岗位标题
+                </p>
                 <PaperInput
                   value={jobDraft.title}
                   onChange={(event) =>
@@ -589,7 +620,9 @@ export default function DashboardResumePage() {
                 />
               </div>
               <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">公司名称</p>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                  公司名称
+                </p>
                 <PaperInput
                   value={jobDraft.company}
                   onChange={(event) =>
@@ -605,7 +638,9 @@ export default function DashboardResumePage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位地点</p>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                  岗位地点
+                </p>
                 <PaperInput
                   value={jobDraft.job_city}
                   onChange={(event) =>
@@ -618,7 +653,9 @@ export default function DashboardResumePage() {
                 />
               </div>
               <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">来源链接</p>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                  来源链接
+                </p>
                 <PaperInput
                   value={jobDraft.source_url}
                   onChange={(event) =>
@@ -633,7 +670,9 @@ export default function DashboardResumePage() {
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">目标岗位 JD</p>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                目标岗位 JD
+              </p>
               <PaperTextarea
                 value={jobDraft.jd_text}
                 onChange={(event) =>
@@ -650,7 +689,9 @@ export default function DashboardResumePage() {
 
           <div className="space-y-3">
             <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-4">
-              <p className="text-sm font-semibold text-[#1C1C1C]">最近目标岗位</p>
+              <p className="text-sm font-semibold text-[#1C1C1C]">
+                最近目标岗位
+              </p>
               <p className="mt-1 text-sm leading-relaxed text-[#1C1C1C]/60">
                 这里保留已生成过专属简历的岗位历史，可直接切换查看成品。
               </p>
@@ -705,12 +746,15 @@ export default function DashboardResumePage() {
 
       <PaperSection
         eyebrow="Tailored Resume Output"
-        title="专属简历成品"
+        title="您的专属简历"
         rightSlot={
           selectedWorkflow ? (
             <div className="flex gap-2">
               <Button
-                disabled={isDownloading || !selectedWorkflow.tailored_resume.has_downloadable_markdown}
+                disabled={
+                  isDownloading ||
+                  !selectedWorkflow.tailored_resume.has_downloadable_markdown
+                }
                 onClick={() => void handleDownload()}
                 size="sm"
                 type="button"
@@ -736,9 +780,15 @@ export default function DashboardResumePage() {
         {selectedWorkflow ? (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              <MetaChip>{getFitBandLabel(selectedWorkflow.tailored_resume.fit_band)}</MetaChip>
-              <MetaChip>评分 {selectedWorkflow.tailored_resume.overall_score}</MetaChip>
-              <MetaChip>{formatDate(selectedWorkflow.tailored_resume.updated_at)}</MetaChip>
+              <MetaChip>
+                {getFitBandLabel(selectedWorkflow.tailored_resume.fit_band)}
+              </MetaChip>
+              <MetaChip>
+                评分 {selectedWorkflow.tailored_resume.overall_score}
+              </MetaChip>
+              <MetaChip>
+                {formatDate(selectedWorkflow.tailored_resume.updated_at)}
+              </MetaChip>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
@@ -750,7 +800,9 @@ export default function DashboardResumePage() {
                     : ""}
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
-                  这是当前岗位的定制版简历成品。后台仍然会生成 match report、rewrite tasks 和 fact check，但它们不再作为用户主交付物展示。
+                  这是当前岗位的定制版简历成品。后台仍然会生成 match
+                  report、rewrite tasks 和 fact
+                  check，但它们不再作为用户主交付物展示。
                 </p>
                 <pre className="mt-5 overflow-x-auto rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
                   {selectedWorkflow.tailored_resume.optimized_resume_md}
@@ -759,9 +811,13 @@ export default function DashboardResumePage() {
 
               <div className="space-y-3">
                 <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-4">
-                  <p className="text-sm font-semibold text-[#1C1C1C]">关联对象</p>
+                  <p className="text-sm font-semibold text-[#1C1C1C]">
+                    关联对象
+                  </p>
                   <p className="mt-3 text-sm text-[#1C1C1C]/60">
-                    主简历：{selectedWorkflow.resume.structured_json?.basic_info.name || selectedWorkflow.resume.file_name}
+                    主简历：
+                    {selectedWorkflow.resume.structured_json?.basic_info.name ||
+                      selectedWorkflow.resume.file_name}
                   </p>
                   <p className="mt-1 text-sm text-[#1C1C1C]/60">
                     目标岗位：{selectedWorkflow.target_job.title}

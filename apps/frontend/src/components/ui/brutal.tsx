@@ -1,49 +1,46 @@
-import { cn } from "@/lib/utils";
-import type { ButtonHTMLAttributes, InputHTMLAttributes } from "react";
+import { cn } from "@/lib/utils"
+import type { ButtonHTMLAttributes, InputHTMLAttributes } from "react"
 
-const brutalButtonBase =
-  "inline-flex shrink-0 cursor-pointer items-center justify-center border-4 border-black font-black uppercase text-sm whitespace-nowrap transition-all select-none pointer-events-auto focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-black focus-visible:ring-offset-[-2px] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0";
-
-export function BrutalButton({
+function MonoButton({
   variant = "primary",
   size = "md",
   className,
   children,
   ...props
 }: {
-  variant?: "primary" | "secondary" | "danger";
-  size?: "sm" | "md" | "lg";
+  variant?: "primary" | "secondary" | "ghost"
+  size?: "sm" | "md" | "lg"
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   const sizeClassName =
     size === "sm"
-      ? "h-8 px-4 py-1.5 text-xs gap-1.5"
+      ? "h-8 px-3 py-1 text-xs gap-1.5"
       : size === "lg"
-        ? "h-14 px-8 py-3 text-base gap-2"
-        : "h-10 px-5 py-2 text-sm gap-1.5";
+        ? "h-12 px-6 py-3 text-base gap-2"
+        : "h-10 px-4 py-2 text-sm gap-1.5"
 
   const variantClassName =
     variant === "primary"
-      ? "bg-[#ccff00] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px]"
-      : variant === "danger"
-        ? "bg-[#ff006e] text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px]"
-        : "bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px]";
+      ? "bg-[#111111] text-white hover:bg-[#333333] border border-[#111111]"
+      : variant === "ghost"
+        ? "bg-transparent text-[#111111] hover:bg-[#fafafa] border border-transparent"
+        : "bg-[#fafafa] text-[#111111] hover:bg-[#e5e5e5] border border-[#e5e5e5]"
 
   return (
     <button
       {...props}
       className={cn(
-        brutalButtonBase,
+        "inline-flex shrink-0 cursor-pointer items-center justify-center font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
         sizeClassName,
         variantClassName,
-        className,
+        className
       )}
     >
       {children}
     </button>
-  );
+  )
 }
 
-export function BrutalCard({
+function MonoCard({
   className,
   children,
   ...props
@@ -51,29 +48,29 @@ export function BrutalCard({
   return (
     <div
       className={cn(
-        "border-4 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]",
-        className,
+        "border border-[#e5e5e5] bg-white",
+        className
       )}
       {...props}
     >
       {children}
     </div>
-  );
+  )
 }
 
-export function BrutalSection({
+function MonoSection({
   className,
   children,
   ...props
 }: React.ComponentProps<"section">) {
   return (
-    <section className={cn("border-b-4 border-black", className)} {...props}>
+    <section className={cn("border-b border-[#e5e5e5]", className)} {...props}>
       {children}
     </section>
-  );
+  )
 }
 
-export function BrutalTag({
+function MonoTag({
   className,
   children,
   ...props
@@ -81,29 +78,55 @@ export function BrutalTag({
   return (
     <div
       className={cn(
-        "inline-block border-2 border-black bg-[#ccff00] px-3 py-1 font-black text-xs uppercase",
-        className,
+        "inline-block border border-[#e5e5e5] bg-[#fafafa] px-3 py-1 text-xs font-medium text-[#111111]",
+        className
       )}
       {...props}
     >
       {children}
     </div>
-  );
+  )
 }
 
-export function BrutalInput({
+function MonoInput({
   className,
   error,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
   return (
     <input
-      {...props}
       className={cn(
-        "h-10 w-full border-4 border-black bg-white px-3 py-2 font-mono text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-4 focus:ring-black focus:ring-offset-[-2px] disabled:cursor-not-allowed disabled:opacity-50",
-        error && "border-[#ff006e] focus:ring-[#ff006e]",
-        className,
+        "flex h-10 w-full border bg-white px-4 py-2 text-sm text-[#111111] placeholder:text-[#999999] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] disabled:cursor-not-allowed disabled:opacity-50",
+        error ? "border-[#111111]" : "border-[#e5e5e5]",
+        className
       )}
+      {...props}
     />
-  );
+  )
+}
+
+function MonoTextarea({
+  className,
+  error,
+  ...props
+}: InputHTMLAttributes<HTMLTextAreaElement> & { error?: boolean }) {
+  return (
+    <textarea
+      className={cn(
+        "flex min-h-24 w-full border bg-white px-4 py-3 text-sm text-[#111111] placeholder:text-[#999999] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
+        error ? "border-[#111111]" : "border-[#e5e5e5]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export {
+  MonoButton as BrutalButton,
+  MonoCard as BrutalCard,
+  MonoSection as BrutalSection,
+  MonoTag as BrutalTag,
+  MonoInput as BrutalInput,
+  MonoTextarea as BrutalTextarea,
 }
