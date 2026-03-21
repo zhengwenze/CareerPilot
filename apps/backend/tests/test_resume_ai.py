@@ -133,16 +133,83 @@ async def test_resume_ai_normalizes_object_lists_to_strings(
     assert result.structured_data.education == [
         "新疆大学 本科 软件工程 2023.09 2027.06 211 双一流"
     ]
+    assert result.structured_data.education_items[0].school == "新疆大学"
+    assert result.structured_data.education_items[0].major == "软件工程"
     assert result.structured_data.projects == ["黑马点评 高可用秒杀系统 完成架构设计与实现。"]
+    assert result.structured_data.project_items[0].name == "黑马点评"
+    assert result.structured_data.project_items[0].summary == "高可用秒杀系统"
     assert "CareerPilot AI 开发实习生 负责 Agent 工作流开发 搭建简历解析模块。" in (
         result.structured_data.work_experience
     )
+    assert result.structured_data.work_experience_items[0].company == "CareerPilot"
+    assert len(result.structured_data.work_experience_items[0].bullets) == 2
     assert "Python" in result.structured_data.skills.technical
     assert "Docker Git" in result.structured_data.skills.tools
     assert result.structured_data.certifications == [
         "百度之星金奖 竞赛。",
         "精灵e站软件 软著。",
     ]
+    assert result.structured_data.certification_items[0].name == "百度之星金奖"
+
+
+@pytest.mark.asyncio
+async def test_resume_ai_accepts_awards_and_custom_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_request_json_completion(**_: object) -> dict[str, object]:
+        return {
+            "structured_json": {
+                "basic_info": {"name": "郑文泽"},
+                "education": [],
+                "work_experience": [],
+                "projects": [],
+                "skills": {"technical": [], "tools": [], "languages": ["English"]},
+                "certifications": [],
+                "awards": ["百度之星金奖"],
+                "custom_sections": [
+                    {
+                        "title": "校园经历",
+                        "items": [
+                            {
+                                "title": "学生会",
+                                "subtitle": "技术部",
+                                "years": "2022 - 2023",
+                                "description": ["负责招新系统开发"],
+                            }
+                        ],
+                    }
+                ],
+            },
+            "confidence": 0.8,
+            "corrections": [],
+            "reasoning": "ok",
+        }
+
+    monkeypatch.setattr(
+        "app.services.resume_ai.request_json_completion",
+        fake_request_json_completion,
+    )
+
+    provider = ConfiguredResumeAICorrectionProvider(
+        provider="minimax",
+        base_url="https://api.minimaxi.com/anthropic",
+        api_key="test-key",
+        model="MiniMax-M2.5",
+        timeout_seconds=30,
+    )
+
+    result = await provider.correct(
+        ResumeAICorrectionRequest(
+            raw_text="郑文泽 百度之星金奖 学生会 技术部 负责招新系统开发 English",
+            rule_structured_json={},
+        )
+    )
+
+    assert result.structured_data is not None
+    assert result.structured_data.awards == ["百度之星金奖"]
+    assert result.structured_data.skills.languages == ["English"]
+    assert result.structured_data.custom_sections[0].title == "校园经历"
+    assert result.structured_data.custom_sections[0].items[0].title == "学生会"
 
 
 @pytest.mark.asyncio

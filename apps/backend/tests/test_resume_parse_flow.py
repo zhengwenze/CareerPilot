@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+from io import BytesIO
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.errors import ApiException
 from app.core.config import Settings
 from app.models import Resume, ResumeParseJob, User
 from app.schemas.resume import ResumeStructuredData
 from app.services.ai_client import AIClientError
-from app.services.resume import process_resume_parse_job
+from app.services.resume import process_resume_parse_job, validate_resume_upload
 
 
 class FakeStorage:
@@ -26,15 +29,33 @@ class AppliedAIProvider:
             structured_data=ResumeStructuredData(
                 basic_info={
                     "name": "郑文泽",
+                    "title": "AI 应用开发",
+                    "status": "立即到岗",
                     "email": "zheng@example.com",
                     "phone": "17590522997",
                     "location": "北京",
                     "summary": "",
                 },
-                education=["新疆大学 软件工程 本科 2023.09 2027.06 211 双一流"],
+                education_items=[
+                    {
+                        "school": "新疆大学",
+                        "major": "软件工程",
+                        "degree": "本科",
+                        "start_date": "2023.09",
+                        "end_date": "2027.06",
+                        "honors": ["211", "双一流"],
+                    }
+                ],
                 work_experience=[],
-                projects=[
-                    "黑马点评 高可用秒杀系统 完成高可用秒杀系统从0到1的架构设计与实现"
+                project_items=[
+                    {
+                        "name": "黑马点评",
+                        "role": "核心开发",
+                        "summary": "高可用秒杀系统",
+                        "bullets": [
+                            {"text": "完成高可用秒杀系统从0到1的架构设计与实现"}
+                        ],
+                    }
                 ],
                 skills={
                     "technical": ["Python", "FastAPI"],
@@ -105,8 +126,17 @@ async def test_process_resume_parse_job_persists_success_with_applied_ai(
     assert persisted_resume.parse_artifacts_json["meta"]["source_type"] == "pdf"
     assert persisted_resume.parse_artifacts_json["meta"]["ai_correction_applied"] is True
     assert persisted_resume.parse_artifacts_json["quality"]["text_extractable"] is True
+    assert persisted_resume.parse_artifacts_json["canonical_resume_md"].startswith(
+        "# 郑文泽"
+    )
+    assert "AI 应用开发｜立即到岗" in persisted_resume.parse_artifacts_json["canonical_resume_md"]
+    assert "## 项目经历" in persisted_resume.parse_artifacts_json["canonical_resume_md"]
+    assert "### 黑马点评｜核心开发" in persisted_resume.parse_artifacts_json["canonical_resume_md"]
+    assert "- 完成高可用秒杀系统从0到1的架构设计与实现" in (
+        persisted_resume.parse_artifacts_json["canonical_resume_md"]
+    )
     assert persisted_resume.structured_json["projects"] == [
-        "黑马点评 高可用秒杀系统 完成高可用秒杀系统从0到1的架构设计与实现。"
+        "黑马点评 核心开发 高可用秒杀系统 完成高可用秒杀系统从0到1的架构设计与实现。"
     ]
     assert persisted_job.status == "success"
     assert persisted_job.ai_status == "applied"
@@ -160,6 +190,10 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_invalid_ai(
     assert persisted_resume.structured_json == rule_result.model_dump()
     assert persisted_resume.parse_artifacts_json["pipeline"]["current_stage"] == "completed"
     assert persisted_resume.parse_artifacts_json["meta"]["ai_correction_applied"] is False
+    assert persisted_resume.parse_artifacts_json["canonical_resume_md"].startswith(
+        "# 郑文泽"
+    )
+    assert "## 教育经历" in persisted_resume.parse_artifacts_json["canonical_resume_md"]
     assert any(
         item["status"] == "fallback"
         for item in persisted_resume.parse_artifacts_json["pipeline"]["history"]
@@ -172,108 +206,42 @@ async def test_process_resume_parse_job_falls_back_to_rule_result_on_invalid_ai(
 
 
 @pytest.mark.asyncio
-async def test_process_resume_parse_job_supports_docx_source_type(
-    session_factory: async_sessionmaker[AsyncSession],
-    db_session: AsyncSession,
-    test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.asyncio
+async def test_validate_resume_upload_rejects_non_pdf_files(
 ) -> None:
-    resume, parse_job = await _create_resume_and_parse_job(
-        db_session,
-        test_user,
-        file_name="resume.docx",
-        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    with pytest.raises(ApiException) as exc_info:
+        await validate_resume_upload(
+            UploadFile(
+                file=BytesIO(b"fake docx"),
+                filename="resume.docx",
+                headers={"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+            ),
+            settings=Settings(),
+        )
 
-    monkeypatch.setattr(
-        "app.services.resume.extract_text_from_resume_bytes",
-        lambda **_kwargs: SimpleNamespace(
-            raw_text=_raw_text(),
-            source_type="docx",
-            ocr_used=False,
-            ocr_engine="none",
-        ),
-    )
-    monkeypatch.setattr(
-        "app.services.resume.build_structured_resume",
-        lambda _raw_text: _rule_structured_data(),
-    )
-    monkeypatch.setattr(
-        "app.services.resume.build_resume_ai_correction_provider",
-        lambda _settings: InvalidAIProvider(),
-    )
-
-    await process_resume_parse_job(
-        resume_id=resume.id,
-        parse_job_id=parse_job.id,
-        storage=FakeStorage(),
-        session_factory=session_factory,
-        settings=Settings(),
-    )
-
-    async with session_factory() as session:
-        persisted_resume = await session.get(Resume, resume.id)
-
-    assert persisted_resume is not None
-    assert persisted_resume.parse_status == "success"
-    assert persisted_resume.parse_artifacts_json["meta"]["source_type"] == "docx"
-    assert persisted_resume.structured_json["meta"]["source_type"] == "docx"
+    assert exc_info.value.message == "Only text-based PDF resumes are supported"
 
 
 @pytest.mark.asyncio
-async def test_process_resume_parse_job_marks_ocr_for_image_resume(
-    session_factory: async_sessionmaker[AsyncSession],
-    db_session: AsyncSession,
-    test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    resume, parse_job = await _create_resume_and_parse_job(
-        db_session,
-        test_user,
-        file_name="resume.png",
-        content_type="image/png",
-    )
-
-    monkeypatch.setattr(
-        "app.services.resume.extract_text_from_resume_bytes",
-        lambda **_kwargs: SimpleNamespace(
-            raw_text=_raw_text(),
-            source_type="image",
-            ocr_used=True,
-            ocr_engine="tesseract",
+async def test_validate_resume_upload_accepts_pdf_files() -> None:
+    file_name, content_type, content = await validate_resume_upload(
+        UploadFile(
+            file=BytesIO(b"%PDF-1.4 fake"),
+            filename="resume.pdf",
+            headers={"content-type": "application/pdf"},
         ),
-    )
-    monkeypatch.setattr(
-        "app.services.resume.build_structured_resume",
-        lambda _raw_text: _rule_structured_data(),
-    )
-    monkeypatch.setattr(
-        "app.services.resume.build_resume_ai_correction_provider",
-        lambda _settings: InvalidAIProvider(),
-    )
-
-    await process_resume_parse_job(
-        resume_id=resume.id,
-        parse_job_id=parse_job.id,
-        storage=FakeStorage(),
-        session_factory=session_factory,
         settings=Settings(),
     )
 
-    async with session_factory() as session:
-        persisted_resume = await session.get(Resume, resume.id)
-
-    assert persisted_resume is not None
-    assert persisted_resume.parse_status == "success"
-    assert persisted_resume.parse_artifacts_json["meta"]["source_type"] == "image"
-    assert persisted_resume.parse_artifacts_json["ocr"]["used"] is True
-    assert persisted_resume.parse_artifacts_json["ocr"]["engine"] == "tesseract"
-    assert persisted_resume.structured_json["meta"]["source_type"] == "image"
+    assert file_name == "resume.pdf"
+    assert content_type == "application/pdf"
+    assert content == b"%PDF-1.4 fake"
 
 
 def _raw_text() -> str:
     return """
     郑文泽
+    AI 应用开发 立即到岗
     zheng@example.com 17590522997 北京
     教育背景
     新疆大学 软件工程 本科 2023.09-2027.06 211 双一流

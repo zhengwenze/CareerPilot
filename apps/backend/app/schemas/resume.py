@@ -9,9 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class ResumeBasicInfo(BaseModel):
     name: str = ""
+    title: str = ""
+    status: str = ""
     email: str = ""
     phone: str = ""
     location: str = ""
+    links: list[str] = Field(default_factory=list)
     summary: str = ""
 
 
@@ -83,6 +86,21 @@ class ResumeCertificationItem(BaseModel):
     source_refs: list[str] = Field(default_factory=list)
 
 
+class ResumeCustomSectionItem(BaseModel):
+    id: str = ""
+    title: str = ""
+    subtitle: str = ""
+    years: str = ""
+    description: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+
+
+class ResumeCustomSection(BaseModel):
+    id: str = ""
+    title: str = ""
+    items: list[ResumeCustomSectionItem] = Field(default_factory=list)
+
+
 class ResumeStructuredData(BaseModel):
     meta: ResumeMeta = Field(default_factory=ResumeMeta)
     basic_info: ResumeBasicInfo = Field(default_factory=ResumeBasicInfo)
@@ -95,6 +113,8 @@ class ResumeStructuredData(BaseModel):
     skills: ResumeSkills = Field(default_factory=ResumeSkills)
     certifications: list[str] = Field(default_factory=list)
     certification_items: list[ResumeCertificationItem] = Field(default_factory=list)
+    awards: list[str] = Field(default_factory=list)
+    custom_sections: list[ResumeCustomSection] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _sync_legacy_and_canonical(self) -> "ResumeStructuredData":
@@ -242,6 +262,7 @@ class ResumeParseArtifactsData(BaseModel):
     document_blocks: list[ResumeParseDocumentBlock] = Field(default_factory=list)
     ocr: ResumeParseOCRInfo = Field(default_factory=ResumeParseOCRInfo)
     quality: ResumeParseQualityInfo = Field(default_factory=ResumeParseQualityInfo)
+    canonical_resume_md: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 

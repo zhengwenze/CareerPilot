@@ -32,12 +32,15 @@ from app.schemas.resume_optimization import (
     ResumeOptimizationSectionDraft,
     ResumeOptimizationSessionCreateRequest,
     ResumeOptimizationSessionResponse,
-    ResumeOptimizationTaskState,
     ResumeOptimizationSessionUpdateRequest,
+    ResumeOptimizationTaskState,
 )
 from app.services.ai_client import AIClientError
 from app.services.match_support import mark_reports_stale_for_resume
-from app.services.resume_optimizer_ai import build_resume_optimization_ai_provider
+from app.services.resume_optimizer_ai import (
+    AIResumeOptimizationPayload,
+    build_resume_optimization_ai_provider,
+)
 
 TEXT_TOKEN_PATTERN = re.compile(r"[a-z0-9+#./-]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?%?|\d+[kKwW万亿千百]?")
@@ -170,7 +173,9 @@ def _score_text_match(item_text: str, query_terms: list[str]) -> int:
 
 
 def _work_anchor_text(item: ResumeWorkExperienceItem) -> str:
-    bullet_text = " ".join(bullet.text.strip() for bullet in item.bullets if bullet.text.strip())
+    bullet_text = " ".join(
+        bullet.text.strip() for bullet in item.bullets if bullet.text.strip()
+    )
     return " ".join(
         part
         for part in [
@@ -185,7 +190,9 @@ def _work_anchor_text(item: ResumeWorkExperienceItem) -> str:
 
 
 def _project_anchor_text(item: ResumeProjectItem) -> str:
-    bullet_text = " ".join(bullet.text.strip() for bullet in item.bullets if bullet.text.strip())
+    bullet_text = " ".join(
+        bullet.text.strip() for bullet in item.bullets if bullet.text.strip()
+    )
     return " ".join(
         part
         for part in [
@@ -200,7 +207,9 @@ def _project_anchor_text(item: ResumeProjectItem) -> str:
     ).strip()
 
 
-def _serialize_selected_tasks(raw_value: dict[str, Any]) -> list[ResumeOptimizationTaskState]:
+def _serialize_selected_tasks(
+    raw_value: dict[str, Any],
+) -> list[ResumeOptimizationTaskState]:
     return [
         ResumeOptimizationTaskState.model_validate(item)
         for item in raw_value.get("tasks", [])
@@ -208,7 +217,9 @@ def _serialize_selected_tasks(raw_value: dict[str, Any]) -> list[ResumeOptimizat
     ]
 
 
-def _serialize_rewrite_tasks(raw_value: dict[str, Any]) -> list[ResumeOptimizationTaskState]:
+def _serialize_rewrite_tasks(
+    raw_value: dict[str, Any],
+) -> list[ResumeOptimizationTaskState]:
     return [
         ResumeOptimizationTaskState.model_validate(item)
         for item in raw_value.get("tasks", [])
@@ -226,7 +237,9 @@ def _serialize_draft_sections(
     return sections
 
 
-def _serialize_optimized_resume(raw_value: dict[str, Any]) -> ResumeStructuredData | None:
+def _serialize_optimized_resume(
+    raw_value: dict[str, Any],
+) -> ResumeStructuredData | None:
     if not raw_value:
         return None
     return ResumeStructuredData.model_validate(raw_value)
@@ -279,7 +292,9 @@ def serialize_resume_optimization_session(
     job: JobDescription,
     report: MatchReport,
 ) -> ResumeOptimizationSessionResponse:
-    optimized_resume = _serialize_optimized_resume(session_record.optimized_resume_json or {})
+    optimized_resume = _serialize_optimized_resume(
+        session_record.optimized_resume_json or {}
+    )
     optimized_resume_md = session_record.optimized_resume_md or ""
     return ResumeOptimizationSessionResponse(
         id=session_record.id,
@@ -295,13 +310,19 @@ def serialize_resume_optimization_session(
         tailoring_plan_snapshot=session_record.tailoring_plan_snapshot_json or {},
         diagnosis_json=session_record.diagnosis_json or {},
         rewrite_tasks=_serialize_rewrite_tasks(session_record.rewrite_tasks_json or {}),
-        draft_sections=_serialize_draft_sections(session_record.draft_sections_json or {}),
-        selected_tasks=_serialize_selected_tasks(session_record.selected_tasks_json or {}),
+        draft_sections=_serialize_draft_sections(
+            session_record.draft_sections_json or {}
+        ),
+        selected_tasks=_serialize_selected_tasks(
+            session_record.selected_tasks_json or {}
+        ),
         optimized_resume_json=optimized_resume,
         fact_check_report_json=session_record.fact_check_report_json or {},
         optimized_resume_md=optimized_resume_md,
         has_downloadable_markdown=bool(optimized_resume_md.strip()),
-        downloadable_file_name=_build_downloadable_file_name(session_record, optimized_resume),
+        downloadable_file_name=_build_downloadable_file_name(
+            session_record, optimized_resume
+        ),
         downstream_contract=_build_downstream_contract(),
         is_stale=report.stale_status == "stale",
         created_at=session_record.created_at,
@@ -349,11 +370,17 @@ def _resolve_target_section(
         matched_jd_fields=matched_jd_fields,
     )
     work_score = max(
-        (_score_text_match(_work_anchor_text(item), query_terms) for item in current_resume.work_experience_items),
+        (
+            _score_text_match(_work_anchor_text(item), query_terms)
+            for item in current_resume.work_experience_items
+        ),
         default=0,
     )
     project_score = max(
-        (_score_text_match(_project_anchor_text(item), query_terms) for item in current_resume.project_items),
+        (
+            _score_text_match(_project_anchor_text(item), query_terms)
+            for item in current_resume.project_items
+        ),
         default=0,
     )
     if project_score > work_score:
@@ -446,7 +473,9 @@ def _build_rewrite_tasks(
     tailoring_plan = report.tailoring_plan_json or {}
     evidence_map_json = report.evidence_map_json or {}
     gap_json = report.gap_json or {}
-    raw_tasks = tailoring_plan.get("rewrite_tasks") or (report.action_pack_json or {}).get(
+    raw_tasks = tailoring_plan.get("rewrite_tasks") or (
+        report.action_pack_json or {}
+    ).get(
         "resume_tailoring_tasks",
         [],
     )
@@ -471,7 +500,8 @@ def _build_rewrite_tasks(
             {
                 "priority": index,
                 "title": label,
-                "instruction": gap_lookup[label].get("reason") or f"补强 {label} 相关表达",
+                "instruction": gap_lookup[label].get("reason")
+                or f"补强 {label} 相关表达",
                 "target_section": "work_experience_or_projects",
             }
             for index, label in enumerate(gap_lookup.keys(), start=1)
@@ -484,7 +514,9 @@ def _build_rewrite_tasks(
         title = str(raw_task.get("title") or f"改写任务 {index}").strip()
         instruction = str(raw_task.get("instruction") or "").strip()
         section_key = _resolve_target_section(
-            requested_section=str(raw_task.get("target_section", "work_experience_or_projects")),
+            requested_section=str(
+                raw_task.get("target_section", "work_experience_or_projects")
+            ),
             title=title,
             instruction=instruction,
             current_resume=current_resume,
@@ -536,7 +568,8 @@ def _build_rewrite_tasks(
                 *[
                     item
                     for item in evidence_items
-                    if _score_text_match(item, [title, instruction, target_requirement]) > 0
+                    if _score_text_match(item, [title, instruction, target_requirement])
+                    > 0
                 ],
             ]
         )[:4]
@@ -550,7 +583,8 @@ def _build_rewrite_tasks(
             ResumeOptimizationTaskState(
                 key=f"task-{index}",
                 title=title,
-                instruction=instruction or f"基于已验证证据强化 {target_requirement} 相关表达",
+                instruction=instruction
+                or f"基于已验证证据强化 {target_requirement} 相关表达",
                 target_section=section_key,
                 target_requirement=target_requirement,
                 issue=str(
@@ -558,7 +592,8 @@ def _build_rewrite_tasks(
                     or f"当前简历未充分体现 {target_requirement} 对岗位的支撑。"
                 ),
                 available_evidence=available_evidence,
-                rewrite_instruction=instruction or f"只基于既有事实重写 {section_key} 表达",
+                rewrite_instruction=instruction
+                or f"只基于既有事实重写 {section_key} 表达",
                 risk_note=(
                     "若缺少直接证据，只能保持原事实并在诊断中提示补充，禁止新增经历、技能、数字或时间。"
                 ),
@@ -581,17 +616,29 @@ def _build_default_draft_sections(
     selected_tasks: list[ResumeOptimizationTaskState],
 ) -> dict[str, ResumeOptimizationSectionDraft]:
     findings = fact_check_report.get("findings", [])
-    section_findings: dict[str, list[str]] = {"summary": [], "work_experience": [], "projects": []}
+    section_findings: dict[str, list[str]] = {
+        "summary": [],
+        "work_experience": [],
+        "projects": [],
+    }
     for finding in findings:
         if not isinstance(finding, dict):
             continue
         section_key = str(finding.get("section") or "").strip()
         if section_key in section_findings:
-            section_findings[section_key].append(str(finding.get("message") or "").strip())
-    task_titles_by_section: dict[str, list[str]] = {"summary": [], "work_experience": [], "projects": []}
+            section_findings[section_key].append(
+                str(finding.get("message") or "").strip()
+            )
+    task_titles_by_section: dict[str, list[str]] = {
+        "summary": [],
+        "work_experience": [],
+        "projects": [],
+    }
     for task in selected_tasks:
         if task.selected:
-            task_titles_by_section.setdefault(task.target_section, []).append(task.title)
+            task_titles_by_section.setdefault(task.target_section, []).append(
+                task.title
+            )
     return {
         "summary": ResumeOptimizationSectionDraft(
             key="summary",
@@ -612,7 +659,10 @@ def _build_default_draft_sections(
             suggested_text=_newline_join(optimized_resume.work_experience),
             mode="replace",
             diagnostics=_dedupe_strings(
-                [*task_titles_by_section["work_experience"], *section_findings["work_experience"]]
+                [
+                    *task_titles_by_section["work_experience"],
+                    *section_findings["work_experience"],
+                ]
             ),
         ),
         "projects": ResumeOptimizationSectionDraft(
@@ -688,7 +738,9 @@ def _merge_ai_payload_into_resume(
                 {
                     **bullet.model_dump(),
                     "id": bullet.id or f"{target.id}_b{index}",
-                    "source_refs": bullet.source_refs or target.source_refs or [target.id],
+                    "source_refs": bullet.source_refs
+                    or target.source_refs
+                    or [target.id],
                 }
             )
             merged_bullets.append(merged_bullet)
@@ -705,7 +757,9 @@ def _merge_ai_payload_into_resume(
                 {
                     **bullet.model_dump(),
                     "id": bullet.id or f"{target.id}_b{index}",
-                    "source_refs": bullet.source_refs or target.source_refs or [target.id],
+                    "source_refs": bullet.source_refs
+                    or target.source_refs
+                    or [target.id],
                 }
             )
             merged_bullets.append(merged_bullet)
@@ -769,26 +823,50 @@ def _build_fact_check_report(
     findings: list[dict[str, Any]] = []
 
     original_company_map = {
-        item.id: (item.company.strip(), item.title.strip(), item.start_date.strip(), item.end_date.strip())
+        item.id: (
+            item.company.strip(),
+            item.title.strip(),
+            item.start_date.strip(),
+            item.end_date.strip(),
+        )
         for item in original_resume.work_experience_items
     }
     optimized_company_map = {
-        item.id: (item.company.strip(), item.title.strip(), item.start_date.strip(), item.end_date.strip())
+        item.id: (
+            item.company.strip(),
+            item.title.strip(),
+            item.start_date.strip(),
+            item.end_date.strip(),
+        )
         for item in optimized_resume.work_experience_items
     }
     original_project_map = {
-        item.id: (item.name.strip(), item.role.strip(), item.start_date.strip(), item.end_date.strip())
+        item.id: (
+            item.name.strip(),
+            item.role.strip(),
+            item.start_date.strip(),
+            item.end_date.strip(),
+        )
         for item in original_resume.project_items
     }
     optimized_project_map = {
-        item.id: (item.name.strip(), item.role.strip(), item.start_date.strip(), item.end_date.strip())
+        item.id: (
+            item.name.strip(),
+            item.role.strip(),
+            item.start_date.strip(),
+            item.end_date.strip(),
+        )
         for item in optimized_resume.project_items
     }
     original_school_names = {
-        item.school.strip() for item in original_resume.education_items if item.school.strip()
+        item.school.strip()
+        for item in original_resume.education_items
+        if item.school.strip()
     }
     optimized_school_names = {
-        item.school.strip() for item in optimized_resume.education_items if item.school.strip()
+        item.school.strip()
+        for item in optimized_resume.education_items
+        if item.school.strip()
     }
     if optimized_school_names - original_school_names:
         findings.append(
@@ -796,14 +874,18 @@ def _build_fact_check_report(
                 "type": "new_school",
                 "severity": "high",
                 "section": "education",
-                "message": f"检测到新增学校：{', '.join(sorted(optimized_school_names - original_school_names))}",
+                "message": (
+                    "检测到新增学校："
+                    + ", ".join(sorted(optimized_school_names - original_school_names))
+                ),
             }
         )
 
     added_companies = {
         company
         for _item_id, (company, _title, _start, _end) in optimized_company_map.items()
-        if company and company not in {value[0] for value in original_company_map.values()}
+        if company
+        and company not in {value[0] for value in original_company_map.values()}
     }
     if added_companies:
         findings.append(
@@ -873,7 +955,9 @@ def _build_fact_check_report(
         *optimized_resume.projects,
         *optimized_resume.certifications,
     ]
-    new_numbers = _extract_number_tokens(optimized_texts) - _extract_number_tokens(original_texts)
+    new_numbers = _extract_number_tokens(optimized_texts) - _extract_number_tokens(
+        original_texts
+    )
     if new_numbers:
         findings.append(
             {
@@ -889,7 +973,9 @@ def _build_fact_check_report(
         if original_fields is None:
             continue
         original_company, original_title, original_start, original_end = original_fields
-        optimized_company, optimized_title, optimized_start, optimized_end = optimized_fields
+        optimized_company, optimized_title, optimized_start, optimized_end = (
+            optimized_fields
+        )
         if (
             optimized_company != original_company
             or optimized_start != original_start
@@ -903,13 +989,20 @@ def _build_fact_check_report(
                     "message": f"工作经历 {item_id} 出现公司或时间改动，需要人工复核。",
                 }
             )
-        if _extract_seniority_rank(optimized_title) > _extract_seniority_rank(original_title):
+        if _extract_seniority_rank(optimized_title) > _extract_seniority_rank(
+            original_title
+        ):
             findings.append(
                 {
                     "type": "title_inflation",
                     "severity": "medium",
                     "section": "work_experience",
-                    "message": f"工作经历 {item_id} 的职级表达可能被夸大：{original_title} -> {optimized_title}",
+                    "message": (
+                        "工作经历 "
+                        + f"{item_id}"
+                        + " 的职级表达可能被夸大："
+                        + f"{original_title} -> {optimized_title}"
+                    ),
                 }
             )
 
@@ -918,7 +1011,9 @@ def _build_fact_check_report(
         if original_fields is None:
             continue
         original_name, _original_role, original_start, original_end = original_fields
-        optimized_name, _optimized_role, optimized_start, optimized_end = optimized_fields
+        optimized_name, _optimized_role, optimized_start, optimized_end = (
+            optimized_fields
+        )
         if (
             optimized_name != original_name
             or optimized_start != original_start
@@ -935,12 +1030,14 @@ def _build_fact_check_report(
 
     original_bullet_text = " ".join(
         bullet.text
-        for item in original_resume.work_experience_items + original_resume.project_items
+        for item in original_resume.work_experience_items
+        + original_resume.project_items
         for bullet in item.bullets
     )
     optimized_bullet_text = " ".join(
         bullet.text
-        for item in optimized_resume.work_experience_items + optimized_resume.project_items
+        for item in optimized_resume.work_experience_items
+        + optimized_resume.project_items
         for bullet in item.bullets
     )
     for term in OUTCOME_INTENSITY_TERMS:
@@ -957,14 +1054,20 @@ def _build_fact_check_report(
     for item in optimized_resume.work_experience_items + optimized_resume.project_items:
         for bullet in item.bullets:
             extra_skills = {
-                skill for skill in bullet.skills_used if skill.strip() and skill not in original_skills
+                skill
+                for skill in bullet.skills_used
+                if skill.strip() and skill not in original_skills
             }
             if extra_skills:
                 findings.append(
                     {
                         "type": "skill_attribution",
                         "severity": "medium",
-                        "section": "projects" if isinstance(item, ResumeProjectItem) else "work_experience",
+                        "section": (
+                            "projects"
+                            if isinstance(item, ResumeProjectItem)
+                            else "work_experience"
+                        ),
                         "message": f"{item.id} 存在新增技能归属：{', '.join(sorted(extra_skills))}",
                     }
                 )
@@ -983,7 +1086,11 @@ def _build_fact_check_report(
                         "type": "timeline_conflict",
                         "severity": "high",
                         "section": collection_name,
-                        "message": f"{collection_name} 中存在开始时间晚于结束时间的记录：{getattr(item, 'id', '')}",
+                        "message": (
+                            collection_name
+                            + " 中存在开始时间晚于结束时间的记录："
+                            + getattr(item, "id", "")
+                        ),
                     }
                 )
 
@@ -999,6 +1106,17 @@ def _build_fact_check_report(
         },
         "findings": findings,
     }
+
+
+def build_resume_fact_check_report(
+    *,
+    original_resume: ResumeStructuredData,
+    optimized_resume: ResumeStructuredData,
+) -> dict[str, Any]:
+    return _build_fact_check_report(
+        original_resume=original_resume,
+        optimized_resume=optimized_resume,
+    )
 
 
 def _render_markdown_header(resume: ResumeStructuredData) -> list[str]:
@@ -1031,8 +1149,16 @@ def _render_education_markdown(resume: ResumeStructuredData) -> list[str]:
                 value
                 for value in [
                     item.school.strip(),
-                    " ".join(value for value in [item.major.strip(), item.degree.strip()] if value).strip(),
-                    " - ".join(value for value in [item.start_date.strip(), item.end_date.strip()] if value).strip(),
+                    " ".join(
+                        value
+                        for value in [item.major.strip(), item.degree.strip()]
+                        if value
+                    ).strip(),
+                    " - ".join(
+                        value
+                        for value in [item.start_date.strip(), item.end_date.strip()]
+                        if value
+                    ).strip(),
                 ]
                 if value
             )
@@ -1056,7 +1182,11 @@ def _render_experience_items_markdown(
             for value in [
                 item.company.strip(),
                 item.title.strip(),
-                " - ".join(value for value in [item.start_date.strip(), item.end_date.strip()] if value).strip(),
+                " - ".join(
+                    value
+                    for value in [item.start_date.strip(), item.end_date.strip()]
+                    if value
+                ).strip(),
                 item.location.strip(),
             ]
             if value
@@ -1080,7 +1210,11 @@ def _render_project_items_markdown(
             for value in [
                 item.name.strip(),
                 item.role.strip(),
-                " - ".join(value for value in [item.start_date.strip(), item.end_date.strip()] if value).strip(),
+                " - ".join(
+                    value
+                    for value in [item.start_date.strip(), item.end_date.strip()]
+                    if value
+                ).strip(),
             ]
             if value
         )
@@ -1114,8 +1248,12 @@ def render_optimized_resume_markdown(resume: ResumeStructuredData) -> str:
     lines: list[str] = []
     lines.extend(_render_markdown_header(resume))
     if resume.basic_info.summary.strip():
-        lines.extend(_render_markdown_section("Summary", [resume.basic_info.summary.strip()]))
-    lines.extend(_render_markdown_section("Education", _render_education_markdown(resume)))
+        lines.extend(
+            _render_markdown_section("Summary", [resume.basic_info.summary.strip()])
+        )
+    lines.extend(
+        _render_markdown_section("Education", _render_education_markdown(resume))
+    )
     lines.extend(
         _render_markdown_section(
             "Work Experience",
@@ -1163,7 +1301,9 @@ def _build_diagnosis_json(
             if isinstance(item, dict)
         ][:5],
         "must_add_evidence": list(tailoring_plan_snapshot.get("must_add_evidence", [])),
-        "missing_info_questions": list(tailoring_plan_snapshot.get("missing_info_questions", [])),
+        "missing_info_questions": list(
+            tailoring_plan_snapshot.get("missing_info_questions", [])
+        ),
         "rewrite_task_count": len(rewrite_tasks),
         "ai_status": {"status": ai_status, "reason": ai_reason},
         "session_rules": {
@@ -1174,7 +1314,10 @@ def _build_diagnosis_json(
                 "optimized_resume_json",
                 "optimized_resume_md",
             ],
-            "apply_effect": "optimized_resume_json is written into resume.structured_json and increments resume.latest_version",
+            "apply_effect": (
+                "optimized_resume_json is written into resume.structured_json "
+                "and increments resume.latest_version"
+            ),
             "match_report_after_apply": "related match reports become stale",
         },
         "downstream_contract": _build_downstream_contract().model_dump(),
@@ -1212,7 +1355,9 @@ async def _generate_optimized_resume_artifacts(
                 "source_resume": current_resume.model_dump(),
                 "job_snapshot": _build_job_snapshot(job),
                 "match_report_snapshot": _build_match_report_snapshot(report),
-                "rewrite_tasks": [task.model_dump() for task in selected_tasks if task.selected],
+                "rewrite_tasks": [
+                    task.model_dump() for task in selected_tasks if task.selected
+                ],
             }
         )
         ai_status = ai_result.status
@@ -1402,7 +1547,9 @@ async def create_resume_optimization_session(
         ),
         tailoring_plan_snapshot_json=report.tailoring_plan_json or {},
         rewrite_tasks_json={"tasks": [item.model_dump() for item in rewrite_tasks]},
-        draft_sections_json={key: value.model_dump() for key, value in initial_draft_sections.items()},
+        draft_sections_json={
+            key: value.model_dump() for key, value in initial_draft_sections.items()
+        },
         selected_tasks_json={"tasks": [item.model_dump() for item in rewrite_tasks]},
         optimized_resume_json=initial_resume.model_dump(),
         fact_check_report_json=initial_fact_check,
@@ -1445,7 +1592,9 @@ async def generate_resume_optimization_suggestions(
     current_resume = ResumeStructuredData.model_validate(resume.structured_json or {})
     selected_tasks = _serialize_selected_tasks(session_record.selected_tasks_json or {})
     if not selected_tasks:
-        selected_tasks = _build_rewrite_tasks(report=report, current_resume=current_resume)
+        selected_tasks = _build_rewrite_tasks(
+            report=report, current_resume=current_resume
+        )
 
     (
         optimized_resume,
@@ -1462,8 +1611,12 @@ async def generate_resume_optimization_suggestions(
         settings=settings,
     )
 
-    session_record.rewrite_tasks_json = {"tasks": [item.model_dump() for item in selected_tasks]}
-    session_record.selected_tasks_json = {"tasks": [item.model_dump() for item in selected_tasks]}
+    session_record.rewrite_tasks_json = {
+        "tasks": [item.model_dump() for item in selected_tasks]
+    }
+    session_record.selected_tasks_json = {
+        "tasks": [item.model_dump() for item in selected_tasks]
+    }
     session_record.diagnosis_json = diagnosis_json
     session_record.draft_sections_json = {
         key: value.model_dump() for key, value in draft_sections.items()
@@ -1538,7 +1691,9 @@ async def update_resume_optimization_session(
     session_record.diagnosis_json = diagnosis_json
     session_record.optimized_resume_json = optimized_resume.model_dump()
     session_record.fact_check_report_json = fact_check_report
-    session_record.optimized_resume_md = render_optimized_resume_markdown(optimized_resume)
+    session_record.optimized_resume_md = render_optimized_resume_markdown(
+        optimized_resume
+    )
     session_record.status = "ready"
     session_record.updated_by = current_user.id
     session.add(session_record)
@@ -1558,14 +1713,19 @@ async def apply_resume_optimization_session(
         current_user=current_user,
         session_id=session_id,
     )
-    if session_record.status == "applied" and session_record.applied_resume_version is not None:
+    if (
+        session_record.status == "applied"
+        and session_record.applied_resume_version is not None
+    ):
         return ResumeOptimizationApplyResponse(
             session_id=session_record.id,
             resume_id=resume.id,
             applied_resume_version=session_record.applied_resume_version,
         )
 
-    optimized_resume = _serialize_optimized_resume(session_record.optimized_resume_json or {})
+    optimized_resume = _serialize_optimized_resume(
+        session_record.optimized_resume_json or {}
+    )
     if optimized_resume is None:
         raise ApiException(
             status_code=409,
@@ -1576,7 +1736,10 @@ async def apply_resume_optimization_session(
         raise ApiException(
             status_code=409,
             code=ErrorCode.CONFLICT,
-            message="Optimization session is not ready for apply because markdown output is missing",
+            message=(
+                "Optimization session is not ready for apply "
+                "because markdown output is missing"
+            ),
         )
 
     resume.structured_json = optimized_resume.model_dump()
@@ -1638,11 +1801,19 @@ async def get_resume_optimization_markdown_download(
         current_user=current_user,
         session_id=session_id,
     )
-    payload = serialize_resume_optimization_session(session_record, job=job, report=report)
+    payload = serialize_resume_optimization_session(
+        session_record, job=job, report=report
+    )
+    tailored_markdown = (session_record.tailored_resume_md or "").strip()
+    if tailored_markdown:
+        return tailored_markdown, payload.downloadable_file_name or "tailored_resume.md"
     if not payload.optimized_resume_md.strip():
         raise ApiException(
             status_code=409,
             code=ErrorCode.CONFLICT,
             message="Optimized markdown resume is not ready yet",
         )
-    return payload.optimized_resume_md, payload.downloadable_file_name or "optimized_resume.md"
+    return (
+        payload.optimized_resume_md,
+        payload.downloadable_file_name or "optimized_resume.md",
+    )

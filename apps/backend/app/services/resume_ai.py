@@ -10,7 +10,11 @@ from pydantic import ValidationError
 from app.core.config import Settings
 from app.prompts.resume import get_resume_structure_correction_prompt
 from app.schemas.resume import ResumeStructuredData
-from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
+from app.services.ai_client import (
+    AIClientError,
+    AIProviderConfig,
+    request_json_completion,
+)
 from app.services.resume_parser import EMAIL_PATTERN, PHONE_PATTERN
 
 logger = logging.getLogger(__name__)
@@ -22,9 +26,11 @@ LIST_LIMITS = {
     "work_experience": 10,
     "projects": 10,
     "certifications": 8,
+    "awards": 8,
     "technical": 30,
     "tools": 20,
     "languages": 10,
+    "custom_section_items": 20,
 }
 PROFESSIONAL_PUNCTUATION_MAP = str.maketrans(
     {
@@ -239,31 +245,45 @@ def _normalize_ai_structured_payload(payload: object) -> dict[str, object]:
     basic_info_payload = payload.get("basic_info")
     skills_payload = payload.get("skills")
 
+    education, education_items = _normalize_education_payload(payload.get("education"))
+    work_experience, work_experience_items = _normalize_work_experience_payload(
+        payload.get("work_experience")
+    )
+    projects, project_items = _normalize_project_payload(payload.get("projects"))
+    certifications, certification_items = _normalize_certification_payload(
+        payload.get("certifications")
+    )
+
     normalized = {
         "basic_info": _normalize_basic_info(
             basic_info_payload if isinstance(basic_info_payload, dict) else {}
         ),
-        "education": _normalize_list_field(payload.get("education"), field_name="education"),
-        "work_experience": _normalize_list_field(
-            payload.get("work_experience"),
-            field_name="work_experience",
+        "education": education,
+        "education_items": education_items,
+        "work_experience": work_experience,
+        "work_experience_items": work_experience_items,
+        "projects": projects,
+        "project_items": project_items,
+        "skills": _normalize_skills(
+            skills_payload if isinstance(skills_payload, dict) else {}
         ),
-        "projects": _normalize_list_field(payload.get("projects"), field_name="projects"),
-        "skills": _normalize_skills(skills_payload if isinstance(skills_payload, dict) else {}),
-        "certifications": _normalize_list_field(
-            payload.get("certifications"),
-            field_name="certifications",
-        ),
+        "certifications": certifications,
+        "certification_items": certification_items,
+        "awards": _normalize_list_field(payload.get("awards"), field_name="awards"),
+        "custom_sections": _normalize_custom_sections(payload.get("custom_sections")),
     }
     return normalized
 
 
-def _normalize_basic_info(payload: dict[str, object]) -> dict[str, str]:
+def _normalize_basic_info(payload: dict[str, object]) -> dict[str, object]:
     return {
         "name": _normalize_scalar_text(payload.get("name")),
+        "title": _normalize_scalar_text(payload.get("title")),
+        "status": _normalize_scalar_text(payload.get("status")),
         "email": _normalize_scalar_text(payload.get("email")),
         "phone": _normalize_scalar_text(payload.get("phone")),
         "location": _normalize_scalar_text(payload.get("location")),
+        "links": _normalize_list_field(payload.get("links"), field_name="skills"),
         "summary": _normalize_professional_punctuation(
             _normalize_scalar_text(payload.get("summary")),
             ensure_terminal_sentence=True,
@@ -273,10 +293,267 @@ def _normalize_basic_info(payload: dict[str, object]) -> dict[str, str]:
 
 def _normalize_skills(payload: dict[str, object]) -> dict[str, list[str]]:
     return {
-        "technical": _normalize_list_field(payload.get("technical"), field_name="skills"),
+        "technical": _normalize_list_field(
+            payload.get("technical"), field_name="skills"
+        ),
         "tools": _normalize_list_field(payload.get("tools"), field_name="skills"),
-        "languages": _normalize_list_field(payload.get("languages"), field_name="skills"),
+        "languages": _normalize_list_field(
+            payload.get("languages"), field_name="skills"
+        ),
     }
+
+
+def _normalize_custom_sections(payload: object) -> list[dict[str, object]]:
+    if not isinstance(payload, list):
+        return []
+
+    normalized_sections: list[dict[str, object]] = []
+    for index, section in enumerate(payload, start=1):
+        if not isinstance(section, dict):
+            continue
+        title = _normalize_scalar_text(section.get("title"))
+        if not title:
+            continue
+        items_payload = section.get("items")
+        items: list[dict[str, object]] = []
+        if isinstance(items_payload, list):
+            for item_index, item in enumerate(items_payload, start=1):
+                if not isinstance(item, dict):
+                    continue
+                description = _normalize_list_field(
+                    item.get("description"),
+                    field_name="custom_section_items",
+                )
+                normalized_item = {
+                    "id": _normalize_scalar_text(item.get("id"))
+                    or f"custom_{index}_{item_index}",
+                    "title": _normalize_scalar_text(item.get("title")),
+                    "subtitle": _normalize_scalar_text(item.get("subtitle")),
+                    "years": _normalize_scalar_text(item.get("years")),
+                    "description": description,
+                }
+                if (
+                    normalized_item["title"]
+                    or normalized_item["subtitle"]
+                    or normalized_item["years"]
+                    or normalized_item["description"]
+                ):
+                    items.append(normalized_item)
+        normalized_sections.append(
+            {
+                "id": _normalize_scalar_text(section.get("id")) or f"custom_{index}",
+                "title": title,
+                "items": items,
+            }
+        )
+    return normalized_sections
+
+
+def _normalize_education_payload(
+    payload: object,
+) -> tuple[list[str], list[dict[str, object]]]:
+    if not isinstance(payload, list):
+        values = _normalize_list_field(payload, field_name="education")
+        return values, []
+
+    strings: list[str] = []
+    items: list[dict[str, object]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            text = _normalize_professional_punctuation(
+                _flatten_list_item(item, field_name="education")
+            )
+            if text:
+                strings.append(text)
+            continue
+        normalized_item = {
+            "id": _normalize_scalar_text(item.get("id")) or f"edu_{index}",
+            "school": _normalize_scalar_text(item.get("school")),
+            "degree": _normalize_scalar_text(item.get("degree")),
+            "major": _normalize_scalar_text(item.get("major")),
+            "start_date": _normalize_scalar_text(item.get("start_date")),
+            "end_date": _normalize_scalar_text(item.get("end_date")),
+            "gpa": _normalize_scalar_text(item.get("gpa")),
+            "honors": _normalize_list_field(item.get("honors"), field_name="education"),
+        }
+        if any(
+            normalized_item[key]
+            for key in (
+                "school",
+                "degree",
+                "major",
+                "start_date",
+                "end_date",
+                "gpa",
+                "honors",
+            )
+        ):
+            items.append(normalized_item)
+            strings.append(
+                _normalize_professional_punctuation(
+                    _flatten_object_item(item, field_name="education")
+                )
+            )
+    return _dedupe_clean_items(strings, limit=LIST_LIMITS["education"]), items
+
+
+def _normalize_work_experience_payload(
+    payload: object,
+) -> tuple[list[str], list[dict[str, object]]]:
+    if not isinstance(payload, list):
+        values = _normalize_list_field(payload, field_name="work_experience")
+        return values, []
+
+    strings: list[str] = []
+    items: list[dict[str, object]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            text = _normalize_professional_punctuation(
+                _flatten_list_item(item, field_name="work_experience"),
+                ensure_terminal_sentence=True,
+            )
+            if text:
+                strings.append(text)
+            continue
+        bullets = _normalize_list_field(
+            item.get("bullets")
+            or item.get("highlights")
+            or item.get("responsibilities")
+            or item.get("achievements"),
+            field_name="work_experience",
+        )
+        normalized_item = {
+            "id": _normalize_scalar_text(item.get("id")) or f"work_{index}",
+            "company": _normalize_scalar_text(item.get("company")),
+            "title": _normalize_scalar_text(item.get("title") or item.get("role")),
+            "department": _normalize_scalar_text(item.get("department")),
+            "location": _normalize_scalar_text(item.get("location")),
+            "start_date": _normalize_scalar_text(item.get("start_date")),
+            "end_date": _normalize_scalar_text(item.get("end_date")),
+            "employment_type": _normalize_scalar_text(item.get("employment_type")),
+            "bullets": [
+                {"id": f"work_{index}_b{bullet_index}", "text": bullet}
+                for bullet_index, bullet in enumerate(bullets, start=1)
+            ],
+        }
+        if any(
+            normalized_item[key]
+            for key in (
+                "company",
+                "title",
+                "department",
+                "location",
+                "start_date",
+                "end_date",
+                "employment_type",
+                "bullets",
+            )
+        ):
+            items.append(normalized_item)
+            strings.append(
+                _normalize_professional_punctuation(
+                    _flatten_object_item(item, field_name="work_experience"),
+                    ensure_terminal_sentence=True,
+                )
+            )
+    return _dedupe_clean_items(strings, limit=LIST_LIMITS["work_experience"]), items
+
+
+def _normalize_project_payload(
+    payload: object,
+) -> tuple[list[str], list[dict[str, object]]]:
+    if not isinstance(payload, list):
+        values = _normalize_list_field(payload, field_name="projects")
+        return values, []
+
+    strings: list[str] = []
+    items: list[dict[str, object]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            text = _normalize_professional_punctuation(
+                _flatten_list_item(item, field_name="projects"),
+                ensure_terminal_sentence=True,
+            )
+            if text:
+                strings.append(text)
+            continue
+        bullets = _normalize_list_field(
+            item.get("bullets") or item.get("description") or item.get("highlights"),
+            field_name="projects",
+        )
+        normalized_item = {
+            "id": _normalize_scalar_text(item.get("id")) or f"proj_{index}",
+            "name": _normalize_scalar_text(item.get("name")),
+            "role": _normalize_scalar_text(item.get("role")),
+            "start_date": _normalize_scalar_text(item.get("start_date")),
+            "end_date": _normalize_scalar_text(item.get("end_date")),
+            "summary": _normalize_professional_punctuation(
+                _normalize_scalar_text(item.get("summary"))
+            ),
+            "bullets": [
+                {"id": f"proj_{index}_b{bullet_index}", "text": bullet}
+                for bullet_index, bullet in enumerate(bullets, start=1)
+            ],
+            "skills_used": _normalize_list_field(
+                item.get("skills_used") or item.get("tech_stack"),
+                field_name="skills",
+            ),
+        }
+        if any(
+            normalized_item[key]
+            for key in (
+                "name",
+                "role",
+                "start_date",
+                "end_date",
+                "summary",
+                "bullets",
+                "skills_used",
+            )
+        ):
+            items.append(normalized_item)
+            strings.append(
+                _normalize_professional_punctuation(
+                    _flatten_object_item(item, field_name="projects"),
+                    ensure_terminal_sentence=True,
+                )
+            )
+    return _dedupe_clean_items(strings, limit=LIST_LIMITS["projects"]), items
+
+
+def _normalize_certification_payload(
+    payload: object,
+) -> tuple[list[str], list[dict[str, object]]]:
+    if not isinstance(payload, list):
+        values = _normalize_list_field(payload, field_name="certifications")
+        return values, []
+
+    strings: list[str] = []
+    items: list[dict[str, object]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            text = _normalize_professional_punctuation(
+                _flatten_list_item(item, field_name="certifications"),
+                ensure_terminal_sentence=True,
+            )
+            if text:
+                strings.append(text)
+            continue
+        normalized_item = {
+            "id": _normalize_scalar_text(item.get("id")) or f"cert_{index}",
+            "name": _normalize_scalar_text(item.get("name")),
+            "issuer": _normalize_scalar_text(item.get("issuer")),
+            "date": _normalize_scalar_text(item.get("date")),
+        }
+        if any(normalized_item[key] for key in ("name", "issuer", "date")):
+            items.append(normalized_item)
+            strings.append(
+                _normalize_professional_punctuation(
+                    _flatten_object_item(item, field_name="certifications"),
+                    ensure_terminal_sentence=True,
+                )
+            )
+    return _dedupe_clean_items(strings, limit=LIST_LIMITS["certifications"]), items
 
 
 def _normalize_scalar_text(value: object) -> str:
@@ -301,7 +578,9 @@ def _normalize_list_field(value: object, *, field_name: str) -> list[str]:
         cleaned = _clean_text(flattened)
         if cleaned:
             normalized_items.append(cleaned)
-    deduped = _dedupe_clean_items(normalized_items, limit=LIST_LIMITS.get(field_name, 50))
+    deduped = _dedupe_clean_items(
+        normalized_items, limit=LIST_LIMITS.get(field_name, 50)
+    )
     return _normalize_professional_items(deduped, field_name=field_name)
 
 
@@ -313,7 +592,9 @@ def _flatten_list_item(value: object, *, field_name: str) -> str:
     if isinstance(value, list):
         return " ".join(
             part
-            for part in (_flatten_list_item(item, field_name=field_name) for item in value)
+            for part in (
+                _flatten_list_item(item, field_name=field_name) for item in value
+            )
             if _clean_text(part)
         )
     if value is None:
@@ -387,6 +668,20 @@ def merge_resume_ai_correction(
             ai_value=ai_result.basic_info.name,
             use_overlap=False,
         ),
+        "title": _choose_evidence_backed_scalar(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_value=rule_result.basic_info.title,
+            ai_value=ai_result.basic_info.title,
+            use_overlap=True,
+        ),
+        "status": _choose_evidence_backed_scalar(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_value=rule_result.basic_info.status,
+            ai_value=ai_result.basic_info.status,
+            use_overlap=True,
+        ),
         "email": _choose_contact_field(
             rule_value=rule_result.basic_info.email,
             ai_value=ai_result.basic_info.email,
@@ -413,6 +708,14 @@ def merge_resume_ai_correction(
                 ai_value=ai_result.basic_info.summary,
             ),
             ensure_terminal_sentence=True,
+        ),
+        "links": _choose_supported_items(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_items=rule_result.basic_info.links,
+            ai_items=ai_result.basic_info.links,
+            limit=5,
+            use_overlap=False,
         ),
     }
 
@@ -444,6 +747,13 @@ def merge_resume_ai_correction(
         ai_items=ai_result.certifications,
         limit=LIST_LIMITS["certifications"],
     )
+    awards = _choose_supported_items(
+        raw_text=raw_text,
+        normalized_raw_text=normalized_raw_text,
+        rule_items=rule_result.awards,
+        ai_items=ai_result.awards,
+        limit=LIST_LIMITS["awards"],
+    )
     education = _normalize_professional_items(education, field_name="education")
     work_experience = _normalize_professional_items(
         work_experience,
@@ -454,6 +764,7 @@ def merge_resume_ai_correction(
         certifications,
         field_name="certifications",
     )
+    awards = _normalize_professional_items(awards, field_name="awards")
 
     skills = {
         "technical": _choose_supported_items(
@@ -485,10 +796,51 @@ def merge_resume_ai_correction(
     merged = ResumeStructuredData(
         basic_info=basic_info,
         education=education,
+        education_items=_choose_structured_items(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_items=[item.model_dump() for item in rule_result.education_items],
+            ai_items=[item.model_dump() for item in ai_result.education_items],
+            item_text_builder=_education_item_text,
+            limit=LIST_LIMITS["education"],
+        ),
         work_experience=work_experience,
+        work_experience_items=_choose_structured_items(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_items=[
+                item.model_dump() for item in rule_result.work_experience_items
+            ],
+            ai_items=[item.model_dump() for item in ai_result.work_experience_items],
+            item_text_builder=_work_experience_item_text,
+            limit=LIST_LIMITS["work_experience"],
+        ),
         projects=projects,
+        project_items=_choose_structured_items(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_items=[item.model_dump() for item in rule_result.project_items],
+            ai_items=[item.model_dump() for item in ai_result.project_items],
+            item_text_builder=_project_item_text,
+            limit=LIST_LIMITS["projects"],
+        ),
         skills=skills,
         certifications=certifications,
+        certification_items=_choose_structured_items(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_items=[item.model_dump() for item in rule_result.certification_items],
+            ai_items=[item.model_dump() for item in ai_result.certification_items],
+            item_text_builder=_certification_item_text,
+            limit=LIST_LIMITS["certifications"],
+        ),
+        awards=awards,
+        custom_sections=_choose_custom_sections(
+            raw_text=raw_text,
+            normalized_raw_text=normalized_raw_text,
+            rule_sections=rule_result.custom_sections,
+            ai_sections=ai_result.custom_sections,
+        ),
     )
     logger.info(
         (
@@ -503,6 +855,169 @@ def merge_resume_ai_correction(
         len(merged.skills.technical),
     )
     return merged
+
+
+def _choose_structured_items(
+    *,
+    raw_text: str,
+    normalized_raw_text: str,
+    rule_items: list[dict[str, object]],
+    ai_items: list[dict[str, object]],
+    item_text_builder: callable,
+    limit: int,
+) -> list[dict[str, object]]:
+    supported_ai: list[dict[str, object]] = []
+    for item in ai_items:
+        text = _clean_text(item_text_builder(item))
+        if not text:
+            continue
+        if _appears_in_raw_text(text, normalized_raw_text) or _has_text_overlap(
+            text, raw_text
+        ):
+            supported_ai.append(item)
+        if len(supported_ai) >= limit:
+            break
+    if supported_ai:
+        return supported_ai
+    return rule_items[:limit]
+
+
+def _education_item_text(item: dict[str, object]) -> str:
+    return _join_text_parts(
+        [
+            item.get("school"),
+            item.get("major"),
+            item.get("degree"),
+            item.get("start_date"),
+            item.get("end_date"),
+            item.get("gpa"),
+            " ".join(
+                str(value)
+                for value in item.get("honors", [])
+                if _clean_text(str(value))
+            ),
+        ]
+    )
+
+
+def _work_experience_item_text(item: dict[str, object]) -> str:
+    bullets = item.get("bullets", [])
+    bullet_text = " ".join(
+        _clean_text(bullet.get("text", "") if isinstance(bullet, dict) else str(bullet))
+        for bullet in bullets
+    )
+    return _join_text_parts(
+        [
+            item.get("company"),
+            item.get("title"),
+            item.get("department"),
+            item.get("location"),
+            item.get("start_date"),
+            item.get("end_date"),
+            item.get("employment_type"),
+            bullet_text,
+        ]
+    )
+
+
+def _project_item_text(item: dict[str, object]) -> str:
+    bullets = item.get("bullets", [])
+    bullet_text = " ".join(
+        _clean_text(bullet.get("text", "") if isinstance(bullet, dict) else str(bullet))
+        for bullet in bullets
+    )
+    return _join_text_parts(
+        [
+            item.get("name"),
+            item.get("role"),
+            item.get("start_date"),
+            item.get("end_date"),
+            item.get("summary"),
+            bullet_text,
+            " ".join(
+                _clean_text(str(value))
+                for value in item.get("skills_used", [])
+                if _clean_text(str(value))
+            ),
+        ]
+    )
+
+
+def _certification_item_text(item: dict[str, object]) -> str:
+    return _join_text_parts([item.get("name"), item.get("issuer"), item.get("date")])
+
+
+def _join_text_parts(parts: list[object]) -> str:
+    return " ".join(_clean_text(str(part)) for part in parts if _clean_text(str(part)))
+
+
+def _choose_custom_sections(
+    *,
+    raw_text: str,
+    normalized_raw_text: str,
+    rule_sections: list[dict] | list,
+    ai_sections: list[dict] | list,
+) -> list[dict]:
+    supported_sections: list[dict] = []
+    for section in ai_sections:
+        title = (
+            _clean_text(section.get("title", ""))
+            if isinstance(section, dict)
+            else _clean_text(getattr(section, "title", ""))
+        )
+        items_source = (
+            section.get("items", [])
+            if isinstance(section, dict)
+            else getattr(section, "items", [])
+        )
+        if not title or not _appears_in_raw_text(title, normalized_raw_text):
+            continue
+        items: list[dict[str, object]] = []
+        for item in items_source:
+            item_title = (
+                _clean_text(item.get("title", ""))
+                if isinstance(item, dict)
+                else _clean_text(getattr(item, "title", ""))
+            )
+            subtitle = (
+                _clean_text(item.get("subtitle", ""))
+                if isinstance(item, dict)
+                else _clean_text(getattr(item, "subtitle", ""))
+            )
+            years = (
+                _clean_text(item.get("years", ""))
+                if isinstance(item, dict)
+                else _clean_text(getattr(item, "years", ""))
+            )
+            description_source = (
+                item.get("description", [])
+                if isinstance(item, dict)
+                else getattr(item, "description", [])
+            )
+            description = _filter_supported_items(
+                items=[str(value) for value in description_source],
+                raw_text=raw_text,
+                normalized_raw_text=normalized_raw_text,
+                limit=LIST_LIMITS["custom_section_items"],
+                use_overlap=True,
+            )
+            if not any([item_title, subtitle, years, description]):
+                continue
+            if item_title and not _has_text_overlap(item_title, raw_text):
+                continue
+            items.append(
+                {
+                    "title": item_title,
+                    "subtitle": subtitle,
+                    "years": years,
+                    "description": description,
+                }
+            )
+        if items:
+            supported_sections.append({"title": title, "items": items})
+    if supported_sections:
+        return supported_sections
+    return list(rule_sections)
 
 
 def _choose_contact_field(
@@ -679,6 +1194,7 @@ def _normalize_professional_punctuation(
 
     if re.search(r"[\u4e00-\u9fff]", cleaned):
         cleaned = cleaned.translate(PROFESSIONAL_PUNCTUATION_MAP)
+        cleaned = cleaned.replace(",", "，").replace(";", "；").replace(":", "：")
         cleaned = re.sub(r"(?<!\d)\.(?!\d)", "。", cleaned)
         cleaned = re.sub(r"\s*([，。；：！？、])\s*", r"\1", cleaned)
         cleaned = re.sub(r"([，。；：！？、])\1+", r"\1", cleaned)

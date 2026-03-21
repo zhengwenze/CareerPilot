@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import re
 import subprocess
 import tempfile
@@ -8,7 +9,9 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree
+
 from pypdf import PdfReader
+
 from app.core.errors import ApiException, ErrorCode
 from app.schemas.resume import ResumeParseArtifactsData, ResumeStructuredData
 
@@ -269,23 +272,16 @@ def extract_text_from_resume_bytes(
 ) -> ResumeTextExtractionResult:
     source_type = _detect_source_type(file_name)
     if source_type == "pdf":
-        return extract_text_from_pdf_or_ocr_bytes(data)
-    if source_type == "docx":
         return ResumeTextExtractionResult(
-            raw_text=extract_text_from_docx_bytes(data),
-            source_type="docx",
-        )
-    if source_type == "image":
-        return ResumeTextExtractionResult(
-            raw_text=extract_text_from_image_bytes(data),
-            source_type="image",
-            ocr_used=True,
-            ocr_engine="tesseract",
+            raw_text=extract_text_from_pdf_bytes(data),
+            source_type="pdf",
+            ocr_used=False,
+            ocr_engine="none",
         )
     raise ApiException(
         status_code=400,
         code=ErrorCode.BAD_REQUEST,
-        message="Unsupported resume file type",
+        message="Only text-based PDF resumes are supported",
     )
 
 
@@ -301,7 +297,7 @@ def extract_text_from_pdf_bytes(data: bytes) -> str:
         ) from exc
 
     pages: list[str] = []
-    for index, page in enumerate(reader.pages):
+    for page in reader.pages:
         extracted = page.extract_text() or ""
         cleaned = _normalize_text(extracted)
         if cleaned:
@@ -315,28 +311,6 @@ def extract_text_from_pdf_bytes(data: bytes) -> str:
             message="No extractable text found in PDF. Scanned PDFs are not supported yet.",
         )
     return raw_text
-
-
-def extract_text_from_pdf_or_ocr_bytes(data: bytes) -> ResumeTextExtractionResult:
-    try:
-        raw_text = extract_text_from_pdf_bytes(data)
-        return ResumeTextExtractionResult(
-            raw_text=raw_text,
-            source_type="pdf",
-            ocr_used=False,
-            ocr_engine="none",
-        )
-    except ApiException as exc:
-        if "No extractable text found in PDF" not in exc.message:
-            raise
-
-    ocr_text = extract_text_from_scanned_pdf_bytes(data)
-    return ResumeTextExtractionResult(
-        raw_text=ocr_text,
-        source_type="pdf",
-        ocr_used=True,
-        ocr_engine="tesseract",
-    )
 
 
 def extract_text_from_docx_bytes(data: bytes) -> str:
@@ -515,7 +489,11 @@ def _normalize_lines(raw_text: str) -> list[str]:
         normalized = _normalize_text(block)
         if not normalized:
             continue
-        parts = [item.strip() for item in SECTION_BREAK_PATTERN.split(normalized) if item.strip()]
+        parts = [
+            item.strip()
+            for item in SECTION_BREAK_PATTERN.split(normalized)
+            if item.strip()
+        ]
         lines.extend(parts or [normalized])
     return lines
 
@@ -552,7 +530,11 @@ def _guess_name(lines: list[str]) -> str:
             continue
         if _match_section(line) is not None:
             continue
-        if _looks_like_education_line(line) or _looks_like_work_line(line) or _looks_like_project_line(line):
+        if (
+            _looks_like_education_line(line)
+            or _looks_like_work_line(line)
+            or _looks_like_project_line(line)
+        ):
             continue
         if any(keyword.lower() in lowered for keyword in LOCATION_KEYWORDS):
             continue
@@ -572,7 +554,11 @@ def _guess_summary(lines: list[str]) -> str:
             continue
         if any(token in line for token in ("到岗", "实习", "求职方向")):
             continue
-        if _looks_like_education_line(line) or _looks_like_work_line(line) or _looks_like_project_line(line):
+        if (
+            _looks_like_education_line(line)
+            or _looks_like_work_line(line)
+            or _looks_like_project_line(line)
+        ):
             continue
         summary_lines.append(line)
     return " ".join(summary_lines[:3]).strip()
@@ -584,7 +570,9 @@ def _match_section(line: str) -> str | None:
         for heading in sorted(headings, key=len, reverse=True):
             if normalized == heading:
                 return section
-            if normalized.startswith(f"{heading}:") or normalized.startswith(f"{heading}："):
+            if normalized.startswith(f"{heading}:") or normalized.startswith(
+                f"{heading}："
+            ):
                 return section
             if normalized.startswith(f"{heading} "):
                 return section
@@ -640,13 +628,17 @@ def _clean_list_line(line: str) -> str:
 def _strip_section_heading(line: str, section: str) -> str:
     normalized = _clean_list_line(line)
     for heading in sorted(SECTION_PATTERNS[section], key=len, reverse=True):
-        pattern = re.compile(rf"^{re.escape(heading)}(?:\s*[:：]\s*|\s+)?", re.IGNORECASE)
+        pattern = re.compile(
+            rf"^{re.escape(heading)}(?:\s*[:：]\s*|\s+)?", re.IGNORECASE
+        )
         if pattern.match(normalized):
             return pattern.sub("", normalized, count=1).strip()
     return ""
 
 
-def _extract_keyword_tags(lines: list[str], raw_text: str, keywords: list[str]) -> list[str]:
+def _extract_keyword_tags(
+    lines: list[str], raw_text: str, keywords: list[str]
+) -> list[str]:
     joined = " ".join(lines).lower()
     haystack = f"{joined} {raw_text.lower()}"
     found: list[str] = []
@@ -719,11 +711,22 @@ def _build_education_items(lines: list[str]) -> list[dict[str, object]]:
                 items.append(current)
             start_date, end_date = _extract_date_range(line)
             school = ""
-            school_match = re.match(r"^([^\s(（]+(?:大学|学院|University|College))", line, re.IGNORECASE)
+            school_match = re.match(
+                r"^([^\s(（]+(?:大学|学院|University|College))", line, re.IGNORECASE
+            )
             if school_match:
                 school = school_match.group(1).strip()
             degree = ""
-            for candidate in ("本科", "硕士", "博士", "大专", "MBA", "Master", "Bachelor", "PhD"):
+            for candidate in (
+                "本科",
+                "硕士",
+                "博士",
+                "大专",
+                "MBA",
+                "Master",
+                "Bachelor",
+                "PhD",
+            ):
                 if candidate.lower() in line.lower():
                     degree = candidate
                     break
@@ -792,7 +795,9 @@ def _looks_like_project_header(line: str) -> bool:
         return True
     if "项目" in stripped and len(stripped) <= 40:
         return True
-    return len(stripped) <= 40 and all(token not in stripped for token in ("：", ";", "；", "。"))
+    return len(stripped) <= 40 and all(
+        token not in stripped for token in ("：", ";", "；", "。")
+    )
 
 
 def _project_name_from_header(line: str) -> str:
@@ -850,7 +855,9 @@ def _build_project_items(lines: list[str]) -> list[dict[str, object]]:
                 "text": line,
                 "kind": "responsibility",
                 "metrics": [],
-                "skills_used": _extract_keyword_tags_from_text(line, TECHNICAL_KEYWORDS + TOOL_KEYWORDS),
+                "skills_used": _extract_keyword_tags_from_text(
+                    line, TECHNICAL_KEYWORDS + TOOL_KEYWORDS
+                ),
                 "source_refs": [],
             }
         )
@@ -903,10 +910,23 @@ def _looks_like_work_line(line: str) -> bool:
     if any(token in lowered for token in ("可实习", "立即到岗", "求职方向")):
         return False
     if any(token in lowered for token in EDUCATION_HINTS) and not any(
-        token in lowered for token in ("有限公司", "公司", "intern", "工程师", "经理", "分析师", "产品", "运营", "研发")
+        token in lowered
+        for token in (
+            "有限公司",
+            "公司",
+            "intern",
+            "工程师",
+            "经理",
+            "分析师",
+            "产品",
+            "运营",
+            "研发",
+        )
     ):
         return False
-    return bool(DATE_SPAN_PATTERN.search(lowered)) or any(token in lowered for token in WORK_HINTS)
+    return bool(DATE_SPAN_PATTERN.search(lowered)) or any(
+        token in lowered for token in WORK_HINTS
+    )
 
 
 def _looks_like_project_line(line: str) -> bool:
@@ -963,7 +983,24 @@ def build_structured_resume(raw_text: str) -> ResumeStructuredData:
     sections = _split_sections(lines)
     education_items = _build_education_items(sections["education"])
     education = _dedupe_preserve_order(
-        [item["school"] if not item["major"] else f"{item['school']} {item['major']} {item['degree']} {item['start_date']} {item['end_date']}".strip() for item in education_items]
+        [
+            (
+                item["school"]
+                if not item["major"]
+                else " ".join(
+                    part
+                    for part in [
+                        item["school"],
+                        item["major"],
+                        item["degree"],
+                        item["start_date"],
+                        item["end_date"],
+                    ]
+                    if part
+                ).strip()
+            )
+            for item in education_items
+        ]
         or sections["education"]
     )
     work_experience = _dedupe_preserve_order(sections["work_experience"])
@@ -1096,6 +1133,7 @@ def build_initial_resume_parse_artifacts(
             "layout_complexity": "unknown",
             "parser_confidence": 0.0,
         },
+        canonical_resume_md="",
         meta={
             "source_type": _detect_source_type(file_name),
             "parser_version": "resume-parser-v2",
@@ -1109,6 +1147,7 @@ def build_resume_parse_artifacts(
     file_name: str,
     raw_text: str | None,
     structured: ResumeStructuredData | None,
+    canonical_resume_md: str | None,
     ai_status: str | None,
     parse_status: str,
     parse_error: str | None = None,
@@ -1222,6 +1261,7 @@ def build_resume_parse_artifacts(
             "layout_complexity": _estimate_layout_complexity(document_blocks),
             "parser_confidence": _estimate_parser_confidence(structured),
         },
+        canonical_resume_md=(canonical_resume_md or "").strip(),
         meta={
             "source_type": source_type or _detect_source_type(file_name),
             "parser_version": "resume-parser-v2",

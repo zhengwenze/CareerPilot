@@ -41,6 +41,15 @@ export type ResumeParseJob = {
   updated_at: string;
 };
 
+export type ResumeParseArtifacts = {
+  canonical_resume_md: string;
+  meta: {
+    source_type?: string;
+    parser_version?: string;
+    ai_correction_applied?: boolean;
+  };
+};
+
 /**
  * 简历记录类型
  * 包含简历的完整信息和最新的解析任务
@@ -58,6 +67,7 @@ export type ResumeRecord = {
   parse_error: string | null;
   raw_text: string | null;
   structured_json: ResumeStructuredData | null;
+  parse_artifacts_json: ResumeParseArtifacts | null;
   latest_version: number;
   created_at: string;
   updated_at: string;
@@ -75,12 +85,72 @@ export type ResumeDownloadUrlResponse = {
 };
 
 export type TailoredResumeArtifactRecord = {
+  document: {
+    matchSummary: {
+      targetRole: string;
+      optimizationLevel: "conservative";
+      matchedKeywords: string[];
+      missingButImportantKeywords: string[];
+      overallStrategy: string;
+    };
+    basic: {
+      name: string;
+      title: string;
+      email: string;
+      phone: string;
+      location: string;
+      links: string[];
+    };
+    summary: string;
+    education: Array<{
+      school: string;
+      major: string;
+      degree: string;
+      startDate: string;
+      endDate: string;
+      description: string[];
+    }>;
+    experience: Array<{
+      company: string;
+      position: string;
+      startDate: string;
+      endDate: string;
+      bullets: string[];
+    }>;
+    projects: Array<{
+      name: string;
+      role: string;
+      startDate: string;
+      endDate: string;
+      bullets: string[];
+      link: string;
+    }>;
+    skills: string[];
+    certificates: string[];
+    languages: string[];
+    awards: string[];
+    customSections: Array<{
+      title: string;
+      items: Array<{
+        title: string;
+        subtitle: string;
+        years: string;
+        description: string[];
+      }>;
+    }>;
+    markdown: string;
+    audit: {
+      truthfulnessStatus: "passed" | "warning";
+      warnings: string[];
+      changedSections: string[];
+      addedKeywordsOnlyFromEvidence: boolean;
+    };
+  };
   session_id: string;
   match_report_id: string;
   status: string;
   fit_band: string;
   overall_score: string;
-  optimized_resume_md: string;
   has_downloadable_markdown: boolean;
   downloadable_file_name: string | null;
   created_at: string;
@@ -214,6 +284,7 @@ export async function generateTailoredResume(
     priority: number;
     jd_text: string;
     force_refresh?: boolean;
+    optimization_level?: "conservative";
   }
 ): Promise<TailoredResumeWorkflowRecord> {
   return apiRequest<TailoredResumeWorkflowRecord>("/tailored-resumes/workflows", {
@@ -231,6 +302,7 @@ export async function generateTailoredResume(
       priority: payload.priority,
       jd_text: payload.jd_text.trim(),
       force_refresh: payload.force_refresh ?? false,
+      optimization_level: payload.optimization_level ?? "conservative",
     }),
   });
 }

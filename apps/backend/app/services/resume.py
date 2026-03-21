@@ -31,6 +31,7 @@ from app.services.resume_ai import (
     build_resume_ai_correction_provider,
     merge_resume_ai_correction,
 )
+from app.services.resume_markdown_renderer import render_resume_markdown
 from app.services.resume_parser import (
     build_initial_resume_parse_artifacts,
     build_resume_parse_artifacts,
@@ -40,7 +41,7 @@ from app.services.resume_parser import (
 from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
-SUPPORTED_RESUME_SUFFIXES = {".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"}
+SUPPORTED_RESUME_SUFFIXES = {".pdf"}
 RESUME_PARSE_TIMEOUT_SECONDS = 120
 AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
@@ -117,11 +118,6 @@ def infer_resume_content_type(file_name: str) -> str:
     suffix = Path(file_name).suffix.lower()
     return {
         ".pdf": "application/pdf",
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".webp": "image/webp",
     }.get(suffix, "application/octet-stream")
 
 
@@ -176,7 +172,7 @@ async def validate_resume_upload(
         raise ApiException(
             status_code=400,
             code=ErrorCode.BAD_REQUEST,
-            message="Only PDF, DOCX, PNG, JPG, JPEG, and WEBP resumes are supported",
+            message="Only text-based PDF resumes are supported",
         )
 
     max_file_size_bytes = settings.max_resume_file_size_mb * 1024 * 1024
@@ -357,6 +353,7 @@ async def process_resume_parse_job(
 
     raw_text: str | None = None
     final_structured: ResumeStructuredData | None = None
+    canonical_resume_md: str | None = None
     extraction_source_type = "pdf"
     extraction_ocr_used = False
     extraction_ocr_engine = "none"
@@ -448,6 +445,9 @@ async def process_resume_parse_job(
                 ai_status = AI_STATUS_FALLBACK_RULE
                 ai_message = build_ai_fallback_message(exc)
 
+            if final_structured is not None:
+                canonical_resume_md = render_resume_markdown(final_structured)
+
         resume_parse_status = "success"
         resume_parse_error = None
         parse_job_status = "success"
@@ -489,6 +489,7 @@ async def process_resume_parse_job(
             file_name=resume.file_name,
             raw_text=raw_text,
             structured=final_structured,
+            canonical_resume_md=canonical_resume_md,
             ai_status=ai_status,
             parse_status=resume_parse_status,
             parse_error=resume_parse_error,

@@ -46,17 +46,19 @@ async function parseError(response: Response): Promise<never> {
       });
     }
 
-    const detail =
-      typeof payload.detail === "string"
-        ? payload.detail
-        : payload.detail && typeof payload.detail.message === "string"
-          ? payload.detail.message
-          : null;
+    if ("detail" in payload) {
+      const detail =
+        typeof payload.detail === "string"
+          ? payload.detail
+          : payload.detail && typeof payload.detail.message === "string"
+            ? payload.detail.message
+            : null;
 
-    if (detail) {
-      throw new ApiError(detail, {
-        status: response.status,
-      });
+      if (detail) {
+        throw new ApiError(detail, {
+          status: response.status,
+        });
+      }
     }
 
     throw new ApiError(`请求失败 (${response.status})`, {

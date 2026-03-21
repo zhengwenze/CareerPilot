@@ -88,17 +88,6 @@ function getFitBandLabel(value: string) {
   return labels[value] ?? value;
 }
 
-function summarizeText(value: string | null | undefined, limit = 120) {
-  const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
-  if (!normalized) {
-    return "暂无摘要";
-  }
-  if (normalized.length <= limit) {
-    return normalized;
-  }
-  return `${normalized.slice(0, limit)}...`;
-}
-
 function getGenerateBlockedReason(
   selectedResume: ResumeRecord | null,
   jobDraft: JobDraft,
@@ -170,6 +159,12 @@ export default function DashboardResumePage() {
     workflows.find(
       (item) => item.tailored_resume.session_id === selectedWorkflowId,
     ) ?? null;
+  const selectedTailoredDocument = selectedWorkflow?.tailored_resume.document;
+  const selectedTailoredMarkdown =
+    selectedTailoredDocument?.markdown?.trim() ?? "";
+  const canonicalResumeMd =
+    selectedResume?.parse_artifacts_json?.canonical_resume_md?.trim() ?? "";
+  const rawResumeText = selectedResume?.raw_text?.trim() ?? "";
 
   useEffect(() => {
     if (!token) {
@@ -322,7 +317,7 @@ export default function DashboardResumePage() {
       const uploaded = await uploadPrimaryResume(token, file);
       setResumes((current) => upsertResume(current, uploaded));
       setSelectedResumeId(uploaded.id);
-      setStatusMessage("主简历已上传，正在解析为 canonical resume。");
+      setStatusMessage("简历已上传，正在解析并生成规范化 Markdown 简历。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -410,17 +405,6 @@ export default function DashboardResumePage() {
     }
   }
 
-  function handleSelectWorkflow(workflow: TailoredResumeWorkflowRecord) {
-    setSelectedWorkflowId(workflow.tailored_resume.session_id);
-    setSelectedResumeId(workflow.resume.id);
-    setJobDraft(toJobDraft(workflow.target_job));
-    setPageError("");
-    setStatusMessage("");
-    router.replace(
-      `/dashboard/resume?workflowId=${workflow.tailored_resume.session_id}`,
-    );
-  }
-
   function handleCreateNewTargetJob() {
     setSelectedWorkflowId(null);
     setJobDraft(createEmptyJobDraft());
@@ -434,7 +418,7 @@ export default function DashboardResumePage() {
       <PageHeader
         eyebrow="Tailored Resume"
         title="专属简历"
-        description="围绕一份主简历和目标岗位 JD，系统会自动复用解析、匹配和改写能力，输出可下载的岗位定制版 Markdown 简历。"
+        description="上传文字 PDF 后，系统会完成规则解析、AI 审查和 Markdown 规范化，再基于这份主简历生成岗位定制版简历。"
         meta={
           <>
             <MetaChip>{resumes.length} 份主简历</MetaChip>
@@ -467,7 +451,7 @@ export default function DashboardResumePage() {
 
       <PaperSection
         eyebrow="Primary Resume"
-        title="主简历"
+        title="当前简历"
         rightSlot={
           <>
             <input
@@ -477,7 +461,7 @@ export default function DashboardResumePage() {
               disabled={isUploading}
               onChange={handleUploadResume}
               type="file"
-              accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
+              accept=".pdf,application/pdf"
             />
             <Button
               disabled={isUploading}
@@ -488,118 +472,82 @@ export default function DashboardResumePage() {
               <FileUp className="size-4" />
               {isUploading ? "上传中" : "上传简历"}
             </Button>
+            {/* <Button>重新解析</Button> */}
           </>
         }
       >
-        {resumes.length === 0 ? (
-          <PageEmptyState
-            title="还没有主简历"
-            description="先上传一份 PDF 或 DOCX 简历，系统会自动解析成 canonical resume。"
-          />
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="space-y-3">
-              {resumes.map((resume) => {
-                const isActive = resume.id === selectedResumeId;
-                return (
-                  <button
-                    key={resume.id}
-                    type="button"
-                    onClick={() => setSelectedResumeId(resume.id)}
-                    className={`w-full rounded-3xl border px-4 py-4 text-left transition-colors ${
-                      isActive
-                        ? "border-[#1C1C1C] bg-white"
-                        : "border-[#1C1C1C]/10 bg-white hover:border-[#1C1C1C]/25"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-[#1C1C1C]">
-                          {resume.structured_json?.basic_info.name ||
-                            resume.file_name}
-                        </p>
-                        <p className="mt-1 text-xs text-[#1C1C1C]/45">
-                          {resume.file_name}
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-[#1C1C1C]/10 px-2 py-1 text-xs text-[#1C1C1C]/60">
-                        {getResumeStatusLabel(resume.parse_status)}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/60">
-                      {summarizeText(
-                        resume.structured_json?.basic_info.summary,
-                      )}
-                    </p>
-                    <p className="mt-3 text-xs text-[#1C1C1C]/45">
-                      更新于 {formatDate(resume.updated_at)}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+        {selectedResume ? (
+          <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-5">
+            <div className="space-y-5">
+              <div className="flex flex-wrap gap-2">
+                <MetaChip>
+                  {getResumeStatusLabel(selectedResume.parse_status)}
+                </MetaChip>
+                {/* <MetaChip>版本 v{selectedResume.latest_version}</MetaChip> */}
+                <MetaChip>{formatDate(selectedResume.updated_at)}</MetaChip>
+                <MetaChip>{selectedResume.file_name}</MetaChip>
+              </div>
 
-            <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-5">
-              {selectedResume ? (
-                <div className="space-y-5">
-                  <div className="flex flex-wrap gap-2">
-                    <MetaChip>
-                      {getResumeStatusLabel(selectedResume.parse_status)}
-                    </MetaChip>
-                    <MetaChip>版本 v{selectedResume.latest_version}</MetaChip>
-                    <MetaChip>{formatDate(selectedResume.updated_at)}</MetaChip>
-                  </div>
+              <div>
+                <p className="text-lg font-semibold text-[#1C1C1C]">
+                  {selectedResume.structured_json?.basic_info.name ||
+                    selectedResume.file_name}
+                </p>
+                <p className="mt-1 text-sm text-[#1C1C1C]/60">
+                  当前工作流仅支持文字 PDF。上传完成后，系统会先做规则解析，再做
+                  AI 审查，最后生成完整的规范化 Markdown 简历。
+                </p>
+              </div>
 
-                  <div>
-                    <p className="text-lg font-semibold text-[#1C1C1C]">
-                      {selectedResume.structured_json?.basic_info.name ||
-                        "未识别姓名"}
-                    </p>
-                    <p className="mt-1 text-sm text-[#1C1C1C]/60">
-                      {selectedResume.structured_json?.basic_info.location ||
-                        "地点待补充"}
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-2xl border border-[#1C1C1C]/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#1C1C1C]/45">
-                        联系方式
-                      </p>
-                      <p className="mt-3 text-sm text-[#1C1C1C]/70">
-                        {selectedResume.structured_json?.basic_info.email ||
-                          "未识别邮箱"}
-                      </p>
-                      <p className="mt-1 text-sm text-[#1C1C1C]/70">
-                        {selectedResume.structured_json?.basic_info.phone ||
-                          "未识别电话"}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-[#1C1C1C]/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#1C1C1C]/45">
-                        核心摘要
-                      </p>
-                      <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/70">
-                        {selectedResume.structured_json?.basic_info.summary ||
-                          "解析完成后会显示摘要。"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {selectedResume.parse_error ? (
-                    <div className="rounded-2xl border border-[#1C1C1C]/10 p-4 text-sm text-[#1C1C1C]/70">
-                      解析错误：{selectedResume.parse_error}
-                    </div>
-                  ) : null}
+              {canonicalResumeMd ? (
+                <div className="rounded-2xl border border-[#1C1C1C]/10 p-4">
+                  <p className="text-sm font-semibold text-[#1C1C1C]">
+                    规范化 Markdown 简历
+                  </p>
+                  <p className="mt-1 text-sm text-[#1C1C1C]/60">
+                    这是规则解析和 AI 审查后的完整主简历成品。
+                  </p>
+                  <pre className="mt-4 overflow-x-auto rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
+                    {canonicalResumeMd}
+                  </pre>
                 </div>
-              ) : (
-                <PageEmptyState
-                  title="请选择主简历"
-                  description="左侧会展示你最近上传的主简历。"
-                />
-              )}
+              ) : null}
+
+              {rawResumeText ? (
+                <div className="rounded-2xl border border-[#1C1C1C]/10 p-4">
+                  <p className="text-sm font-semibold text-[#1C1C1C]">
+                    简历提取原文
+                  </p>
+                  <p className="mt-1 text-sm text-[#1C1C1C]/60">
+                    原始 PDF
+                    中提取到的全文内容会完整保留在这里，便于核对解析结果。
+                  </p>
+                  <pre className="mt-4 max-h-[420px] overflow-auto rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
+                    {rawResumeText}
+                  </pre>
+                </div>
+              ) : null}
+
+              {!canonicalResumeMd && !rawResumeText ? (
+                <div className="rounded-2xl border border-[#1C1C1C]/10 p-4 text-sm text-[#1C1C1C]/70">
+                  {selectedResume.parse_status === "failed"
+                    ? "这份简历暂未生成可展示内容，请检查解析错误后重新上传文字 PDF。"
+                    : "正在等待解析产出完整 Markdown 与原文文本。"}
+                </div>
+              ) : null}
+
+              {selectedResume.parse_error ? (
+                <div className="rounded-2xl border border-[#1C1C1C]/10 p-4 text-sm text-[#1C1C1C]/70">
+                  解析错误：{selectedResume.parse_error}
+                </div>
+              ) : null}
             </div>
           </div>
+        ) : (
+          <PageEmptyState
+            title="请选择主简历"
+            description="上传文字 PDF 后即可查看完整 Markdown 成品与提取原文。"
+          />
         )}
       </PaperSection>
 
@@ -628,151 +576,94 @@ export default function DashboardResumePage() {
           </div>
         }
       >
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-4">
-            {generateBlockedReason ? (
-              <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
-                {generateBlockedReason}
-              </div>
-            ) : null}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                  岗位标题
-                </p>
-                <PaperInput
-                  value={jobDraft.title}
-                  onChange={(event) =>
-                    setJobDraft((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                  placeholder="例如：增长数据分析师"
-                />
-              </div>
-              <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                  公司名称
-                </p>
-                <PaperInput
-                  value={jobDraft.company}
-                  onChange={(event) =>
-                    setJobDraft((current) => ({
-                      ...current,
-                      company: event.target.value,
-                    }))
-                  }
-                  placeholder="例如：CareerPilot"
-                />
-              </div>
+        <div className="space-y-4">
+          {generateBlockedReason ? (
+            <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
+              {generateBlockedReason}
             </div>
+          ) : null}
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                  岗位地点
-                </p>
-                <PaperInput
-                  value={jobDraft.job_city}
-                  onChange={(event) =>
-                    setJobDraft((current) => ({
-                      ...current,
-                      job_city: event.target.value,
-                    }))
-                  }
-                  placeholder="例如：上海"
-                />
-              </div>
-              <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                  来源链接
-                </p>
-                <PaperInput
-                  value={jobDraft.source_url}
-                  onChange={(event) =>
-                    setJobDraft((current) => ({
-                      ...current,
-                      source_url: event.target.value,
-                    }))
-                  }
-                  placeholder="可选"
-                />
-              </div>
-            </div>
-
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
               <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                目标岗位 JD
+                岗位标题
               </p>
-              <PaperTextarea
-                value={jobDraft.jd_text}
+              <PaperInput
+                value={jobDraft.title}
                 onChange={(event) =>
                   setJobDraft((current) => ({
                     ...current,
-                    jd_text: event.target.value,
+                    title: event.target.value,
                   }))
                 }
-                placeholder="粘贴完整 JD，系统会自动结构化并生成 match report，再产出岗位定制版简历。"
-                className="min-h-[260px]"
+                placeholder="例如：增长数据分析师"
+              />
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                公司名称
+              </p>
+              <PaperInput
+                value={jobDraft.company}
+                onChange={(event) =>
+                  setJobDraft((current) => ({
+                    ...current,
+                    company: event.target.value,
+                  }))
+                }
+                placeholder="例如：CareerPilot"
               />
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="rounded-3xl border border-[#1C1C1C]/10 bg-white p-4">
-              <p className="text-sm font-semibold text-[#1C1C1C]">
-                最近目标岗位
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                岗位地点
               </p>
-              <p className="mt-1 text-sm leading-relaxed text-[#1C1C1C]/60">
-                这里保留已生成过专属简历的岗位历史，可直接切换查看成品。
-              </p>
-            </div>
-
-            {workflows.length === 0 ? (
-              <PageEmptyState
-                title="还没有岗位历史"
-                description="填写 JD 并点击一键生成后，这里会保留每次岗位定制结果。"
+              <PaperInput
+                value={jobDraft.job_city}
+                onChange={(event) =>
+                  setJobDraft((current) => ({
+                    ...current,
+                    job_city: event.target.value,
+                  }))
+                }
+                placeholder="例如：上海"
               />
-            ) : (
-              workflows.map((workflow) => {
-                const isActive =
-                  workflow.tailored_resume.session_id === selectedWorkflowId;
-                return (
-                  <button
-                    key={workflow.tailored_resume.session_id}
-                    type="button"
-                    onClick={() => handleSelectWorkflow(workflow)}
-                    className={`w-full rounded-3xl border px-4 py-4 text-left transition-colors ${
-                      isActive
-                        ? "border-[#1C1C1C] bg-white"
-                        : "border-[#1C1C1C]/10 bg-white hover:border-[#1C1C1C]/25"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-[#1C1C1C]">
-                          {workflow.target_job.title}
-                        </p>
-                        <p className="mt-1 text-xs text-[#1C1C1C]/45">
-                          {workflow.target_job.company || "未填写公司"}
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-[#1C1C1C]/10 px-2 py-1 text-xs text-[#1C1C1C]/60">
-                        {getFitBandLabel(workflow.tailored_resume.fit_band)}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/60">
-                      {summarizeText(workflow.target_job.jd_text)}
-                    </p>
-                    <p className="mt-3 text-xs text-[#1C1C1C]/45">
-                      生成于 {formatDate(workflow.tailored_resume.updated_at)}
-                    </p>
-                  </button>
-                );
-              })
-            )}
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                来源链接
+              </p>
+              <PaperInput
+                value={jobDraft.source_url}
+                onChange={(event) =>
+                  setJobDraft((current) => ({
+                    ...current,
+                    source_url: event.target.value,
+                  }))
+                }
+                placeholder="可选"
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+              目标岗位 JD
+            </p>
+            <PaperTextarea
+              value={jobDraft.jd_text}
+              onChange={(event) =>
+                setJobDraft((current) => ({
+                  ...current,
+                  jd_text: event.target.value,
+                }))
+              }
+              placeholder="粘贴完整 JD，系统会自动结构化并生成 match report，再产出岗位定制版简历。"
+              className="min-h-[260px]"
+            />
           </div>
         </div>
       </PaperSection>
@@ -838,7 +729,8 @@ export default function DashboardResumePage() {
                   check，但它们不再作为用户主交付物展示。
                 </p>
                 <pre className="mt-5 overflow-x-auto rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
-                  {selectedWorkflow.tailored_resume.optimized_resume_md}
+                  {selectedTailoredMarkdown ||
+                    "这条历史记录缺少新的成品对象，请重新生成一次专属简历。"}
                 </pre>
               </div>
 

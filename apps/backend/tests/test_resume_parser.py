@@ -88,4 +88,4 @@ def test_build_structured_resume_parses_chinese_student_resume_blocks() -> None:
 
     assert any("百度之星省赛金奖" == item.name for item in structured.certification_items)
     assert any("发表 RV-DANet 相关论文" in item.name for item in structured.certification_items)
-    assert any("CET-4 538，CET-6 492" in item.name for item in structured.certification_items)
+    assert any("CET-4 538,CET-6 492" in item.name for item in structured.certification_items)

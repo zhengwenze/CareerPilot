@@ -53,9 +53,18 @@ class ResumeOptimizationSession(TimestampMixin, UserAuditMixin, Base):
     rewrite_tasks_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     draft_sections_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     selected_tasks_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Legacy compatibility projection for optimizer flows only. This is not the final tailored result.
     optimized_resume_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     fact_check_report_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    tailored_resume_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    audit_report_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     optimized_resume_md: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+    )
+    tailored_resume_md: Mapped[str] = mapped_column(
         Text,
         nullable=False,
         default="",

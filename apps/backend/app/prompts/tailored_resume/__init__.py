@@ -9,6 +9,10 @@ def get_tailored_resume_rewrite_prompt() -> str:
     return (PROMPT_DIR / "rewrite_only.txt").read_text(encoding="utf-8").strip()
 
 
+def get_tailored_resume_full_document_prompt() -> str:
+    return (PROMPT_DIR / "full_document.txt").read_text(encoding="utf-8").strip()
+
+
 def get_tailored_resume_grammar_prompt() -> str:
     return (PROMPT_DIR / "grammar_check.txt").read_text(encoding="utf-8").strip()
 
