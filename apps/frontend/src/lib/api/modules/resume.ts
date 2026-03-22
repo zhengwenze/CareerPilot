@@ -287,6 +287,19 @@ export async function fetchTailoredResumeWorkflows(
   );
 }
 
+export async function fetchTailoredResumeWorkflowDetail(
+  token: string,
+  sessionId: string
+): Promise<TailoredResumeWorkflowRecord> {
+  return apiRequest<TailoredResumeWorkflowRecord>(
+    `/tailored-resumes/workflows/${sessionId}`,
+    {
+      method: "GET",
+      token,
+    }
+  );
+}
+
 export async function generateTailoredResume(
   token: string,
   payload: {
@@ -482,7 +495,8 @@ export async function retryResumeParse(
 export async function updateResumeStructuredData(
   token: string,
   resumeId: string,
-  structuredJson: ResumeStructuredData
+  structuredJson: ResumeStructuredData,
+  markdown?: string
 ): Promise<ResumeRecord> {
   logResumeApi("save-structured:start", {
     resumeId,
@@ -497,6 +511,7 @@ export async function updateResumeStructuredData(
       token,
       body: JSON.stringify({
         structured_json: structuredJson,
+        markdown: markdown?.trim() || undefined,
       }),
     }
   );

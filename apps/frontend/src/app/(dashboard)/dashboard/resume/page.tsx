@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useRef,
@@ -7,7 +8,12 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { Download, FileUp, RefreshCcw, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  Download,
+  FileUp,
+  Sparkles,
+} from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -27,13 +33,19 @@ import { ApiError } from "@/lib/api/client";
 import {
   createJob,
   createEmptyJobDraft,
+  fetchJobDetail,
+  fetchJobList,
   type JobDraft,
   type JobRecord,
+  toJobDraft,
   updateJob,
 } from "@/lib/api/modules/jobs";
 import {
   convertResumePdfToMarkdown,
   downloadTailoredResumeMarkdown,
+  fetchResumeDetail,
+  fetchResumeList,
+  fetchTailoredResumeWorkflows,
   optimizeTailoredResume,
   updateResumeStructuredData,
   uploadPrimaryResume,
@@ -41,10 +53,6 @@ import {
   type ResumeStructuredData,
   type TailoredResumeWorkflowRecord,
 } from "@/lib/api/modules/resume";
-import {
-  readResumeWorkbenchState,
-  writeResumeWorkbenchState,
-} from "@/lib/resume-workbench-storage";
 import { cn } from "@/lib/utils";
 
 function getErrorMessage(error: unknown) {
@@ -85,6 +93,27 @@ function getFitBandLabel(value: string) {
     unknown: "待评估",
   };
   return labels[value] ?? value;
+}
+
+function getJobStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "待解析",
+    processing: "解析中",
+    success: "已可用",
+    failed: "解析失败",
+  };
+  return labels[status] ?? status;
+}
+
+function getCanonicalResumeMarkdown(resume: ResumeRecord | null) {
+  if (!resume) {
+    return "";
+  }
+  return (
+    resume.parse_artifacts_json?.canonical_resume_md?.trim() ||
+    resume.raw_text?.trim() ||
+    ""
+  );
 }
 
 function normalizeMarkdown(md: string) {
@@ -129,8 +158,10 @@ function markdownToStructuredResume(markdown: string): ResumeStructuredData {
   const normalized = normalizeMarkdown(markdown);
   const lines = normalized.split("\n");
   const name =
-    lines.find((line) => line.trim().startsWith("# "))?.replace(/^#\s+/, "").trim() ??
-    "";
+    lines
+      .find((line) => line.trim().startsWith("# "))
+      ?.replace(/^#\s+/, "")
+      .trim() ?? "";
   const introLines: string[] = [];
   for (const line of lines.slice(1)) {
     if (line.trim().startsWith("## ")) {
@@ -150,20 +181,18 @@ function markdownToStructuredResume(markdown: string): ResumeStructuredData {
 
   const skills = cleanList(
     pickSection(normalized, ["专业技能", "技能", "skills"]).flatMap((line) =>
-      line.split(/[,，]/)
-    )
+      line.split(/[,，]/),
+    ),
   );
   const education = cleanList(
-    pickSection(normalized, ["教育经历", "education"])
+    pickSection(normalized, ["教育经历", "education"]),
   );
   const workExperience = cleanList(
-    pickSection(normalized, ["工作经验", "work experience"])
+    pickSection(normalized, ["工作经验", "work experience"]),
   );
-  const projects = cleanList(
-    pickSection(normalized, ["项目经历", "projects"])
-  );
+  const projects = cleanList(pickSection(normalized, ["项目经历", "projects"]));
   const certifications = cleanList(
-    pickSection(normalized, ["证书", "certificates"])
+    pickSection(normalized, ["证书", "certificates"]),
   );
 
   return {
@@ -186,25 +215,6 @@ function markdownToStructuredResume(markdown: string): ResumeStructuredData {
   };
 }
 
-function mergeResumeWithMarkdown(
-  resume: ResumeRecord,
-  markdown: string
-): ResumeRecord {
-  return {
-    ...resume,
-    parse_status: "success",
-    raw_text: markdown,
-    parse_artifacts_json: {
-      canonical_resume_md: markdown,
-      meta: {
-        source_type: "pdf_to_md",
-        parser_version: "demo-pdf-to-md",
-        ai_correction_applied: true,
-      },
-    },
-  };
-}
-
 function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
   const lines = markdown.split("\n");
   const nodes: ReactNode[] = [];
@@ -222,7 +232,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
         {listItems.map((item, index) => (
           <li key={`${key}-${index}`}>{item}</li>
         ))}
-      </ul>
+      </ul>,
     );
     listItems = [];
   };
@@ -248,7 +258,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
           className="mt-5 text-base font-semibold text-[#1C1C1C]"
         >
           {line.slice(4)}
-        </h3>
+        </h3>,
       );
       return;
     }
@@ -260,7 +270,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
           className="mt-6 border-t border-[#1C1C1C]/10 pt-6 text-lg font-semibold text-[#1C1C1C]"
         >
           {line.slice(3)}
-        </h2>
+        </h2>,
       );
       return;
     }
@@ -272,7 +282,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
           className="text-2xl font-semibold text-[#1C1C1C]"
         >
           {line.slice(2)}
-        </h1>
+        </h1>,
       );
       return;
     }
@@ -285,11 +295,11 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
           /^\d{4}[./-]\d{1,2}\s*-\s*/.test(line) ||
             /^\d{4}\s*-\s*\d{4}/.test(line)
             ? "font-medium text-[#1C1C1C]"
-            : ""
+            : "",
         )}
       >
         {line}
-      </p>
+      </p>,
     );
   });
 
@@ -300,14 +310,13 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
 export default function DashboardResumePage() {
   const { token } = useAuth();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const reconvertInputRef = useRef<HTMLInputElement | null>(null);
 
   const [resume, setResume] = useState<ResumeRecord | null>(null);
   const [resumeMarkdown, setResumeMarkdown] = useState("");
   const [jobDraft, setJobDraft] = useState<JobDraft>(createEmptyJobDraft());
   const [savedJob, setSavedJob] = useState<JobRecord | null>(null);
   const [workflow, setWorkflow] = useState<TailoredResumeWorkflowRecord | null>(
-    null
+    null,
   );
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
@@ -319,34 +328,113 @@ export default function DashboardResumePage() {
   const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
-    const stored = readResumeWorkbenchState();
-    if (!stored) {
+    if (!token) {
       return;
     }
-    setResume(stored.resume);
-    setResumeMarkdown(stored.resumeMarkdown);
-    setJobDraft(stored.jobDraft);
-    setSavedJob(stored.savedJob);
-    setWorkflow(stored.workflow);
-  }, []);
+
+    let cancelled = false;
+
+    async function bootstrap() {
+      setPageError("");
+
+      try {
+        const [resumes, jobs, workflows] = await Promise.all([
+          fetchResumeList(token!),
+          fetchJobList(token!),
+          fetchTailoredResumeWorkflows(token!).catch(() => []),
+        ]);
+        if (cancelled) {
+          return;
+        }
+
+        const nextResume = resumes[0] ?? null;
+        const nextSavedJob = jobs[0] ?? null;
+        const nextWorkflow =
+          workflows.find(
+            (item) =>
+              item.resume.id === nextResume?.id &&
+              item.target_job.id === nextSavedJob?.id,
+          ) ?? null;
+
+        setResume(nextResume);
+        setResumeMarkdown((current) => current || getCanonicalResumeMarkdown(nextResume));
+        setSavedJob(nextSavedJob);
+        setJobDraft(
+          nextSavedJob ? toJobDraft(nextSavedJob) : createEmptyJobDraft(),
+        );
+        setWorkflow(nextWorkflow);
+      } catch (error) {
+        if (!cancelled) {
+          setPageError(getErrorMessage(error));
+        }
+      }
+    }
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
-    writeResumeWorkbenchState({
-      resume,
-      resumeMarkdown,
-      jobDraft,
-      savedJob,
-      workflow,
-    });
-  }, [resume, resumeMarkdown, jobDraft, savedJob, workflow]);
+    if (!token || !resume?.id) {
+      return;
+    }
+    if (!["pending", "processing"].includes(resume.parse_status)) {
+      return;
+    }
 
-  const canSaveResume = Boolean(token && resume?.id && normalizeMarkdown(resumeMarkdown));
-  const canSaveJob = Boolean(token && jobDraft.title.trim() && jobDraft.jd_text.trim());
+    const timer = window.setInterval(async () => {
+      try {
+        const nextResume = await fetchResumeDetail(token, resume.id);
+        setResume(nextResume);
+        const nextMarkdown = getCanonicalResumeMarkdown(nextResume);
+        if (nextMarkdown) {
+          setResumeMarkdown(nextMarkdown);
+        }
+      } catch {
+        // keep the last visible state until the next retry
+      }
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [resume?.id, resume?.parse_status, token]);
+
+  useEffect(() => {
+    if (!token || !savedJob?.id) {
+      return;
+    }
+    if (!["pending", "processing"].includes(savedJob.parse_status)) {
+      return;
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const nextJob = await fetchJobDetail(token, savedJob.id);
+        setSavedJob(nextJob);
+        setJobDraft((current) =>
+          current.jd_text.trim() ? current : toJobDraft(nextJob),
+        );
+      } catch {
+        // keep the last visible state until the next retry
+      }
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [savedJob?.id, savedJob?.parse_status, token]);
+
+  const canSaveResume = Boolean(
+    token && resume?.id && normalizeMarkdown(resumeMarkdown),
+  );
+  const canSaveJob = Boolean(
+    token && jobDraft.title.trim() && jobDraft.jd_text.trim(),
+  );
   const canGenerate = Boolean(
     token &&
-      resume?.id &&
-      resume.parse_status === "success" &&
-      savedJob?.id
+    resume?.id &&
+    resume.parse_status === "success" &&
+    savedJob?.id &&
+    savedJob.parse_status === "success",
   );
 
   if (!token) {
@@ -367,43 +455,29 @@ export default function DashboardResumePage() {
     try {
       const uploaded = await uploadPrimaryResume(token, file);
       setResume(uploaded);
-
       setIsConverting(true);
+
       const converted = await convertResumePdfToMarkdown(token, file);
-      setResumeMarkdown(converted.markdown);
-      setResume(mergeResumeWithMarkdown(uploaded, converted.markdown));
+      const nextMarkdown = normalizeMarkdown(converted.markdown);
+      setResumeMarkdown(nextMarkdown);
+      setIsSavingResume(true);
+
+      const autoSaved = await updateResumeStructuredData(
+        token,
+        uploaded.id,
+        markdownToStructuredResume(nextMarkdown),
+        nextMarkdown,
+      );
+      setResume(autoSaved);
+      setResumeMarkdown(getCanonicalResumeMarkdown(autoSaved) || nextMarkdown);
       setWorkflow(null);
-      setStatusMessage("PDF 已上传并转成 Markdown，请确认后保存简历。");
+      setStatusMessage("PDF 已上传、自动转换为 Markdown，并已保存到当前用户账户。");
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
       setIsUploading(false);
       setIsConverting(false);
-    }
-  }
-
-  async function handleDirectConvert(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!token || !file) {
-      return;
-    }
-
-    setIsConverting(true);
-    setPageError("");
-    setStatusMessage("");
-
-    try {
-      const converted = await convertResumePdfToMarkdown(token, file);
-      setResumeMarkdown(converted.markdown);
-      if (resume) {
-        setResume(mergeResumeWithMarkdown(resume, converted.markdown));
-      }
-      setStatusMessage("已按直转接口重新生成 Markdown，请再次保存简历。");
-    } catch (error) {
-      setPageError(getErrorMessage(error));
-    } finally {
-      setIsConverting(false);
+      setIsSavingResume(false);
     }
   }
 
@@ -418,8 +492,16 @@ export default function DashboardResumePage() {
 
     try {
       const payload = markdownToStructuredResume(resumeMarkdown);
-      const saved = await updateResumeStructuredData(token, resume.id, payload);
-      setResume(mergeResumeWithMarkdown(saved, normalizeMarkdown(resumeMarkdown)));
+      const saved = await updateResumeStructuredData(
+        token,
+        resume.id,
+        payload,
+        normalizeMarkdown(resumeMarkdown),
+      );
+      const nextMarkdown =
+        getCanonicalResumeMarkdown(saved) || normalizeMarkdown(resumeMarkdown);
+      setResume(saved);
+      setResumeMarkdown(nextMarkdown);
       setStatusMessage("简历已保存，可继续保存岗位 JD 并生成优化简历。");
     } catch (error) {
       setPageError(getErrorMessage(error));
@@ -442,7 +524,11 @@ export default function DashboardResumePage() {
         ? await updateJob(token, savedJob.id, jobDraft)
         : await createJob(token, jobDraft);
       setSavedJob(nextJob);
-      setStatusMessage(savedJob ? "岗位 JD 已更新。" : "岗位 JD 已保存。");
+      setStatusMessage(
+        savedJob
+          ? "岗位 JD 已更新，后端正在重新解析。"
+          : "岗位 JD 已保存，后端正在解析。",
+      );
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -487,7 +573,7 @@ export default function DashboardResumePage() {
     try {
       const result = await downloadTailoredResumeMarkdown(
         token,
-        workflow.tailored_resume.session_id
+        workflow.tailored_resume.session_id,
       );
       const objectUrl = window.URL.createObjectURL(result.blob);
       const link = document.createElement("a");
@@ -518,7 +604,9 @@ export default function DashboardResumePage() {
           <>
             <MetaChip>{resume ? "已上传简历" : "未上传简历"}</MetaChip>
             <MetaChip>{savedJob ? "已保存 JD" : "未保存 JD"}</MetaChip>
-            <MetaChip>{workflow ? "已生成优化简历" : "未生成优化简历"}</MetaChip>
+            <MetaChip>
+              {workflow ? "已生成优化简历" : "未生成优化简历"}
+            </MetaChip>
           </>
         }
       />
@@ -557,31 +645,14 @@ export default function DashboardResumePage() {
               accept=".pdf,application/pdf"
               onChange={handleUploadResume}
             />
-            <input
-              ref={reconvertInputRef}
-              className="hidden"
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={handleDirectConvert}
-            />
             <Button
-              disabled={isUploading}
+              disabled={isUploading || isConverting}
               size="sm"
               type="button"
               onClick={() => uploadInputRef.current?.click()}
             >
               <FileUp className="size-4" />
-              {isUploading ? "上传中" : "上传 PDF"}
-            </Button>
-            <Button
-              disabled={isConverting}
-              size="sm"
-              type="button"
-              variant="secondary"
-              onClick={() => reconvertInputRef.current?.click()}
-            >
-              <RefreshCcw className="size-4" />
-              {isConverting ? "转 MD 中" : "重新转 MD"}
+              {isUploading || isConverting ? "上传并解析中" : "上传 PDF"}
             </Button>
             <Button
               disabled={!canSaveResume || isSavingResume}
@@ -610,14 +681,16 @@ export default function DashboardResumePage() {
             />
             {normalizeMarkdown(resumeMarkdown) ? (
               <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-5">
-                <ResumeMarkdownPreview markdown={normalizeMarkdown(resumeMarkdown)} />
+                <ResumeMarkdownPreview
+                  markdown={normalizeMarkdown(resumeMarkdown)}
+                />
               </div>
             ) : null}
           </div>
         ) : (
           <PageEmptyState
             title="还没有主简历"
-            description="先上传 PDF，页面会同时使用上传接口和 PDF 直转 MD 接口。"
+            description="先上传 PDF，系统会自动把 PDF 转成可编辑的 Markdown。"
           />
         )}
       </PaperSection>
@@ -626,34 +699,49 @@ export default function DashboardResumePage() {
         eyebrow="Job"
         title="保存或更新岗位 JD"
         rightSlot={
-          <Button
-            disabled={!canSaveJob || isSavingJob}
-            size="sm"
-            type="button"
-            onClick={() => void handleSaveJob()}
-          >
-            {isSavingJob ? "保存中" : savedJob ? "更新 JD" : "保存 JD"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {savedJob ? (
+              <MetaChip>{getJobStatusLabel(savedJob.parse_status)}</MetaChip>
+            ) : null}
+            <Button
+              disabled={!canSaveJob || isSavingJob}
+              size="sm"
+              type="button"
+              onClick={() => void handleSaveJob()}
+            >
+              {isSavingJob ? "保存中" : savedJob ? "更新 JD" : "保存 JD"}
+            </Button>
+          </div>
         }
       >
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位标题</p>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                岗位标题
+              </p>
               <PaperInput
                 value={jobDraft.title}
                 onChange={(event) =>
-                  setJobDraft((current) => ({ ...current, title: event.target.value }))
+                  setJobDraft((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
                 }
                 placeholder="例如：高级前端工程师"
               />
             </div>
             <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">公司名称</p>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                公司名称
+              </p>
               <PaperInput
                 value={jobDraft.company}
                 onChange={(event) =>
-                  setJobDraft((current) => ({ ...current, company: event.target.value }))
+                  setJobDraft((current) => ({
+                    ...current,
+                    company: event.target.value,
+                  }))
                 }
                 placeholder="例如：CareerPilot"
               />
@@ -662,21 +750,31 @@ export default function DashboardResumePage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位地点</p>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                岗位地点
+              </p>
               <PaperInput
                 value={jobDraft.job_city}
                 onChange={(event) =>
-                  setJobDraft((current) => ({ ...current, job_city: event.target.value }))
+                  setJobDraft((current) => ({
+                    ...current,
+                    job_city: event.target.value,
+                  }))
                 }
                 placeholder="例如：上海"
               />
             </div>
             <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">来源链接</p>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                来源链接
+              </p>
               <PaperInput
                 value={jobDraft.source_url}
                 onChange={(event) =>
-                  setJobDraft((current) => ({ ...current, source_url: event.target.value }))
+                  setJobDraft((current) => ({
+                    ...current,
+                    source_url: event.target.value,
+                  }))
                 }
                 placeholder="可选"
               />
@@ -684,11 +782,16 @@ export default function DashboardResumePage() {
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-medium text-[#1C1C1C]">目标岗位 JD</p>
+            <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+              目标岗位 JD
+            </p>
             <PaperTextarea
               value={jobDraft.jd_text}
               onChange={(event) =>
-                setJobDraft((current) => ({ ...current, jd_text: event.target.value }))
+                setJobDraft((current) => ({
+                  ...current,
+                  jd_text: event.target.value,
+                }))
               }
               placeholder="粘贴完整岗位描述。首次点击保存会走 POST /jobs，之后更新会走 PUT /jobs/{job_id}。"
               className="min-h-[240px]"
@@ -721,12 +824,23 @@ export default function DashboardResumePage() {
               <Download className="size-4" />
               {isDownloading ? "下载中" : "下载 MD"}
             </Button>
+            {workflow ? (
+              <Button asChild size="sm" type="button" variant="secondary">
+                <Link
+                  href={`/dashboard/interviews?jobId=${workflow.target_job.id}&optimizationSessionId=${workflow.tailored_resume.session_id}`}
+                >
+                  开始模拟面试
+                  <ArrowUpRight className="size-4" />
+                </Link>
+              </Button>
+            ) : null}
           </div>
         }
       >
         {!canGenerate ? (
           <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
-            先完成 1. 上传并转 MD 2. 保存简历 3. 保存岗位 JD，然后才能调用优化简历接口。
+            先完成 1. 上传并等待简历解析成功 / 或保存直转 Markdown 2. 保存岗位
+            JD 并等待解析成功，然后才能生成优化简历。
           </div>
         ) : null}
 
@@ -734,7 +848,9 @@ export default function DashboardResumePage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <MetaChip>{workflow.target_job.title}</MetaChip>
-              <MetaChip>{getFitBandLabel(workflow.tailored_resume.fit_band)}</MetaChip>
+              <MetaChip>
+                {getFitBandLabel(workflow.tailored_resume.fit_band)}
+              </MetaChip>
               <MetaChip>
                 Score {workflow.tailored_resume.overall_score}
               </MetaChip>

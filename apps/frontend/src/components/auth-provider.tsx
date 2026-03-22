@@ -51,7 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     const storedSession = readStoredSession();
 
-    if (!storedSession) {
+    if (!storedSession?.accessToken) {
+      clearStoredSession();
       setIsBootstrapping(false);
       return;
     }

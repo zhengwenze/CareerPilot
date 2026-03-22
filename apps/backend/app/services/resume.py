@@ -485,19 +485,32 @@ async def process_resume_parse_job(
             )
             return
 
-        if raw_text is not None:
-            resume.raw_text = raw_text
-        resume.parse_artifacts_json = build_resume_parse_artifacts(
-            file_name=resume.file_name,
-            raw_text=raw_text,
-            canonical_resume_md=canonical_resume_md,
-            ai_status=ai_status,
-            parse_status=resume_parse_status,
-            parse_error=resume_parse_error,
-            source_type=extraction_source_type,
-            ocr_used=extraction_ocr_used,
-            ocr_engine=extraction_ocr_engine,
+        existing_artifacts = resume.parse_artifacts_json or {}
+        existing_canonical_md = str(
+            existing_artifacts.get("canonical_resume_md") or ""
+        ).strip()
+        existing_raw_text = str(resume.raw_text or "").strip()
+        preserve_user_saved_markdown = (
+            resume.parse_status == "success"
+            and resume.latest_version > 1
+            and bool(existing_canonical_md)
+            and bool(existing_raw_text)
         )
+
+        if not preserve_user_saved_markdown:
+            if raw_text is not None:
+                resume.raw_text = raw_text
+            resume.parse_artifacts_json = build_resume_parse_artifacts(
+                file_name=resume.file_name,
+                raw_text=raw_text,
+                canonical_resume_md=canonical_resume_md,
+                ai_status=ai_status,
+                parse_status=resume_parse_status,
+                parse_error=resume_parse_error,
+                source_type=extraction_source_type,
+                ocr_used=extraction_ocr_used,
+                ocr_engine=extraction_ocr_engine,
+            )
 
         resume.parse_status = resume_parse_status
         resume.parse_error = resume_parse_error
@@ -680,7 +693,17 @@ async def update_resume_structured_data(
     resume = await get_resume_for_user(
         session, current_user=current_user, resume_id=resume_id
     )
+    normalized_markdown = str(payload.markdown or "").strip()
     resume.structured_json = payload.structured_json.model_dump()
+    if normalized_markdown:
+        resume.raw_text = normalized_markdown
+        artifacts = dict(resume.parse_artifacts_json or {})
+        artifacts["canonical_resume_md"] = normalized_markdown
+        meta = dict(artifacts.get("meta") or {})
+        if "source_type" not in meta:
+            meta["source_type"] = "pdf_to_md"
+        artifacts["meta"] = meta
+        resume.parse_artifacts_json = artifacts
     resume.latest_version += 1
     resume.updated_by = current_user.id
 

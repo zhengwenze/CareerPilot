@@ -26,6 +26,8 @@ from app.services.resume import convert_pdf_bytes_to_markdown, validate_resume_u
 from app.services.resume_optimizer import get_resume_optimization_markdown_download
 from app.services.tailored_resume import (
     generate_tailored_resume_for_saved_job,
+    get_tailored_resume_workflow,
+    list_tailored_resume_workflows,
 )
 
 router = APIRouter(prefix="/tailored-resumes", tags=["tailored-resumes"])
@@ -33,6 +35,37 @@ router = APIRouter(prefix="/tailored-resumes", tags=["tailored-resumes"])
 
 def resolve_session_factory(request: Request):
     return getattr(request.app.state, "session_factory", get_session_factory())
+
+
+@router.get(
+    "/workflows",
+    response_model=ApiSuccessResponse[list[TailoredResumeWorkflowResponse]],
+)
+async def list_workflows(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[list[TailoredResumeWorkflowResponse]]:
+    workflows = await list_tailored_resume_workflows(session, current_user=current_user)
+    return success_response(request, workflows)
+
+
+@router.get(
+    "/workflows/{session_id}",
+    response_model=ApiSuccessResponse[TailoredResumeWorkflowResponse],
+)
+async def get_workflow(
+    request: Request,
+    session_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[TailoredResumeWorkflowResponse]:
+    workflow = await get_tailored_resume_workflow(
+        session,
+        current_user=current_user,
+        session_id=session_id,
+    )
+    return success_response(request, workflow)
 
 
 @router.post(

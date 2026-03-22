@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     interview_ai_base_url: str = "https://api.minimaxi.com/anthropic"
     interview_ai_api_key: str | None = None
     interview_ai_model: str = "MiniMax-M2.5"
+    interview_ai_model_planning: str | None = None
+    interview_ai_model_realtime: str | None = None
     interview_ai_timeout_seconds: int = 60
 
     model_config = SettingsConfigDict(
@@ -150,11 +152,40 @@ class Settings(BaseSettings):
     def resolve_interview_ai_api_key(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
+        match_ai_api_key = os.getenv("MATCH_AI_API_KEY", "").strip()
+        if match_ai_api_key:
+            return match_ai_api_key
+        minimax_api_key = os.getenv("MINIMAX_API_KEY", "").strip()
+        if minimax_api_key:
+            return minimax_api_key
         anthropic_auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
         if anthropic_auth_token:
             return anthropic_auth_token
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         return anthropic_api_key or None
+
+    @field_validator("interview_ai_model_planning", mode="before")
+    @classmethod
+    def resolve_interview_ai_model_planning(cls, value: str | None) -> str | None:
+        if value is not None and value.strip():
+            return value
+        match_ai_model = os.getenv("MATCH_AI_MODEL", "").strip()
+        if match_ai_model:
+            return match_ai_model
+        minimax_model_planning = os.getenv("MINIMAX_MODEL_PLANNING", "").strip()
+        if minimax_model_planning:
+            return minimax_model_planning
+        return None
+
+    @field_validator("interview_ai_model_realtime", mode="before")
+    @classmethod
+    def resolve_interview_ai_model_realtime(cls, value: str | None) -> str | None:
+        if value is not None and value.strip():
+            return value
+        minimax_model_realtime = os.getenv("MINIMAX_MODEL_REALTIME", "").strip()
+        if minimax_model_realtime:
+            return minimax_model_realtime
+        return None
 
     @model_validator(mode="after")
     def resolve_match_ai_fallbacks(self) -> "Settings":
@@ -173,6 +204,33 @@ class Settings(BaseSettings):
                 "ANTHROPIC_API_KEY", ""
             ).strip()
             self.match_ai_api_key = fallback_key or None
+
+        if not (self.interview_ai_base_url or "").strip():
+            fallback_base_url = (self.match_ai_base_url or "").strip() or os.getenv(
+                "MINIMAX_BASE_URL", ""
+            ).strip()
+            self.interview_ai_base_url = fallback_base_url or self.resume_ai_base_url
+
+        if not (self.interview_ai_api_key or "").strip():
+            fallback_key = (self.match_ai_api_key or "").strip() or os.getenv(
+                "MINIMAX_API_KEY", ""
+            ).strip()
+            self.interview_ai_api_key = fallback_key or None
+
+        if not (self.interview_ai_model_planning or "").strip():
+            fallback_model = (self.match_ai_model or "").strip() or os.getenv(
+                "MINIMAX_MODEL_PLANNING", ""
+            ).strip()
+            self.interview_ai_model_planning = fallback_model or self.interview_ai_model
+
+        if not (self.interview_ai_model_realtime or "").strip():
+            fallback_model = os.getenv("MINIMAX_MODEL_REALTIME", "").strip()
+            self.interview_ai_model_realtime = fallback_model or self.interview_ai_model
+
+        explicit_interview_timeout = os.getenv("INTERVIEW_AI_TIMEOUT_SECONDS", "").strip()
+        if not explicit_interview_timeout and self.interview_ai_timeout_seconds == 60:
+            if self.match_ai_timeout_seconds and self.match_ai_timeout_seconds > 0:
+                self.interview_ai_timeout_seconds = self.match_ai_timeout_seconds
 
         return self
 

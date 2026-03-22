@@ -19,6 +19,8 @@ from app.routers.deps import (
 from app.schemas.common import ApiSuccessResponse
 from app.schemas.resume import ResumeResponse, ResumeStructuredUpdateRequest
 from app.services.resume import (
+    get_resume_detail,
+    list_resumes,
     update_resume_structured_data,
     upload_resume,
 )
@@ -28,6 +30,27 @@ from app.services.storage import ObjectStorage
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
+
+
+@router.get("", response_model=ApiSuccessResponse[list[ResumeResponse]])
+async def list_resume_records(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[list[ResumeResponse]]:
+    items = await list_resumes(session, current_user=current_user)
+    return success_response(request, items)
+
+
+@router.get("/{resume_id}", response_model=ApiSuccessResponse[ResumeResponse])
+async def get_resume_record(
+    request: Request,
+    resume_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[ResumeResponse]:
+    item = await get_resume_detail(session, current_user=current_user, resume_id=resume_id)
+    return success_response(request, item)
 
 
 @router.post(

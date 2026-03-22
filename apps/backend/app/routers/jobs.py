@@ -16,6 +16,8 @@ from app.schemas.job import JobCreateRequest, JobResponse, JobUpdateRequest
 from app.services.job import (
     build_job_response,
     create_job,
+    get_job_response_or_404,
+    list_jobs,
     process_job_parse_job,
     serialize_job,
     update_job,
@@ -73,6 +75,27 @@ def schedule_job_parse_job(
         active_task_ids.discard(parse_job_id)
 
     task.add_done_callback(_cleanup)
+
+
+@router.get("", response_model=ApiSuccessResponse[list[JobResponse]])
+async def list_job_descriptions(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[list[JobResponse]]:
+    items = await list_jobs(session, current_user=current_user)
+    return success_response(request, items)
+
+
+@router.get("/{job_id}", response_model=ApiSuccessResponse[JobResponse])
+async def get_job_description(
+    request: Request,
+    job_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[JobResponse]:
+    item = await get_job_response_or_404(session, current_user=current_user, job_id=job_id)
+    return success_response(request, item)
 
 
 @router.post(
