@@ -364,6 +364,7 @@ chmod +x docker/deploy.sh
 ```
 
 脚本会自动：
+
 - 检查 Docker 环境
 - 创建 `.env` 配置文件
 - 启动所有服务（PostgreSQL、Redis、MinIO、Backend、Frontend）
