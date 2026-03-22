@@ -88,6 +88,10 @@ scripts/utils/__pycache__/
 .cache/
 .cache/*
 
+# PDF files (local development, do not commit)
+pdf/
+*.pdf
+
 # uv cache
 .uv-cache/
 
