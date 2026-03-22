@@ -607,253 +607,29 @@ uv run alembic current
 career-pilot/
 ├── apps/
 │   ├── backend/                      # FastAPI 后端服务
-│   │   ├── app/
-│   │   │   ├── core/                 # 核心配置
-│   │   │   │   ├── config.py         # 配置管理
-│   │   │   │   ├── errors.py         # 错误处理
-│   │   │   │   ├── logging.py        # 日志配置
-│   │   │   │   ├── responses.py      # 统一响应格式
-│   │   │   │   └── security.py       # 安全工具（JWT、密码哈希）
-│   │   │   ├── db/                   # 数据库层
-│   │   │   │   ├── base.py           # SQLAlchemy 基础配置
-│   │   │   │   └── session.py        # 数据库会话管理
-│   │   │   ├── models/               # SQLAlchemy 数据模型
-│   │   │   │   ├── user.py           # 用户模型
-│   │   │   │   ├── user_profile.py   # 用户资料模型
-│   │   │   │   ├── resume.py         # 简历模型
-│   │   │   │   ├── resume_parse_job.py    # 简历解析任务
-│   │   │   │   ├── job_description.py      # 岗位描述模型
-│   │   │   │   ├── job_parse_job.py        # 岗位解析任务
-│   │   │   │   ├── job_readiness_event.py  # 岗位准备事件
-│   │   │   │   ├── match_report.py         # 匹配报告模型
-│   │   │   │   ├── mock_interview_session.py  # 模拟面试会话
-│   │   │   │   ├── mock_interview_turn.py     # 模拟面试轮次
-│   │   │   │   ├── resume_optimization_session.py # 简历优化会话
-│   │   │   │   └── mixins.py         # 公共模型混入
-│   │   │   ├── routers/              # API 路由
-│   │   │   │   ├── auth.py           # 认证路由
-│   │   │   │   ├── deps.py           # 依赖注入
-│   │   │   │   ├── health.py         # 健康检查
-│   │   │   │   ├── profile.py        # 用户资料路由
-│   │   │   │   ├── resumes.py        # 简历管理路由
-│   │   │   │   ├── tailored_resumes.py    # 定制化简历路由
-│   │   │   │   ├── resume_optimization.py # 简历优化路由
-│   │   │   │   ├── jobs.py           # 岗位管理路由
-│   │   │   │   ├── match_reports.py  # 匹配报告路由
-│   │   │   │   └── mock_interviews.py     # 模拟面试路由
-│   │   │   ├── schemas/              # Pydantic Schema
-│   │   │   │   ├── auth.py           # 认证相关
-│   │   │   │   ├── common.py         # 公共定义
-│   │   │   │   ├── user.py           # 用户相关
-│   │   │   │   ├── profile.py        # 资料相关
-│   │   │   │   ├── resume.py         # 简历相关
-│   │   │   │   ├── tailored_resume.py     # 定制化简历
-│   │   │   │   ├── resume_optimization.py # 简历优化
-│   │   │   │   ├── job.py            # 岗位相关
-│   │   │   │   ├── match_report.py   # 匹配报告
-│   │   │   │   ├── mock_interview.py # 模拟面试
-│   │   │   │   └── system.py         # 系统信息
-│   │   │   ├── services/             # 业务逻辑层
-│   │   │   │   ├── ai_client.py      # AI 客户端统一封装
-│   │   │   │   ├── auth.py           # 认证服务
-│   │   │   │   ├── profile.py        # 用户资料服务
-│   │   │   │   ├── resume.py         # 简历服务
-│   │   │   │   ├── resume_parser.py  # 简历规则解析
-│   │   │   │   ├── resume_ai.py      # AI 校正服务
-│   │   │   │   ├── resume_markdown_renderer.py # Markdown 渲染
-│   │   │   │   ├── tailored_resume.py          # 定制化简历服务
-│   │   │   │   ├── tailored_resume_document_ai.py # 定制化文档 AI
-│   │   │   │   ├── tailored_resume_grammar.py     # 定制化语法检查
-│   │   │   │   ├── tailored_resume_polish.py      # 定制化润色
-│   │   │   │   ├── resume_optimizer.py         # 简历优化服务
-│   │   │   │   ├── resume_optimizer_ai.py      # 简历优化 AI
-│   │   │   │   ├── job.py            # 岗位服务
-│   │   │   │   ├── job_parser.py     # 岗位规则解析
-│   │   │   │   ├── match_report.py   # 匹配报告服务
-│   │   │   │   ├── match_engine.py   # 规则匹配引擎
-│   │   │   │   ├── match_ai.py       # AI 匹配服务
-│   │   │   │   ├── match_support.py  # 匹配支持工具
-│   │   │   │   ├── mock_interview.py         # 模拟面试服务
-│   │   │   │   ├── mock_interview_ai.py      # 模拟面试 AI
-│   │   │   │   ├── storage.py        # 对象存储服务
-│   │   │   │   └── token_blocklist.py        # Token 黑名单
-│   │   │   ├── prompts/              # AI Prompt 模板
-│   │   │   │   ├── resume/           # 简历解析 Prompt
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── import_extraction.txt
-│   │   │   │   │   └── structure_correction.txt
-│   │   │   │   ├── tailored_resume/  # 定制化简历 Prompt
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── full_document.txt
-│   │   │   │   │   ├── rewrite_only.txt
-│   │   │   │   │   ├── grammar_check.txt
-│   │   │   │   │   └── polish_markdown.txt
-│   │   │   │   ├── match/            # 匹配 Prompt
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── report_generation.txt
-│   │   │   │   │   └── report_repair.txt
-│   │   │   │   ├── mock_interview/   # 模拟面试 Prompt
-│   │   │   │   │   ├── interview_final_review.txt
-│   │   │   │   │   ├── interview_followup_decider.txt
-│   │   │   │   │   ├── interview_plan_system.txt
-│   │   │   │   │   ├── interview_turn_evaluator.txt
-│   │   │   │   │   └── json_repair.txt
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── enrichment.py     # 内容增强
-│   │   │   │   ├── mock_interview.py # 模拟面试系统提示
-│   │   │   │   ├── refinement.py     # 内容精炼
-│   │   │   │   └── templates.py      # Prompt 模板
-│   │   │   └── main.py               # 应用入口
+│   │   └── app/
+│   │       ├── core/                 # 核心配置
+│   │       ├── db/                   # 数据库层
+│   │       ├── models/               # SQLAlchemy 数据模型
+│   │       ├── routers/              # API 路由
+│   │       ├── schemas/              # Pydantic Schema
+│   │       ├── services/             # 业务逻辑层
+│   │       ├── prompts/              # AI Prompt 模板
+│   │       └── main.py               # 应用入口
 │   │   ├── alembic/                  # 数据库迁移
-│   │   │   ├── env.py                # Alembic 配置
-│   │   │   ├── script.py.mako        # 迁移文件模板
-│   │   │   └── versions/             # 迁移历史
-│   │   │       ├── 20260314_0001_create_users_table.py
-│   │   │       ├── 20260314_0002_create_user_profiles_table.py
-│   │   │       ├── 20260314_0003_create_resumes_tables.py
-│   │   │       ├── 20260315_0004_create_jobs_and_match_reports_tables.py
-│   │   │       ├── 20260316_0005_expand_job_matching_workflow.py
-│   │   │       ├── 20260317_0006_create_resume_optimization_sessions_table.py
-│   │   │       ├── 20260317_0007_add_ai_fields_to_resume_parse_jobs.py
-│   │   │       ├── 20260318_0008_create_mock_interview_tables.py
-│   │   │       ├── 20260320_0009_add_parse_artifacts_to_resumes.py
-│   │   │       ├── 20260320_0010_expand_resume_optimization_sessions_outputs.py
-│   │   │       └── 20260321_0011_add_tailored_resume_documents_to_sessions.py
-│   │   ├── tests/                    # 测试用例
-│   │   │   ├── conftest.py           # 测试配置
-│   │   │   ├── test_resume_parser.py
-│   │   │   ├── test_resume_ai.py
-│   │   │   ├── test_resume_parse_flow.py
-│   │   │   ├── test_resume.py
-│   │   │   ├── test_resume_markdown_renderer.py
-│   │   │   ├── test_tailored_resume_document_ai.py
-│   │   │   ├── test_tailored_resume_grammar.py
-│   │   │   ├── test_tailored_resume_polish.py
-│   │   │   ├── test_tailored_resume_flow.py
-│   │   │   ├── test_resume_optimizer_flow.py
-│   │   │   ├── test_jobs_match_flow.py
-│   │   │   ├── test_mock_interview_flow.py
-│   │   │   ├── test_ai_client_json_parse.py
-│   │   │   ├── test_jobs.py
-│   │   │   └── test_match_reports.py
-│   │   ├── .env.example              # 环境变量模板
-│   │   ├── .gitignore
-│   │   ├── Dockerfile
-│   │   ├── alembic.ini
-│   │   └── pyproject.toml            # Python 依赖配置
+│   │   └── tests/                    # 测试用例
 │   │
 │   ├── frontend/                     # Next.js 前端
-│   │   ├── src/
-│   │   │   ├── app/                  # Next.js App Router
-│   │   │   │   ├── (dashboard)/      # 仪表盘路由（带认证保护）
-│   │   │   │   │   ├── dashboard/    # 各功能模块
-│   │   │   │   │   │   ├── page.tsx  # 仪表盘首页
-│   │   │   │   │   │   ├── overview/ # 概览
-│   │   │   │   │   │   ├── resume/   # 简历管理
-│   │   │   │   │   │   ├── jobs/     # 岗位管理
-│   │   │   │   │   │   ├── optimizer/# 简历优化
-│   │   │   │   │   │   ├── profile/  # 用户资料
-│   │   │   │   │   │   ├── setting/  # 设置
-│   │   │   │   │   │   ├── interviews/ # 模拟面试
-│   │   │   │   │   │   └── applications/ # 投递管理
-│   │   │   │   │   ├── layout.tsx    # 仪表盘布局
-│   │   │   │   │   ├── loading.tsx   # 加载状态
-│   │   │   │   │   ├── error.tsx     # 错误处理
-│   │   │   │   ├── login/            # 登录页面
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── register/         # 注册页面
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── layout.tsx        # 根布局
-│   │   │   │   ├── page.tsx          # 首页
-│   │   │   │   ├── globals.css       # 全局样式
-│   │   │   │   └── favicon.ico
-│   │   │   ├── components/           # UI 组件
-│   │   │   │   ├── guards/           # 路由守卫
-│   │   │   │   │   ├── guest-route.tsx
-│   │   │   │   │   └── protected-route.tsx
-│   │   │   │   ├── layout/           # 布局组件
-│   │   │   │   │   ├── app-sidebar.tsx
-│   │   │   │   │   └── dashboard-top-nav.tsx
-│   │   │   │   ├── brutalist/        # Brutalist 风格组件
-│   │   │   │   │   ├── form-controls.tsx
-│   │   │   │   │   └── page-shell.tsx
-│   │   │   │   ├── dashboard/        # 仪表盘组件
-│   │   │   │   │   └── dashboard-placeholder-page.tsx
-│   │   │   │   ├── resume/           # 简历相关组件
-│   │   │   │   │   ├── resume-structured-editor.tsx
-│   │   │   │   │   └── status-meta.ts
-│   │   │   │   ├── ui/               # UI 基础组件（shadcn/ui）
-│   │   │   │   │   ├── alert.tsx
-│   │   │   │   │   ├── badge.tsx
-│   │   │   │   │   ├── button.tsx
-│   │   │   │   │   ├── card.tsx
-│   │   │   │   │   ├── input.tsx
-│   │   │   │   │   ├── label.tsx
-│   │   │   │   │   └── textarea.tsx
-│   │   │   │   ├── auth-form.tsx
-│   │   │   │   ├── auth-page.tsx
-│   │   │   │   ├── auth-provider.tsx
-│   │   │   │   └── page-state.tsx
-│   │   │   ├── config/               # 配置文件
-│   │   │   │   └── nav-config.ts
-│   │   │   └── lib/                  # 工具库、API 客户端
-│   │   │       ├── api/              # API 客户端
-│   │   │       │   ├── client.ts
-│   │   │       │   ├── contracts.ts
-│   │   │       │   └── modules/      # 按模块划分的 API
-│   │   │       │       ├── auth.ts
-│   │   │       │       ├── profile.ts
-│   │   │       │       ├── resume.ts
-│   │   │       │       ├── jobs.ts
-│   │   │       │       ├── optimizer.ts
-│   │   │       │       ├── mock-interviews.ts
-│   │   │       │       └── health.ts
-│   │   │       ├── auth-storage.ts
-│   │   │       └── utils.ts
-│   │   ├── .env.example
-│   │   ├── .gitignore
-│   │   ├── Dockerfile
-│   │   ├── components.json
-│   │   ├── eslint.config.mjs
-│   │   ├── next.config.ts
-│   │   ├── package.json
-│   │   ├── postcss.config.mjs
-│   │   └── tsconfig.json
+│   │   └── src/
+│   │       ├── app/                  # Next.js App Router
+│   │       ├── components/           # UI 组件
+│   │       ├── config/               # 配置文件
+│   │       └── lib/                  # 工具库、API 客户端
 │   │
 │   └── miniprogram/                  # 微信小程序
-│       ├── pages/
-│       │   └── index/
-│       │       ├── index.js
-│       │       ├── index.json
-│       │       ├── index.wxml
-│       │       └── index.wxss
-│       ├── components/
-│       │   └── navigation-bar/
-│       │       ├── navigation-bar.js
-│       │       ├── navigation-bar.json
-│       │       ├── navigation-bar.wxml
-│       │       └── navigation-bar.wxss
-│       ├── app.js
-│       ├── app.json
-│       ├── app.wxss
-│       ├── project.config.json
-│       ├── project.private.config.json
-│       ├── sitemap.json
-│       └── .eslintrc.js
 │
 ├── docker/                           # Docker 编排配置
-│   └── start.sh                      # 本地开发启动脚本
-│
 ├── monochrome/                       # Monochrome 主题配置
-│   ├── monochrome-SKILL.md
-│   ├── monochrome-globals.css
-│   ├── monochrome-hard-prompt.md
-│   ├── monochrome-meta.json
-│   ├── monochrome-shadcn-theme.json
-│   ├── monochrome-tailwind-preset.js
-│   ├── monochrome-tokens.json
-│   └── monochrome-variables.css
-│
 ├── docker-compose.yml                # Docker Compose 配置
 ├── AGENTS.md                         # 代理工作规范
 └── README.md                         # 项目说明
