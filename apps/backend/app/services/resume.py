@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 from uuid import UUID, uuid4
 
 from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.core.errors import ApiException, ErrorCode
 from app.db.session import get_session_factory
 from app.models import Resume, ResumeParseJob, User
@@ -24,22 +26,11 @@ from app.schemas.resume import (
     ResumeStructuredData,
     ResumeStructuredUpdateRequest,
 )
-from app.services.ai_client import AIClientError
 from app.services.match_support import mark_reports_stale_for_resume
-from app.services.resume_ai import (
-    ResumeAICorrectionRequest,
-    build_resume_ai_correction_provider,
-    merge_resume_ai_correction,
-)
-from app.services.resume_markdown_renderer import (
-    ensure_resume_markdown_structure,
-    render_resume_markdown,
-)
 from app.services.resume_parser import (
     build_initial_resume_parse_artifacts,
     build_resume_parse_artifacts,
     build_structured_resume,
-    extract_text_from_resume_bytes,
 )
 from app.services.storage import ObjectStorage
 
@@ -48,16 +39,13 @@ SUPPORTED_RESUME_SUFFIXES = {".pdf"}
 RESUME_PARSE_TIMEOUT_SECONDS = 180
 AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
-AI_STATUS_FALLBACK_RULE = "fallback_rule"
-AI_STATUS_SKIPPED = "skipped"
 PARSE_PROGRESS_PREPARING = "排队完成，准备解析"
 PARSE_PROGRESS_READING_FILE = "读取文件中"
-PARSE_PROGRESS_EXTRACTING_TEXT = "提取文本中"
-PARSE_PROGRESS_RULE_PARSING = "规则解析中"
-PARSE_PROGRESS_AI_REQUESTING = "AI 请求中"
-PARSE_PROGRESS_AI_MERGING = "AI 校准中"
+PARSE_PROGRESS_PDF_TO_MARKDOWN = "PDF 转 Markdown 中"
+PARSE_PROGRESS_STRUCTURING = "结构化整理中"
 
 logger = logging.getLogger(__name__)
+_RESUME_PDF_TO_MD_MODULE: ModuleType | None = None
 
 
 def utc_now_naive() -> datetime:
@@ -89,6 +77,32 @@ def log_renderer_snapshot(*, structured: ResumeStructuredData, markdown: str) ->
     )
 
 
+def load_resume_pdf_to_md_module() -> ModuleType:
+    global _RESUME_PDF_TO_MD_MODULE
+    if _RESUME_PDF_TO_MD_MODULE is not None:
+        return _RESUME_PDF_TO_MD_MODULE
+
+    module_path = Path(__file__).with_name("resume-pdf-to-md.py")
+    spec = importlib.util.spec_from_file_location("app.services.resume_pdf_to_md_core", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load resume PDF to Markdown core: {module_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _RESUME_PDF_TO_MD_MODULE = module
+    return module
+
+
+async def convert_pdf_bytes_to_markdown(pdf_bytes: bytes, file_name: str) -> str:
+    module = load_resume_pdf_to_md_module()
+    pdf_to_markdown = getattr(module, "pdf_to_markdown", None)
+    if pdf_to_markdown is None:
+        raise RuntimeError("resume-pdf-to-md.py does not export pdf_to_markdown")
+
+    markdown = await pdf_to_markdown(pdf_bytes, file_name)
+    return str(markdown or "").strip()
+
+
 def sanitize_file_name(file_name: str) -> str:
     original_name = Path(file_name).name
     suffix = Path(original_name).suffix.lower()
@@ -107,24 +121,6 @@ def set_parse_job_ai_result(
 ) -> None:
     parse_job.ai_status = status
     parse_job.ai_message = message
-
-
-def build_ai_fallback_message(exc: Exception) -> str:
-    if isinstance(exc, TimeoutError):
-        return "AI 校准失败，已回退规则解析（请求超时）"
-    if isinstance(exc, AIClientError):
-        category_messages = {
-            "auth_error": "AI 校准失败，已回退规则解析（401 认证失败）",
-            "permission_error": "AI 校准失败，已回退规则解析（403 权限不足）",
-            "timeout": "AI 校准失败，已回退规则解析（请求超时）",
-            "json_decode_error": "AI 校准失败，已回退规则解析（JSON 解析失败）",
-            "invalid_response_format": "AI 校准失败，已回退规则解析（模型返回格式非法）",
-        }
-        return category_messages.get(
-            exc.category,
-            f"AI 校准失败，已回退规则解析（{exc.category}）",
-        )
-    return "AI 校准失败，已回退规则解析（unexpected_error）"
 
 
 def build_unexpected_parse_error_message(exc: Exception) -> str:
@@ -343,8 +339,8 @@ async def process_resume_parse_job(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     settings: Settings | None = None,
 ) -> None:
+    del settings
     session_maker = session_factory or get_session_factory()
-    config = settings or get_settings()
     async with session_maker() as session:
         resume = await session.get(Resume, resume_id)
         parse_job = await session.get(ResumeParseJob, parse_job_id)
@@ -375,7 +371,7 @@ async def process_resume_parse_job(
     raw_text: str | None = None
     final_structured: ResumeStructuredData | None = None
     canonical_resume_md: str | None = None
-    extraction_source_type = "pdf"
+    extraction_source_type = "pdf_to_md"
     extraction_ocr_used = False
     extraction_ocr_engine = "none"
     resume_parse_status = "failed"
@@ -402,89 +398,31 @@ async def process_resume_parse_job(
                 session_factory=session_maker,
                 parse_job_id=parse_job_id,
                 owner_user_id=owner_user_id,
-                message=PARSE_PROGRESS_EXTRACTING_TEXT,
+                message=PARSE_PROGRESS_PDF_TO_MARKDOWN,
             )
-            extraction_result = extract_text_from_resume_bytes(
-                data=file_bytes,
-                file_name=resume.file_name,
+            canonical_resume_md = await convert_pdf_bytes_to_markdown(
+                file_bytes,
+                resume.file_name,
             )
-            raw_text = extraction_result.raw_text
-            extraction_source_type = extraction_result.source_type
-            extraction_ocr_used = extraction_result.ocr_used
-            extraction_ocr_engine = extraction_result.ocr_engine
+            if not canonical_resume_md:
+                raise ApiException(
+                    status_code=422,
+                    code=ErrorCode.BAD_REQUEST,
+                    message="PDF 转 Markdown 失败，未生成可用内容",
+                )
+            raw_text = canonical_resume_md
 
             await update_parse_job_progress(
                 session_factory=session_maker,
                 parse_job_id=parse_job_id,
                 owner_user_id=owner_user_id,
-                message=PARSE_PROGRESS_RULE_PARSING,
+                message=PARSE_PROGRESS_STRUCTURING,
             )
-            structured = build_structured_resume(raw_text)
-            structured.meta.source_type = extraction_source_type
-            structured.meta.ai_correction_applied = False
-            final_structured = structured
-
-        ai_provider = build_resume_ai_correction_provider(config)
-        try:
-            await update_parse_job_progress(
-                session_factory=session_maker,
-                parse_job_id=parse_job_id,
-                owner_user_id=owner_user_id,
-                message=PARSE_PROGRESS_AI_REQUESTING,
-            )
-            async with asyncio.timeout(max(1, config.resume_ai_timeout_seconds)):
-                ai_result = await ai_provider.correct(
-                    ResumeAICorrectionRequest(
-                        raw_text=raw_text,
-                        rule_structured_json=structured.model_dump(),
-                    )
-                )
-            if ai_result.status == "applied" and ai_result.structured_data is not None:
-                await update_parse_job_progress(
-                    session_factory=session_maker,
-                    parse_job_id=parse_job_id,
-                    owner_user_id=owner_user_id,
-                    message=PARSE_PROGRESS_AI_MERGING,
-                )
-                final_structured = merge_resume_ai_correction(
-                    raw_text=raw_text,
-                    rule_result=structured,
-                    ai_result=ai_result.structured_data,
-                )
-                final_structured.meta.source_type = extraction_source_type
-                final_structured.meta.ai_correction_applied = True
-                ai_status = AI_STATUS_APPLIED
-                ai_message = "已完成校准"
-            else:
-                ai_status = AI_STATUS_SKIPPED
-                ai_message = "AI 校准未启用"
-        except Exception as exc:
-            logger.exception(
-                "Resume AI correction failed for resume_id=%s parse_job_id=%s: %s",
-                resume_id,
-                parse_job_id,
-                exc,
-            )
-            ai_status = AI_STATUS_FALLBACK_RULE
-            ai_message = build_ai_fallback_message(exc)
-
-        if final_structured is not None:
-            logger.info(
-                (
-                    "resume_markdown.render:start "
-                    "name=%s education_items=%s work_items=%s project_items=%s "
-                    "skills_technical=%s"
-                ),
-                final_structured.basic_info.name,
-                len(final_structured.education_items),
-                len(final_structured.work_experience_items),
-                len(final_structured.project_items),
-                len(final_structured.skills.technical),
-            )
-            canonical_resume_md = ensure_resume_markdown_structure(
-                final_structured,
-                render_resume_markdown(final_structured),
-            )
+            final_structured = build_structured_resume(raw_text)
+            final_structured.meta.source_type = extraction_source_type
+            final_structured.meta.ai_correction_applied = True
+            ai_status = AI_STATUS_APPLIED
+            ai_message = "已通过 resume-pdf-to-md 生成 Markdown"
             log_renderer_snapshot(
                 structured=final_structured,
                 markdown=canonical_resume_md,

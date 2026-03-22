@@ -15,6 +15,7 @@ Hard constraints:
 - Limits: strengths<=3, must_fix<=3, should_fix<=3, resume_tailoring_tasks<=3,
   interview_focus_areas<=3, missing_user_inputs<=2, question_pack<=4, rubric<=4.
 - summary and reasoning should each stay under 80 Chinese characters or 160 English characters.
+- Prefer short strings and short arrays over verbose prose.
 
 Return exactly this JSON shape:
 {

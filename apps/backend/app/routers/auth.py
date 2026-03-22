@@ -6,15 +6,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.responses import success_response
+from app.core.security import create_access_token
+from app.db.session import get_db_session
+from app.models import User
 from app.routers.deps import (
     get_current_token_payload,
     get_current_user,
     get_token_blocklist,
 )
-from app.core.responses import success_response
-from app.core.security import create_access_token
-from app.db.session import get_db_session
-from app.models import User
 from app.schemas.auth import (
     AuthTokenResponse,
     LoginRequest,
@@ -42,7 +42,9 @@ async def register(
     payload: RegisterRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[AuthTokenResponse]:
-    user = await register_user(session, payload.email, payload.password, payload.nickname)
+    user = await register_user(
+        session, payload.email, payload.password, payload.nickname
+    )
 
     access_token, expires_in = create_access_token(str(user.id))
     return success_response(

@@ -11,3 +11,7 @@ def get_resume_structure_correction_prompt() -> str:
 
 def get_resume_import_extraction_prompt() -> str:
     return (PROMPT_DIR / "import_extraction.txt").read_text(encoding="utf-8").strip()
+
+
+def get_resume_pdf_to_md_prompt() -> str:
+    return (PROMPT_DIR / "resume_pdf_to_md.txt").read_text(encoding="utf-8").strip()

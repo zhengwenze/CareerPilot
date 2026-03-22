@@ -6,3 +6,6 @@ uv.lock
 
 # Environment variables (contains sensitive data)
 .env
+
+# Ruff cache
+.ruff_cache/

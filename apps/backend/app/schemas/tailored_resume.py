@@ -123,6 +123,11 @@ class TailoredResumeWorkflowResponse(BaseModel):
     tailored_resume: TailoredResumeArtifactResponse
 
 
+class TailoredResumePdfToMarkdownResponse(BaseModel):
+    file_name: str
+    markdown: str = Field(min_length=1)
+
+
 class TailoredResumeGrammarRequest(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
 

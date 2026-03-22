@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
@@ -94,6 +94,13 @@ def _build_job_update_request(
 
 def _normalize_text(value: str) -> str:
     return " ".join(value.split()).strip()
+
+
+def _resolve_user_id(current_user: User) -> UUID:
+    identity = inspect(current_user).identity
+    if identity:
+        return identity[0]
+    return current_user.id
 
 
 def _dedupe_strings(items: list[str]) -> list[str]:
@@ -758,6 +765,14 @@ async def generate_tailored_resume_workflow(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
 ) -> TailoredResumeWorkflowResponse:
+    current_user_id = _resolve_user_id(current_user)
+    current_user = await session.get(User, current_user_id)
+    if current_user is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Current user not found",
+        )
     resume = await get_resume_for_user(
         session,
         current_user=current_user,
@@ -792,6 +807,13 @@ async def generate_tailored_resume_workflow(
         )
 
     session.expire_all()
+    current_user = await session.get(User, current_user_id)
+    if current_user is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Current user not found",
+        )
     job = await get_job_or_404(session, current_user=current_user, job_id=job_id)
     _ensure_job_ready_for_tailoring(job)
 
@@ -812,6 +834,13 @@ async def generate_tailored_resume_workflow(
             settings=settings,
         )
         session.expire_all()
+        current_user = await session.get(User, current_user_id)
+        if current_user is None:
+            raise ApiException(
+                status_code=404,
+                code=ErrorCode.NOT_FOUND,
+                message="Current user not found",
+            )
         report = await get_match_report_or_404(
             session,
             current_user=current_user,
@@ -819,6 +848,13 @@ async def generate_tailored_resume_workflow(
         )
     _ensure_match_report_ready(report)
 
+    current_user = await session.get(User, current_user_id)
+    if current_user is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Current user not found",
+        )
     session_record, _resume, job, report = await create_resume_optimization_session(
         session,
         current_user=current_user,
@@ -849,13 +885,20 @@ async def generate_tailored_resume_workflow(
             "fact_check_report": fact_check_report,
         }
         session_record.status = "ready"
-        session_record.updated_by = current_user.id
+        session_record.updated_by = current_user_id
         session.add(session_record)
         await session.commit()
         await session.refresh(session_record)
         session_id = session_record.id
 
     session.expire_all()
+    current_user = await session.get(User, current_user_id)
+    if current_user is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Current user not found",
+        )
     return await get_tailored_resume_workflow(
         session,
         current_user=current_user,

@@ -8,6 +8,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.errors import ApiException, ErrorCode
 from app.core.responses import success_response
 from app.db.session import get_db_session, get_session_factory
 from app.models import User
@@ -16,18 +17,19 @@ from app.routers.deps import (
     get_object_storage,
     get_settings_dependency,
 )
-from app.routers.resumes import schedule_resume_parse_job
 from app.schemas.common import ApiSuccessResponse
 from app.schemas.resume import ResumeResponse
 from app.schemas.tailored_resume import (
-    TailoredResumeGrammarRequest,
-    TailoredResumeGrammarResponse,
     TailoredResumeGenerateRequest,
-    TailoredResumePolishRequest,
-    TailoredResumePolishResponse,
+    TailoredResumePdfToMarkdownResponse,
     TailoredResumeWorkflowResponse,
 )
-from app.services.resume import upload_resume
+from app.services.resume import (
+    convert_pdf_bytes_to_markdown,
+    upload_resume,
+    validate_resume_upload,
+)
+from app.services.resume_parse_runtime import schedule_resume_parse_job
 from app.services.resume_optimizer import get_resume_optimization_markdown_download
 from app.services.storage import ObjectStorage
 from app.services.tailored_resume import (
@@ -35,8 +37,6 @@ from app.services.tailored_resume import (
     get_tailored_resume_workflow,
     list_tailored_resume_workflows,
 )
-from app.services.tailored_resume_grammar import check_tailored_resume_grammar
-from app.services.tailored_resume_polish import polish_tailored_resume_markdown
 
 router = APIRouter(prefix="/tailored-resumes", tags=["tailored-resumes"])
 
@@ -71,8 +71,39 @@ async def upload_primary_resume(
             resume_id=resume.id,
             parse_job_id=resume.latest_parse_job.id,
             storage=storage,
-        )
+    )
     return success_response(request, resume)
+
+
+@router.post(
+    "/pdf-to-md",
+    response_model=ApiSuccessResponse[TailoredResumePdfToMarkdownResponse],
+)
+async def convert_resume_pdf_to_markdown(
+    request: Request,
+    file: Annotated[UploadFile, File(...)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
+) -> ApiSuccessResponse[TailoredResumePdfToMarkdownResponse]:
+    del current_user
+    file_name, _content_type, content = await validate_resume_upload(
+        file,
+        settings=settings,
+    )
+    markdown = await convert_pdf_bytes_to_markdown(content, file_name)
+    if not markdown:
+        raise ApiException(
+            status_code=422,
+            code=ErrorCode.BAD_REQUEST,
+            message="PDF 转 Markdown 失败，未生成可用内容",
+        )
+    return success_response(
+        request,
+        TailoredResumePdfToMarkdownResponse(
+            file_name=file_name,
+            markdown=markdown,
+        ),
+    )
 
 
 @router.get(
@@ -86,42 +117,6 @@ async def get_tailored_resume_workflow_list(
 ) -> ApiSuccessResponse[list[TailoredResumeWorkflowResponse]]:
     payload = await list_tailored_resume_workflows(session, current_user=current_user)
     return success_response(request, payload)
-
-
-@router.post(
-    "/grammar",
-    response_model=ApiSuccessResponse[TailoredResumeGrammarResponse],
-)
-async def check_tailored_resume_text_grammar(
-    request: Request,
-    payload: TailoredResumeGrammarRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    settings: Annotated[Settings, Depends(get_settings_dependency)],
-) -> ApiSuccessResponse[TailoredResumeGrammarResponse]:
-    del current_user
-    result = await check_tailored_resume_grammar(
-        text=payload.text,
-        settings=settings,
-    )
-    return success_response(request, result)
-
-
-@router.post(
-    "/polish",
-    response_model=ApiSuccessResponse[TailoredResumePolishResponse],
-)
-async def polish_tailored_resume_text(
-    request: Request,
-    payload: TailoredResumePolishRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    settings: Annotated[Settings, Depends(get_settings_dependency)],
-) -> ApiSuccessResponse[TailoredResumePolishResponse]:
-    del current_user
-    result = await polish_tailored_resume_markdown(
-        text=payload.text,
-        settings=settings,
-    )
-    return success_response(request, result)
 
 
 @router.post(

@@ -484,7 +484,7 @@ class ConfiguredAIMatchReportProvider(AIMatchReportProvider):
             ),
             instructions=instructions,
             payload=payload,
-            max_tokens=1600,
+            max_tokens=900,
         )
 
     async def correct(self, payload: AIMatchReportRequest) -> AIMatchReportResult:
@@ -538,5 +538,5 @@ def build_ai_match_correction_provider(settings: Settings) -> AIMatchReportProvi
         base_url=settings.match_ai_base_url,
         api_key=settings.match_ai_api_key.strip(),
         model=settings.match_ai_model.strip(),
-        timeout_seconds=max(90, settings.match_ai_timeout_seconds),
+        timeout_seconds=max(1, settings.match_ai_timeout_seconds),
     )

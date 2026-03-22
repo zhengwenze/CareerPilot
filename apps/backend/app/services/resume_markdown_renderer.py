@@ -24,11 +24,37 @@ SKILL_GROUP_RULES = OrderedDict(
 SECTION_BREAK_TOKENS = ("•", "●", "·", "▪", "■", "◆", ";", "；")
 
 
+def _safe_validate_resume(data: dict[str, Any]) -> ResumeStructuredData:
+    for key in ("education", "work_experience", "projects", "certifications"):
+        if key in data and data[key]:
+            fixed = []
+            for item in data[key]:
+                if isinstance(item, dict):
+                    fixed.append(_dict_to_string(key, item))
+                elif isinstance(item, str):
+                    fixed.append(item)
+            data = dict(data)
+            data[key] = fixed
+    return ResumeStructuredData.model_validate(data)
+
+
+def _dict_to_string(key: str, item: dict) -> str:
+    if key == "education":
+        return "｜".join(filter(None, [item.get("school", ""), item.get("major", ""), item.get("degree", ""), item.get("start_date", ""), item.get("end_date", "")]))
+    elif key == "work_experience":
+        return "｜".join(filter(None, [item.get("company", ""), item.get("title", ""), item.get("start_date", ""), item.get("end_date", "")]))
+    elif key == "projects":
+        return "｜".join(filter(None, [item.get("name", ""), item.get("role", "")]))
+    elif key == "certifications":
+        return "｜".join(filter(None, [item.get("name", ""), item.get("issuer", ""), item.get("date", "")]))
+    return str(item)
+
+
 def render_resume_markdown(resume: ResumeStructuredData | dict[str, Any]) -> str:
     structured = (
         resume
         if isinstance(resume, ResumeStructuredData)
-        else ResumeStructuredData.model_validate(resume)
+        else _safe_validate_resume(resume)
     )
     lines: list[str] = []
     lines.extend(_render_header(structured))
@@ -65,7 +91,7 @@ def validate_resume_markdown_structure(
     structured = (
         resume
         if isinstance(resume, ResumeStructuredData)
-        else ResumeStructuredData.model_validate(resume)
+        else _safe_validate_resume(resume)
     )
     errors: list[str] = []
     content = markdown.strip()

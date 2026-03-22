@@ -1,5 +1,9 @@
 from __future__ import annotations
+
+import asyncio
+import logging
 from decimal import Decimal, ROUND_HALF_UP
+from time import perf_counter
 from uuid import UUID
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -20,6 +24,8 @@ from app.services.match_ai import (
 )
 from app.services.match_engine import build_resume_evidence_profile, build_rule_match_result
 from app.services.resume import get_resume_for_user
+
+logger = logging.getLogger(__name__)
 
 
 def serialize_match_report(report: MatchReport) -> MatchReportResponse:
@@ -142,13 +148,13 @@ def _compact_resume_snapshot(
                 {
                     "source_type": item.source_type,
                     "source_label": item.source_label,
-                    "text": item.text,
+                    "text": _truncate_text(item.text, limit=220),
                 }
-                for item in getattr(evidence_profile, "evidence_snippets", [])[:8]
+                for item in getattr(evidence_profile, "evidence_snippets", [])[:4]
             ],
         }
     return {
-        "summary": resume.basic_info.summary,
+        "summary": _truncate_text(resume.basic_info.summary, limit=180),
         "location": resume.basic_info.location,
         "education": resume.education[:3],
         "recent_roles": resume.work_experience[:4],
@@ -176,7 +182,7 @@ def _compact_job_snapshot(job: JobStructuredData) -> dict[str, object]:
         "title": job.basic.title,
         "company": job.basic.company,
         "job_city": job.basic.job_city,
-        "summary": job.raw_summary or job.domain_context.summary,
+        "summary": _truncate_text(job.raw_summary or job.domain_context.summary, limit=220),
         "must_have": job.must_have[:6],
         "nice_to_have": job.nice_to_have[:6],
         "required_skills": required_skills,
@@ -213,6 +219,15 @@ def _compact_rule_result(rule_result: object) -> dict[str, object]:
             "notes": evidence_map.get("notes", [])[:3],
         },
     }
+
+
+def _truncate_text(value: str | None, *, limit: int) -> str:
+    if not value:
+        return ""
+    normalized = " ".join(str(value).split()).strip()
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit]}..."
 
 
 def _merge_unique_strings(*groups: list[str]) -> list[str]:
@@ -666,15 +681,35 @@ async def process_match_report(
                 ai_provider = build_ai_match_correction_provider(settings)
                 ai_provider_name = ai_provider.provider
                 ai_model_name = ai_provider.model
-                ai_result = await ai_provider.correct(
-                    AIMatchReportRequest(
-                        resume_snapshot=_compact_resume_snapshot(
-                            resume_snapshot,
-                            evidence_profile=evidence_profile,
-                        ),
-                        job_snapshot=_compact_job_snapshot(job_snapshot),
-                        rule_result=_compact_rule_result(rule_result),
-                    )
+                ai_request = AIMatchReportRequest(
+                    resume_snapshot=_compact_resume_snapshot(
+                        resume_snapshot,
+                        evidence_profile=evidence_profile,
+                    ),
+                    job_snapshot=_compact_job_snapshot(job_snapshot),
+                    rule_result=_compact_rule_result(rule_result),
+                )
+                logger.info(
+                    (
+                        "match_ai.request:start report_id=%s provider=%s model=%s "
+                        "resume_chars=%s job_chars=%s rule_chars=%s timeout_seconds=%s"
+                    ),
+                    report_id,
+                    ai_provider_name,
+                    ai_model_name,
+                    len(str(ai_request.resume_snapshot)),
+                    len(str(ai_request.job_snapshot)),
+                    len(str(ai_request.rule_result)),
+                    max(1, settings.match_ai_timeout_seconds),
+                )
+                ai_started_at = perf_counter()
+                async with asyncio.timeout(max(1, settings.match_ai_timeout_seconds)):
+                    ai_result = await ai_provider.correct(ai_request)
+                logger.info(
+                    "match_ai.request:done report_id=%s duration_ms=%.2f status=%s",
+                    report_id,
+                    (perf_counter() - ai_started_at) * 1000,
+                    ai_result.status,
                 )
                 ai_status = ai_result.status
                 ai_reason = "AI correction applied successfully"
@@ -684,7 +719,14 @@ async def process_match_report(
                     )
                 ai_payload = ai_result.report_payload
             except Exception as exc:
-                ai_reason = str(exc)
+                logger.exception(
+                    "match_ai.request:failed report_id=%s provider=%s model=%s error=%s",
+                    report_id,
+                    ai_provider_name,
+                    ai_model_name,
+                    exc,
+                )
+                ai_reason = str(exc).strip() or exc.__class__.__name__
 
             llm_judge_score = (
                 max(0.0, min(100.0, float(ai_payload.overall_score)))

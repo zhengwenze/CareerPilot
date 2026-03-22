@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.routers.deps import get_settings_dependency
 from app.core.config import Settings
 from app.core.responses import success_response
 from app.db.session import get_db_session
+from app.routers.deps import get_settings_dependency
 from app.schemas.common import ApiSuccessResponse
 from app.schemas.system import HealthStatusResponse, ReadinessResponse, VersionResponse
 
