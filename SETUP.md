@@ -347,7 +347,43 @@ curl http://localhost:8001/models
 
 如果你更喜欢容器化部署，Career Pilot 已提供完整的 Docker 支持。
 
-### 前置准备
+### 方案 A：一键部署脚本（推荐，Linux 服务器）
+
+在 Linux 服务器上，使用一键部署脚本，只需 3 步：
+
+```bash
+# 1. 克隆仓库
+git clone https://gitee.com/zwz050418/career-pilot.git
+cd career-pilot
+
+# 2. 赋予脚本执行权限
+chmod +x docker/deploy.sh
+
+# 3. 运行部署脚本
+./docker/deploy.sh
+```
+
+脚本会自动：
+- 检查 Docker 环境
+- 创建 `.env` 配置文件
+- 启动所有服务（PostgreSQL、Redis、MinIO、Backend、Frontend）
+- 显示访问地址和常用命令
+
+**命令说明：**
+
+```bash
+./docker/deploy.sh          # 部署并启动所有服务
+./docker/deploy.sh logs     # 查看服务日志
+./docker/deploy.sh stop     # 停止所有服务
+./docker/deploy.sh restart  # 重启所有服务
+./docker/deploy.sh status   # 查看服务状态
+```
+
+### 方案 B：手动 Docker Compose 部署
+
+如果你更喜欢手动控制：
+
+#### 前置准备
 
 1. **复制环境变量模板**
 
