@@ -12,7 +12,8 @@ from app.schemas.resume import (
 
 SKILL_GROUP_RULES = OrderedDict(
     [
-        ("前端框架", ("react", "next.js", "nextjs", "vue", "nuxt", "angular")),
+        ("前端技术", ("react", "next.js", "nextjs", "vue", "nuxt", "angular")),
+        ("后端技术", ("fastapi", "django", "flask", "spring", "spring boot", "express", "koa", "nestjs", "node.js")),
         ("开发语言", ("python", "java", "javascript", "typescript", "go", "c++", "c#")),
         ("测试工具", ("jest", "cypress", "playwright", "pytest", "testing library")),
         ("工程化", ("webpack", "vite", "rollup", "babel", "eslint", "git", "ci/cd")),
@@ -40,13 +41,39 @@ def _safe_validate_resume(data: dict[str, Any]) -> ResumeStructuredData:
 
 def _dict_to_string(key: str, item: dict) -> str:
     if key == "education":
-        return "｜".join(filter(None, [item.get("school", ""), item.get("major", ""), item.get("degree", ""), item.get("start_date", ""), item.get("end_date", "")]))
+        return "｜".join(
+            filter(
+                None,
+                [
+                    item.get("school", ""),
+                    item.get("major", ""),
+                    item.get("degree", ""),
+                    item.get("start_date", ""),
+                    item.get("end_date", ""),
+                ],
+            )
+        )
     elif key == "work_experience":
-        return "｜".join(filter(None, [item.get("company", ""), item.get("title", ""), item.get("start_date", ""), item.get("end_date", "")]))
+        return "｜".join(
+            filter(
+                None,
+                [
+                    item.get("company", ""),
+                    item.get("title", ""),
+                    item.get("start_date", ""),
+                    item.get("end_date", ""),
+                ],
+            )
+        )
     elif key == "projects":
         return "｜".join(filter(None, [item.get("name", ""), item.get("role", "")]))
     elif key == "certifications":
-        return "｜".join(filter(None, [item.get("name", ""), item.get("issuer", ""), item.get("date", "")]))
+        return "｜".join(
+            filter(
+                None,
+                [item.get("name", ""), item.get("issuer", ""), item.get("date", "")],
+            )
+        )
     return str(item)
 
 
@@ -109,7 +136,11 @@ def validate_resume_markdown_structure(
         errors.append("missing_phone_bullet")
     if (
         structured.work_experience_items
-        and not any(bullet.text.strip() for item in structured.work_experience_items for bullet in item.bullets)
+        and not any(
+            bullet.text.strip()
+            for item in structured.work_experience_items
+            for bullet in item.bullets
+        )
     ) is False and "- " not in content:
         errors.append("missing_description_bullets")
     return errors
@@ -122,8 +153,7 @@ def ensure_resume_markdown_structure(
     errors = validate_resume_markdown_structure(resume, markdown)
     if errors:
         raise ValueError(
-            "Canonical resume markdown failed structure validation: "
-            + ",".join(errors)
+            "Canonical resume markdown failed structure validation: " + ",".join(errors)
         )
     return markdown
 

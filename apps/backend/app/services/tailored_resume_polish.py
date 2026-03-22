@@ -6,7 +6,11 @@ from app.core.config import Settings
 from app.core.errors import ApiException, ErrorCode
 from app.prompts.tailored_resume import get_tailored_resume_polish_prompt
 from app.schemas.tailored_resume import TailoredResumePolishResponse
-from app.services.ai_client import AIClientError, AIProviderConfig, request_text_completion
+from app.services.ai_client import (
+    AIClientError,
+    AIProviderConfig,
+    request_text_completion,
+)
 from app.services.resume_ai import EMPTY_PROVIDER_VALUES
 
 

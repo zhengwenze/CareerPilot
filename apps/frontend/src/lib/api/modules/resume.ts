@@ -251,11 +251,28 @@ export async function uploadPrimaryResume(
   const formData = new FormData();
   formData.append("file", file);
 
-  return apiRequest<ResumeRecord>("/tailored-resumes/resumes/upload", {
+  return apiRequest<ResumeRecord>("/resumes/upload", {
     method: "POST",
     token,
     body: formData,
   });
+}
+
+export async function convertResumePdfToMarkdown(
+  token: string,
+  file: File
+): Promise<{ file_name: string; markdown: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return apiRequest<{ file_name: string; markdown: string }>(
+    "/tailored-resumes/pdf-to-md",
+    {
+      method: "POST",
+      token,
+      body: formData,
+    }
+  );
 }
 
 export async function fetchTailoredResumeWorkflows(
@@ -318,6 +335,27 @@ export async function downloadTailoredResumeMarkdown(
       token,
     }
   );
+}
+
+export async function optimizeTailoredResume(
+  token: string,
+  payload: {
+    resume_id: string;
+    job_id: string;
+    force_refresh?: boolean;
+    optimization_level?: "conservative";
+  }
+): Promise<TailoredResumeWorkflowRecord> {
+  return apiRequest<TailoredResumeWorkflowRecord>("/tailored-resumes/optimize", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      resume_id: payload.resume_id,
+      job_id: payload.job_id,
+      force_refresh: payload.force_refresh ?? false,
+      optimization_level: payload.optimization_level ?? "conservative",
+    }),
+  });
 }
 
 /**

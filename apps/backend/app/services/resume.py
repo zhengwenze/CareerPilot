@@ -20,18 +20,12 @@ from app.models import Resume, ResumeParseJob, User
 from app.schemas.resume import (
     ResumeDeleteResponse,
     ResumeDownloadUrlResponse,
-    ResumeParseArtifactsData,
     ResumeParseJobResponse,
     ResumeResponse,
     ResumeStructuredData,
     ResumeStructuredUpdateRequest,
 )
 from app.services.match_support import mark_reports_stale_for_resume
-from app.services.resume_parser import (
-    build_initial_resume_parse_artifacts,
-    build_resume_parse_artifacts,
-    build_structured_resume,
-)
 from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -42,7 +36,6 @@ AI_STATUS_APPLIED = "applied"
 PARSE_PROGRESS_PREPARING = "排队完成，准备解析"
 PARSE_PROGRESS_READING_FILE = "读取文件中"
 PARSE_PROGRESS_PDF_TO_MARKDOWN = "PDF 转 Markdown 中"
-PARSE_PROGRESS_STRUCTURING = "结构化整理中"
 
 logger = logging.getLogger(__name__)
 _RESUME_PDF_TO_MD_MODULE: ModuleType | None = None
@@ -59,6 +52,53 @@ def build_text_preview(value: str | None, *, limit: int = 160) -> str:
     if len(normalized) <= limit:
         return normalized
     return f"{normalized[:limit]}..."
+
+
+def build_initial_resume_parse_artifacts(*, file_name: str) -> dict[str, object]:
+    return {
+        "file_name": file_name,
+        "canonical_resume_md": "",
+        "raw_text": "",
+        "parse_status": "pending",
+        "parse_error": None,
+        "ai_status": "pending",
+        "meta": {
+            "source_type": "pdf",
+            "parser_version": "demo-pdf-to-md",
+            "ai_correction_applied": False,
+            "ocr_used": False,
+            "ocr_engine": "none",
+        },
+    }
+
+
+def build_resume_parse_artifacts(
+    *,
+    file_name: str,
+    raw_text: str | None,
+    canonical_resume_md: str | None,
+    ai_status: str | None,
+    parse_status: str,
+    parse_error: str | None,
+    source_type: str,
+    ocr_used: bool,
+    ocr_engine: str,
+) -> dict[str, object]:
+    return {
+        "file_name": file_name,
+        "canonical_resume_md": str(canonical_resume_md or "").strip(),
+        "raw_text": str(raw_text or "").strip(),
+        "parse_status": parse_status,
+        "parse_error": parse_error,
+        "ai_status": ai_status,
+        "meta": {
+            "source_type": source_type,
+            "parser_version": "demo-pdf-to-md",
+            "ai_correction_applied": bool(canonical_resume_md),
+            "ocr_used": ocr_used,
+            "ocr_engine": ocr_engine,
+        },
+    }
 
 
 def log_renderer_snapshot(*, structured: ResumeStructuredData, markdown: str) -> None:
@@ -239,9 +279,7 @@ def serialize_resume(
             if resume.structured_json
             else None
         ),
-        parse_artifacts_json=ResumeParseArtifactsData.model_validate(
-            resume.parse_artifacts_json or {}
-        ),
+        parse_artifacts_json=resume.parse_artifacts_json or {},
         latest_version=resume.latest_version,
         created_at=resume.created_at,
         updated_at=resume.updated_at,
@@ -302,7 +340,7 @@ async def upload_resume(
         parse_status="pending",
         parse_artifacts_json=build_initial_resume_parse_artifacts(
             file_name=file_name
-        ).model_dump(),
+        ),
         created_by=current_user.id,
         updated_by=current_user.id,
     )
@@ -369,7 +407,6 @@ async def process_resume_parse_job(
         owner_user_id = resume.user_id
 
     raw_text: str | None = None
-    final_structured: ResumeStructuredData | None = None
     canonical_resume_md: str | None = None
     extraction_source_type = "pdf_to_md"
     extraction_ocr_used = False
@@ -411,22 +448,8 @@ async def process_resume_parse_job(
                     message="PDF 转 Markdown 失败，未生成可用内容",
                 )
             raw_text = canonical_resume_md
-
-            await update_parse_job_progress(
-                session_factory=session_maker,
-                parse_job_id=parse_job_id,
-                owner_user_id=owner_user_id,
-                message=PARSE_PROGRESS_STRUCTURING,
-            )
-            final_structured = build_structured_resume(raw_text)
-            final_structured.meta.source_type = extraction_source_type
-            final_structured.meta.ai_correction_applied = True
             ai_status = AI_STATUS_APPLIED
             ai_message = "已通过 resume-pdf-to-md 生成 Markdown"
-            log_renderer_snapshot(
-                structured=final_structured,
-                markdown=canonical_resume_md,
-            )
 
         resume_parse_status = "success"
         resume_parse_error = None
@@ -462,13 +485,11 @@ async def process_resume_parse_job(
             )
             return
 
-        if final_structured is not None and raw_text is not None:
+        if raw_text is not None:
             resume.raw_text = raw_text
-            resume.structured_json = final_structured.model_dump()
         resume.parse_artifacts_json = build_resume_parse_artifacts(
             file_name=resume.file_name,
             raw_text=raw_text,
-            structured=final_structured,
             canonical_resume_md=canonical_resume_md,
             ai_status=ai_status,
             parse_status=resume_parse_status,
@@ -476,7 +497,7 @@ async def process_resume_parse_job(
             source_type=extraction_source_type,
             ocr_used=extraction_ocr_used,
             ocr_engine=extraction_ocr_engine,
-        ).model_dump()
+        )
 
         resume.parse_status = resume_parse_status
         resume.parse_error = resume_parse_error
@@ -587,7 +608,7 @@ async def create_resume_parse_job(
     resume.parse_error = None
     resume.parse_artifacts_json = build_initial_resume_parse_artifacts(
         file_name=resume.file_name
-    ).model_dump()
+    )
     resume.updated_by = current_user.id
 
     parse_job = ResumeParseJob(

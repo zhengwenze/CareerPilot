@@ -4,17 +4,25 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.responses import success_response
 from app.db.session import get_db_session
 from app.models import User
-from app.routers.deps import get_current_user, get_object_storage
+from app.routers.deps import (
+    get_current_user,
+    get_object_storage,
+    get_settings_dependency,
+)
 from app.schemas.common import ApiSuccessResponse
-from app.schemas.resume import ResumeResponse
-from app.services.resume import get_resume_detail, list_resumes
-from app.services.resume_parse_runtime import ensure_resume_parse_job_scheduled
+from app.schemas.resume import ResumeResponse, ResumeStructuredUpdateRequest
+from app.services.resume import (
+    update_resume_structured_data,
+    upload_resume,
+)
+from app.services.resume_parse_runtime import schedule_resume_parse_job
 from app.services.storage import ObjectStorage
 
 logger = logging.getLogger(__name__)
@@ -22,33 +30,50 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 
-@router.get("", response_model=ApiSuccessResponse[list[ResumeResponse]])
-async def get_resume_list(
+@router.post(
+    "/upload",
+    response_model=ApiSuccessResponse[ResumeResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_resume_file(
     request: Request,
+    file: Annotated[UploadFile, File(...)],
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
-) -> ApiSuccessResponse[list[ResumeResponse]]:
-    logger.info("Fetching resume list: user_id=%s", current_user.id)
-    items = await list_resumes(session, current_user=current_user)
-    for item in items:
-        ensure_resume_parse_job_scheduled(request.app, resume=item, storage=storage)
-    return success_response(request, items)
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
+) -> ApiSuccessResponse[ResumeResponse]:
+    resume = await upload_resume(
+        session,
+        current_user=current_user,
+        file=file,
+        storage=storage,
+        settings=settings,
+    )
+    if resume.latest_parse_job is not None:
+        schedule_resume_parse_job(
+            request.app,
+            resume_id=resume.id,
+            parse_job_id=resume.latest_parse_job.id,
+            storage=storage,
+        )
+    return success_response(request, resume)
 
 
-@router.get("/{resume_id}", response_model=ApiSuccessResponse[ResumeResponse])
-async def get_resume(
+@router.put(
+    "/{resume_id}/structured", response_model=ApiSuccessResponse[ResumeResponse]
+)
+async def save_resume_structured_data(
     request: Request,
     resume_id: UUID,
+    payload: ResumeStructuredUpdateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    storage: Annotated[ObjectStorage, Depends(get_object_storage)],
 ) -> ApiSuccessResponse[ResumeResponse]:
-    logger.info("Fetching resume detail: user_id=%s resume_id=%s", current_user.id, resume_id)
-    resume = await get_resume_detail(
+    resume = await update_resume_structured_data(
         session,
         current_user=current_user,
         resume_id=resume_id,
+        payload=payload,
     )
-    ensure_resume_parse_job_scheduled(request.app, resume=resume, storage=storage)
     return success_response(request, resume)

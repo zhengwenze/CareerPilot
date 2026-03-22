@@ -26,6 +26,13 @@ class TailoredResumeGenerateRequest(BaseModel):
     optimization_level: Literal["conservative"] = "conservative"
 
 
+class TailoredResumeGenerateFromSavedJobRequest(BaseModel):
+    resume_id: UUID
+    job_id: UUID
+    force_refresh: bool = False
+    optimization_level: Literal["conservative"] = "conservative"
+
+
 class TailoredResumeMatchSummary(BaseModel):
     targetRole: str = ""
     optimizationLevel: Literal["conservative"] = "conservative"

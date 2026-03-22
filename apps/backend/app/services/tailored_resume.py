@@ -10,7 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.core.errors import ApiException, ErrorCode
-from app.models import JobDescription, MatchReport, Resume, ResumeOptimizationSession, User
+from app.models import (
+    JobDescription,
+    MatchReport,
+    Resume,
+    ResumeOptimizationSession,
+    User,
+)
 from app.schemas.job import JobCreateRequest, JobUpdateRequest
 from app.schemas.match_report import MatchReportCreateRequest
 from app.schemas.resume import (
@@ -31,6 +37,7 @@ from app.schemas.tailored_resume import (
     TailoredResumeEducationItem,
     TailoredResumeExperienceItem,
     TailoredResumeGenerateRequest,
+    TailoredResumeGenerateFromSavedJobRequest,
     TailoredResumeMatchSummary,
     TailoredResumeProjectItem,
     TailoredResumeWorkflowResponse,
@@ -164,6 +171,9 @@ def _extract_original_resume_markdown(resume: Resume) -> str:
     canonical_markdown = str(artifacts.get("canonical_resume_md") or "").strip()
     if canonical_markdown:
         return canonical_markdown
+    raw_text = str(resume.raw_text or "").strip()
+    if raw_text:
+        return raw_text
 
     structured = ResumeStructuredData.model_validate(resume.structured_json or {})
     markdown = render_resume_markdown(structured).strip()
@@ -211,8 +221,18 @@ def _render_tailored_resume_markdown(document: TailoredResumeDocument) -> str:
             header = " | ".join(
                 part
                 for part in [
-                    _normalize_text(" ".join(part for part in [item.school, item.major, item.degree] if part)),
-                    _normalize_text(" - ".join(part for part in [item.startDate, item.endDate] if part)),
+                    _normalize_text(
+                        " ".join(
+                            part
+                            for part in [item.school, item.major, item.degree]
+                            if part
+                        )
+                    ),
+                    _normalize_text(
+                        " - ".join(
+                            part for part in [item.startDate, item.endDate] if part
+                        )
+                    ),
                 ]
                 if part
             )
@@ -228,8 +248,14 @@ def _render_tailored_resume_markdown(document: TailoredResumeDocument) -> str:
             header = " | ".join(
                 part
                 for part in [
-                    _normalize_text(" ".join(part for part in [item.company, item.position] if part)),
-                    _normalize_text(" - ".join(part for part in [item.startDate, item.endDate] if part)),
+                    _normalize_text(
+                        " ".join(part for part in [item.company, item.position] if part)
+                    ),
+                    _normalize_text(
+                        " - ".join(
+                            part for part in [item.startDate, item.endDate] if part
+                        )
+                    ),
                 ]
                 if part
             )
@@ -245,8 +271,14 @@ def _render_tailored_resume_markdown(document: TailoredResumeDocument) -> str:
             header = " | ".join(
                 part
                 for part in [
-                    _normalize_text(" ".join(part for part in [item.name, item.role] if part)),
-                    _normalize_text(" - ".join(part for part in [item.startDate, item.endDate] if part)),
+                    _normalize_text(
+                        " ".join(part for part in [item.name, item.role] if part)
+                    ),
+                    _normalize_text(
+                        " - ".join(
+                            part for part in [item.startDate, item.endDate] if part
+                        )
+                    ),
                     item.link.strip(),
                 ]
                 if part
@@ -258,16 +290,36 @@ def _render_tailored_resume_markdown(document: TailoredResumeDocument) -> str:
                     lines.append(f"  - {_normalize_text(bullet)}")
 
     if document.skills:
-        lines.extend(["", "## Skills", f"- {', '.join(_dedupe_strings(document.skills))}"])
+        lines.extend(
+            ["", "## Skills", f"- {', '.join(_dedupe_strings(document.skills))}"]
+        )
 
     if document.certificates:
-        lines.extend(["", "## Certificates", *[f"- {item}" for item in document.certificates if item.strip()]])
+        lines.extend(
+            [
+                "",
+                "## Certificates",
+                *[f"- {item}" for item in document.certificates if item.strip()],
+            ]
+        )
 
     if document.languages:
-        lines.extend(["", "## Languages", *[f"- {item}" for item in document.languages if item.strip()]])
+        lines.extend(
+            [
+                "",
+                "## Languages",
+                *[f"- {item}" for item in document.languages if item.strip()],
+            ]
+        )
 
     if document.awards:
-        lines.extend(["", "## Awards", *[f"- {item}" for item in document.awards if item.strip()]])
+        lines.extend(
+            [
+                "",
+                "## Awards",
+                *[f"- {item}" for item in document.awards if item.strip()],
+            ]
+        )
 
     for section in document.customSections:
         if not section.title.strip():
@@ -305,8 +357,14 @@ def _build_fallback_tailored_resume_document(
             *_flatten_string_values(source_resume.model_dump()),
         ]
     )
-    matched_keywords = [keyword for keyword in job_keywords if _keyword_supported(keyword, evidence_text)]
-    missing_keywords = [keyword for keyword in job_keywords if keyword not in matched_keywords]
+    matched_keywords = [
+        keyword
+        for keyword in job_keywords
+        if _keyword_supported(keyword, evidence_text)
+    ]
+    missing_keywords = [
+        keyword for keyword in job_keywords if keyword not in matched_keywords
+    ]
 
     document = TailoredResumeDocument(
         matchSummary=TailoredResumeMatchSummary(
@@ -353,13 +411,22 @@ def _build_fallback_tailored_resume_document(
                 startDate=item.start_date,
                 endDate=item.end_date,
                 bullets=_dedupe_strings(
-                    [item.summary, *[bullet.text for bullet in item.bullets if bullet.text.strip()]]
+                    [
+                        item.summary,
+                        *[
+                            bullet.text
+                            for bullet in item.bullets
+                            if bullet.text.strip()
+                        ],
+                    ]
                 ),
                 link="",
             )
             for item in source_resume.project_items
         ],
-        skills=_dedupe_strings([*source_resume.skills.technical, *source_resume.skills.tools]),
+        skills=_dedupe_strings(
+            [*source_resume.skills.technical, *source_resume.skills.tools]
+        ),
         certificates=_dedupe_strings(source_resume.certifications),
         languages=_dedupe_strings(source_resume.skills.languages),
         awards=[],
@@ -371,7 +438,9 @@ def _build_fallback_tailored_resume_document(
             addedKeywordsOnlyFromEvidence=True,
         ),
     )
-    document.markdown = original_markdown.strip() or _render_tailored_resume_markdown(document)
+    document.markdown = original_markdown.strip() or _render_tailored_resume_markdown(
+        document
+    )
     return document
 
 
@@ -385,11 +454,21 @@ def _build_canonical_projection_from_document(
     projected.work_experience = []
     projected.projects = []
     projected.certifications = []
-    projected.basic_info.name = document.basic.name.strip() or source_resume.basic_info.name
-    projected.basic_info.email = document.basic.email.strip() or source_resume.basic_info.email
-    projected.basic_info.phone = document.basic.phone.strip() or source_resume.basic_info.phone
-    projected.basic_info.location = document.basic.location.strip() or source_resume.basic_info.location
-    projected.basic_info.summary = document.summary.strip() or source_resume.basic_info.summary
+    projected.basic_info.name = (
+        document.basic.name.strip() or source_resume.basic_info.name
+    )
+    projected.basic_info.email = (
+        document.basic.email.strip() or source_resume.basic_info.email
+    )
+    projected.basic_info.phone = (
+        document.basic.phone.strip() or source_resume.basic_info.phone
+    )
+    projected.basic_info.location = (
+        document.basic.location.strip() or source_resume.basic_info.location
+    )
+    projected.basic_info.summary = (
+        document.summary.strip() or source_resume.basic_info.summary
+    )
     projected.education_items = [
         ResumeEducationItem(
             id=f"edu_{index}",
@@ -477,7 +556,9 @@ def _infer_changed_sections(
         _normalize_text(item) for item in projected_resume.education
     ]:
         changed.append("education")
-    if _dedupe_strings(source_resume.certifications) != _dedupe_strings(projected_resume.certifications):
+    if _dedupe_strings(source_resume.certifications) != _dedupe_strings(
+        projected_resume.certifications
+    ):
         changed.append("certificates")
     return changed
 
@@ -496,13 +577,25 @@ def _finalize_document(
             *_flatten_string_values(source_resume.model_dump()),
         ]
     )
-    supported_keywords = [keyword for keyword in job_keywords if _keyword_supported(keyword, evidence_text)]
-    unsupported_keywords = [keyword for keyword in job_keywords if keyword not in supported_keywords]
+    supported_keywords = [
+        keyword
+        for keyword in job_keywords
+        if _keyword_supported(keyword, evidence_text)
+    ]
+    unsupported_keywords = [
+        keyword for keyword in job_keywords if keyword not in supported_keywords
+    ]
 
-    document.matchSummary.targetRole = document.matchSummary.targetRole.strip() or job.title or ""
+    document.matchSummary.targetRole = (
+        document.matchSummary.targetRole.strip() or job.title or ""
+    )
     document.matchSummary.optimizationLevel = "conservative"
     document.matchSummary.matchedKeywords = _dedupe_strings(
-        [keyword for keyword in document.matchSummary.matchedKeywords if keyword in supported_keywords]
+        [
+            keyword
+            for keyword in document.matchSummary.matchedKeywords
+            if keyword in supported_keywords
+        ]
         or supported_keywords[:8]
     )
     document.matchSummary.missingButImportantKeywords = _dedupe_strings(
@@ -521,7 +614,9 @@ def _finalize_document(
     if not document.basic.title.strip():
         document.basic.title = job.title or ""
 
-    projected_resume = _build_canonical_projection_from_document(document, source_resume=source_resume)
+    projected_resume = _build_canonical_projection_from_document(
+        document, source_resume=source_resume
+    )
     fact_check_report = build_resume_fact_check_report(
         original_resume=source_resume,
         optimized_resume=projected_resume,
@@ -539,10 +634,17 @@ def _finalize_document(
     document.audit.truthfulnessStatus = "warning" if warnings else "passed"
     document.audit.warnings = warnings
     document.audit.changedSections = _dedupe_strings(
-        [*document.audit.changedSections, *_infer_changed_sections(source_resume=source_resume, projected_resume=projected_resume)]
+        [
+            *document.audit.changedSections,
+            *_infer_changed_sections(
+                source_resume=source_resume, projected_resume=projected_resume
+            ),
+        ]
     )
     document.audit.addedKeywordsOnlyFromEvidence = not any(
-        isinstance(item, dict) and str(item.get("type") or "").strip() in {"new_skill", "new_company", "new_project", "new_number"}
+        isinstance(item, dict)
+        and str(item.get("type") or "").strip()
+        in {"new_skill", "new_company", "new_project", "new_number"}
         for item in fact_check_report.get("findings", [])
     )
 
@@ -612,7 +714,9 @@ def _build_tailored_resume_artifact(
     session_record: ResumeOptimizationSession,
     report: MatchReport,
 ) -> TailoredResumeArtifactResponse:
-    document = TailoredResumeDocument.model_validate(session_record.tailored_resume_json or {})
+    document = TailoredResumeDocument.model_validate(
+        session_record.tailored_resume_json or {}
+    )
     markdown = session_record.tailored_resume_md or document.markdown
     if markdown and markdown != document.markdown:
         document.markdown = markdown
@@ -624,12 +728,14 @@ def _build_tailored_resume_artifact(
         overall_score=report.overall_score or Decimal("0"),
         document=document,
         has_downloadable_markdown=bool(markdown.strip()),
-        downloadable_file_name=_build_downloadable_file_name(
-            session_record=session_record,
-            document=document,
-        )
-        if markdown.strip()
-        else None,
+        downloadable_file_name=(
+            _build_downloadable_file_name(
+                session_record=session_record,
+                document=document,
+            )
+            if markdown.strip()
+            else None
+        ),
         created_at=session_record.created_at,
         updated_at=session_record.updated_at,
     )
@@ -642,7 +748,9 @@ async def _build_workflow_response(
     session_record: ResumeOptimizationSession,
     report: MatchReport,
 ) -> TailoredResumeWorkflowResponse:
-    job = await get_job_or_404(session, current_user=current_user, job_id=session_record.jd_id)
+    job = await get_job_or_404(
+        session, current_user=current_user, job_id=session_record.jd_id
+    )
     resume_payload = await get_resume_detail(
         session,
         current_user=current_user,
@@ -663,13 +771,15 @@ async def _build_workflow_response(
     )
 
 
-def _ensure_resume_ready_for_tailoring(*, parse_status: str, has_structured_json: bool) -> None:
-    if parse_status == "success" and has_structured_json:
+def _ensure_resume_ready_for_tailoring(
+    *, parse_status: str, has_resume_markdown: bool
+) -> None:
+    if parse_status == "success" and has_resume_markdown:
         return
     raise ApiException(
         status_code=409,
         code=ErrorCode.CONFLICT,
-        message="Resume must be parsed successfully before generating a tailored resume",
+        message="Resume must be parsed successfully into markdown before generating a tailored resume",
     )
 
 
@@ -687,7 +797,9 @@ def _ensure_job_ready_for_tailoring(job: JobDescription) -> None:
 def _ensure_match_report_ready(report: MatchReport) -> None:
     if report.status == "success":
         return
-    message = report.error_message or "Match report generation did not finish successfully"
+    message = (
+        report.error_message or "Match report generation did not finish successfully"
+    )
     raise ApiException(
         status_code=409,
         code=ErrorCode.CONFLICT,
@@ -707,7 +819,10 @@ async def list_tailored_resume_workflows(
     )
     workflows: list[TailoredResumeWorkflowResponse] = []
     for session_record in result.scalars().all():
-        if not session_record.tailored_resume_json and not session_record.tailored_resume_md.strip():
+        if (
+            not session_record.tailored_resume_json
+            and not session_record.tailored_resume_md.strip()
+        ):
             continue
         report = await session.get(MatchReport, session_record.match_report_id)
         if report is None:
@@ -779,9 +894,10 @@ async def generate_tailored_resume_workflow(
         resume_id=payload.resume_id,
     )
     resume_id = resume.id
+    original_markdown = _extract_original_resume_markdown(resume)
     _ensure_resume_ready_for_tailoring(
         parse_status=resume.parse_status,
-        has_structured_json=bool(resume.structured_json),
+        has_resume_markdown=bool(original_markdown.strip()),
     )
 
     if payload.job_id is None:
@@ -860,6 +976,7 @@ async def generate_tailored_resume_workflow(
         current_user=current_user,
         payload=ResumeOptimizationSessionCreateRequest(match_report_id=report.id),
     )
+    session_record_id = session_record.id
     session_id = session_record.id
 
     should_regenerate = (
@@ -868,12 +985,14 @@ async def generate_tailored_resume_workflow(
         or not session_record.tailored_resume_json
     )
     if should_regenerate:
-        document, canonical_projection, fact_check_report = await _generate_tailored_resume_document(
-            resume=resume,
-            job=job,
-            report=report,
-            payload=payload,
-            settings=settings,
+        document, canonical_projection, fact_check_report = (
+            await _generate_tailored_resume_document(
+                resume=resume,
+                job=job,
+                report=report,
+                payload=payload,
+                settings=settings,
+            )
         )
         # Legacy compatibility projection only; canonical facts are not updated in this workflow.
         session_record.optimized_resume_json = canonical_projection.model_dump()
@@ -903,4 +1022,144 @@ async def generate_tailored_resume_workflow(
         session,
         current_user=current_user,
         session_id=session_id,
+    )
+
+
+async def generate_tailored_resume_for_saved_job(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    payload: TailoredResumeGenerateFromSavedJobRequest,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> TailoredResumeWorkflowResponse:
+    current_user_id = _resolve_user_id(current_user)
+    current_user = await session.get(User, current_user_id)
+    if current_user is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Current user not found",
+        )
+
+    resume = await get_resume_for_user(
+        session,
+        current_user=current_user,
+        resume_id=payload.resume_id,
+    )
+    original_markdown = _extract_original_resume_markdown(resume)
+    _ensure_resume_ready_for_tailoring(
+        parse_status=resume.parse_status,
+        has_resume_markdown=bool(original_markdown.strip()),
+    )
+
+    job = await get_job_or_404(
+        session,
+        current_user=current_user,
+        job_id=payload.job_id,
+    )
+    _ensure_job_ready_for_tailoring(job)
+
+    report = await create_match_report(
+        session,
+        current_user=current_user,
+        job_id=job.id,
+        payload=MatchReportCreateRequest(
+            resume_id=resume.id,
+            force_refresh=payload.force_refresh,
+        ),
+    )
+    report_id = report.id
+    if report.status == "pending":
+        await process_match_report(
+            report_id=report_id,
+            session_factory=session_factory,
+            settings=settings,
+        )
+        session.expire_all()
+        current_user = await session.get(User, current_user_id)
+        if current_user is None:
+            raise ApiException(
+                status_code=404,
+                code=ErrorCode.NOT_FOUND,
+                message="Current user not found",
+            )
+        report = await get_match_report_or_404(
+            session,
+            current_user=current_user,
+            report_id=report_id,
+        )
+        resume = await get_resume_for_user(
+            session,
+            current_user=current_user,
+            resume_id=payload.resume_id,
+        )
+        job = await get_job_or_404(
+            session,
+            current_user=current_user,
+            job_id=payload.job_id,
+        )
+    _ensure_match_report_ready(report)
+
+    session_record, _resume, job, report = await create_resume_optimization_session(
+        session,
+        current_user=current_user,
+        payload=ResumeOptimizationSessionCreateRequest(match_report_id=report.id),
+    )
+    session_record_id = session_record.id
+
+    should_regenerate = (
+        payload.force_refresh
+        or not session_record.tailored_resume_md.strip()
+        or not session_record.tailored_resume_json
+    )
+    if should_regenerate:
+        document, canonical_projection, fact_check_report = (
+            await _generate_tailored_resume_document(
+                resume=resume,
+                job=job,
+                report=report,
+                payload=TailoredResumeGenerateRequest(
+                    resume_id=resume.id,
+                    job_id=job.id,
+                    title=job.title,
+                    company=job.company,
+                    job_city=job.job_city,
+                    employment_type=job.employment_type,
+                    source_name=job.source_name,
+                    source_url=job.source_url,
+                    priority=job.priority,
+                    jd_text=job.jd_text,
+                    force_refresh=payload.force_refresh,
+                    optimization_level=payload.optimization_level,
+                ),
+                settings=settings,
+            )
+        )
+        session_record.optimized_resume_json = canonical_projection.model_dump()
+        session_record.optimized_resume_md = document.markdown
+        session_record.tailored_resume_json = document.model_dump()
+        session_record.tailored_resume_md = document.markdown
+        session_record.audit_report_json = {
+            "document_audit": document.audit.model_dump(),
+            "fact_check_report": fact_check_report,
+        }
+        session_record.status = "ready"
+        session_record.updated_by = current_user_id
+        session.add(session_record)
+        await session.commit()
+        await session.refresh(session_record)
+
+    session.expire_all()
+    current_user = await session.get(User, current_user_id)
+    if current_user is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Current user not found",
+        )
+    return await get_tailored_resume_workflow(
+        session,
+        current_user=current_user,
+        session_id=session_record_id,
     )

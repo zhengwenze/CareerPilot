@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -7,21 +8,42 @@ from dotenv import load_dotenv
 from app.prompts.resume import get_resume_pdf_to_md_prompt
 from app.services.ai_client import AIProviderConfig, request_text_completion
 
-load_dotenv(Path(__file__).parent / ".env")
+logger = logging.getLogger(__name__)
 
-MODEL_API_KEY = os.getenv("MATCH_AI_API_KEY", "").strip()
-if not MODEL_API_KEY:
-    MODEL_API_KEY = os.getenv("MINIMAX_API_KEY", "").strip()
-MODEL_BASE_URL = os.getenv(
-    "MINIMAX_BASE_URL", "https://api.minimaxi.com/anthropic"
-).strip()
-MODEL_NAME = os.getenv("MINIMAX_MODEL", "MiniMax-M2.5").strip()
+for dotenv_path in (
+    Path(__file__).resolve().parents[2] / ".env",
+    Path(__file__).resolve().parents[1] / ".env",
+    Path(__file__).resolve().parent / ".env",
+):
+    if dotenv_path.exists():
+        load_dotenv(dotenv_path, override=False)
+
+MODEL_API_KEY = (
+    os.getenv("MATCH_AI_API_KEY", "").strip()
+    or os.getenv("MINIMAX_API_KEY", "").strip()
+)
+MODEL_BASE_URL = (
+    os.getenv("MATCH_AI_BASE_URL", "").strip()
+    or os.getenv("MINIMAX_BASE_URL", "").strip()
+    or "https://api.minimaxi.com/anthropic"
+)
+MODEL_NAME = (
+    os.getenv("MATCH_AI_MODEL", "").strip()
+    or os.getenv("MINIMAX_MODEL", "").strip()
+    or "MiniMax-M2.5"
+)
+MODEL_TIMEOUT_SECONDS = int(
+    os.getenv("MATCH_AI_TIMEOUT_SECONDS", "").strip()
+    or os.getenv("MINIMAX_TIMEOUT_SECONDS", "").strip()
+    or "60"
+)
 
 
 async def pdf_to_markdown(pdf_bytes: bytes, file_name: str) -> str:
     try:
         import pymupdf4llm
     except ImportError:
+        logger.exception("resume-pdf-to-md missing dependency pymupdf4llm")
         return ""
 
     import tempfile
@@ -32,10 +54,14 @@ async def pdf_to_markdown(pdf_bytes: bytes, file_name: str) -> str:
 
     try:
         raw_md = pymupdf4llm.to_markdown(tmp_path).strip()
+    except Exception:
+        logger.exception("resume-pdf-to-md failed during raw markdown extraction file=%s", file_name)
+        return ""
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
     if not raw_md.strip():
+        logger.warning("resume-pdf-to-md extracted empty markdown file=%s", file_name)
         return ""
 
     user_prompt = f"""下面是从 PDF 简历中提取出来的原始 Markdown，请你整理成最终简历 Markdown。
@@ -56,13 +82,16 @@ async def pdf_to_markdown(pdf_bytes: bytes, file_name: str) -> str:
 """
 
     try:
+        if not MODEL_API_KEY:
+            logger.error("resume-pdf-to-md missing MATCH_AI_API_KEY/MINIMAX_API_KEY")
+            return ""
         markdown = await request_text_completion(
             config=AIProviderConfig(
                 provider="anthropic",
                 base_url=MODEL_BASE_URL,
                 api_key=MODEL_API_KEY,
                 model=MODEL_NAME,
-                timeout_seconds=60,
+                timeout_seconds=MODEL_TIMEOUT_SECONDS,
             ),
             instructions=get_resume_pdf_to_md_prompt(),
             payload={"raw_markdown": raw_md, "user_prompt": user_prompt},
@@ -70,6 +99,7 @@ async def pdf_to_markdown(pdf_bytes: bytes, file_name: str) -> str:
         )
         return markdown.strip()
     except Exception:
+        logger.exception("resume-pdf-to-md failed during AI normalization file=%s", file_name)
         return ""
 
 
@@ -77,11 +107,15 @@ async def main():
     import sys
 
     if len(sys.argv) < 2:
-        print("用法: python -m app.services.resume_pdf_to_md <pdf_file> [output_md_file]")
+        print(
+            "用法: python -m app.services.resume_pdf_to_md <pdf_file> [output_md_file]"
+        )
         return
 
     pdf_path = Path(sys.argv[1])
-    output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(__file__).parent / "output.md"
+    output_path = (
+        Path(sys.argv[2]) if len(sys.argv) > 2 else Path(__file__).parent / "output.md"
+    )
 
     if not pdf_path.exists():
         print(f"文件不存在: {pdf_path}")
