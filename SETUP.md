@@ -347,6 +347,61 @@ curl http://localhost:8001/models
 
 如果你更喜欢容器化部署，Career Pilot 已提供完整的 Docker 支持。
 
+### 前置准备
+
+1. **复制环境变量模板**
+
+```bash
+cd apps/backend
+cp .env.example .env
+```
+
+2. **编辑 `.env` 文件**
+
+```bash
+code .env  # 或使用任意编辑器
+```
+
+关键配置项（Docker 环境下）：
+
+```env
+# 数据库（PostgreSQL）
+DATABASE_URL=postgresql+asyncpg://career:career@postgres:5432/career_pilot
+ALEMBIC_DATABASE_URL=postgresql+psycopg://career:career@postgres:5432/career_pilot
+
+# Redis（缓存、Token Blocklist）
+REDIS_URL=redis://redis:6379/0
+
+# 对象存储（MinIO，用于存储简历 PDF）
+STORAGE_PROVIDER=minio
+STORAGE_ENDPOINT=minio:9000
+STORAGE_ACCESS_KEY=careerpilot
+STORAGE_SECRET_KEY=careerpilot123
+STORAGE_BUCKET_NAME=career-pilot-resumes
+
+# JWT 认证
+JWT_SECRET_KEY=replace-this-with-a-very-long-dev-secret-key
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# CORS（允许前端容器访问）
+CORS_ORIGINS=http://localhost:3000
+
+# AI 服务配置（简历解析与校正）
+RESUME_AI_PROVIDER=minimax
+RESUME_AI_BASE_URL=https://api.minimaxi.com/anthropic
+RESUME_AI_API_KEY=your_api_key_here
+RESUME_AI_MODEL=MiniMax-M2.5
+RESUME_AI_TIMEOUT_SECONDS=30
+
+# AI 服务配置（岗位匹配）
+MATCH_AI_PROVIDER=minimax
+MATCH_AI_BASE_URL=https://api.minimaxi.com/anthropic
+MATCH_AI_API_KEY=your_api_key_here
+MATCH_AI_MODEL=MiniMax-M2.5
+MATCH_AI_TIMEOUT_SECONDS=90
+```
+
 ### 使用 Docker Compose（推荐）
 
 ```bash
@@ -366,17 +421,64 @@ docker compose -f docker-compose.yml logs -f
 - **数据库持久化**：数据保存在 Docker volume 中（`career-pilot-postgres-data`）
 - **MinIO 控制台**：访问 http://localhost:9001 查看对象存储
 - **服务依赖**：后端会等待 PostgreSQL、Redis、MinIO 启动完成后再启动
+- **前端开发模式**：前端容器使用 `development` target，支持热重载
 
 ### 停止容器
 
 ```bash
+# 停止所有服务（保留数据）
 docker compose -f docker-compose.yml down
+
+# 停止并删除数据卷（⚠️ 会丢失所有数据）
+docker compose -f docker-compose.yml down -v
 ```
 
 ### 重新构建镜像
 
 ```bash
 docker compose -f docker-compose.yml up -d --build
+```
+
+### 查看特定服务日志
+
+```bash
+docker compose -f docker-compose.yml logs -f backend
+docker compose -f docker-compose.yml logs -f frontend
+docker compose -f docker-compose.yml logs -f postgres
+docker compose -f docker-compose.yml logs -f redis
+docker compose -f docker-compose.yml logs -f minio
+```
+
+### 进入容器执行命令
+
+```bash
+# 进入后端容器
+docker compose -f docker-compose.yml exec backend sh
+
+# 进入数据库容器
+docker compose -f docker-compose.yml exec postgres sh
+
+# 执行数据库迁移（在容器内）
+docker compose -f docker-compose.yml exec backend uv run alembic upgrade head
+```
+
+### 扩展：添加微信小程序服务（可选）
+
+如需部署微信小程序后端，可在 `docker-compose.yml` 中添加：
+
+```yaml
+miniprogram:
+  build:
+    context: ./apps/miniprogram
+    dockerfile: Dockerfile
+  container_name: career-pilot-miniprogram
+  restart: unless-stopped
+  ports:
+    - "8081:8081"
+  environment:
+    - NODE_ENV=production
+  depends_on:
+    - backend
 ```
 
 ---
