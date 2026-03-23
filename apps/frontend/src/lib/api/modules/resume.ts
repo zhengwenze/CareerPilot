@@ -1,6 +1,38 @@
 import { apiRequest, apiRequestBlob } from "@/lib/api/client";
 import type { JobRecord } from "@/lib/api/modules/jobs";
 
+export type TaskStateRecord = {
+  status: "pending" | "processing" | "success" | "failed";
+  phase: string;
+  message: string;
+  current_step: number;
+  total_steps: number;
+  started_at: string | null;
+  first_completed_at: string | null;
+  completed_at: string | null;
+  last_updated_at: string | null;
+  metrics: Record<string, unknown>;
+};
+
+export type SegmentExplanationRecord = {
+  what: string;
+  why: string;
+  value: string;
+};
+
+export type ContentSegmentRecord = {
+  key: string;
+  label: string;
+  sequence: number;
+  status: "pending" | "processing" | "success" | "failed";
+  original_text: string;
+  suggested_text: string;
+  markdown: string;
+  explanation: SegmentExplanationRecord;
+  error_message: string | null;
+  generated_at: string | null;
+};
+
 /**
  * 简历结构化数据类型
  * 包含基本信息、教育经历、工作经历、项目经历、技能和证书
@@ -151,6 +183,8 @@ export type TailoredResumeArtifactRecord = {
   status: string;
   fit_band: string;
   overall_score: string;
+  task_state: TaskStateRecord;
+  segments: ContentSegmentRecord[];
   has_downloadable_markdown: boolean;
   downloadable_file_name: string | null;
   created_at: string;
@@ -369,6 +403,37 @@ export async function optimizeTailoredResume(
       optimization_level: payload.optimization_level ?? "conservative",
     }),
   });
+}
+
+export async function retryTailoredResumeGeneration(
+  token: string,
+  sessionId: string
+): Promise<TailoredResumeWorkflowRecord> {
+  return apiRequest<TailoredResumeWorkflowRecord>(
+    `/tailored-resumes/workflows/${sessionId}/retry`,
+    {
+      method: "POST",
+      token,
+    }
+  );
+}
+
+export async function recordTailoredResumeEvent(
+  token: string,
+  sessionId: string,
+  payload: {
+    event_type: string;
+    payload?: Record<string, unknown>;
+  }
+): Promise<{ recorded: boolean }> {
+  return apiRequest<{ recorded: boolean }>(
+    `/tailored-resumes/workflows/${sessionId}/events`,
+    {
+      method: "POST",
+      token,
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 /**
