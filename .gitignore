@@ -95,5 +95,8 @@ pdf/
 # uv cache
 .uv-cache/
 
+# Theme files (local development, do not commit)
+monochrome/
+
 # Node modules (if not using in apps/web)
 # node_modules/
