@@ -67,7 +67,7 @@ services:
       - STORAGE_ENDPOINT=minio:9000
       - STORAGE_ACCESS_KEY=careerpilot
       - STORAGE_SECRET_KEY=careerpilot123
-      - CORS_ORIGINS=http://localhost:3000,http://123.56.190.100
+      - CORS_ORIGINS=http://localhost:3000,http://123.56.190.100,http://codeclaw.top,https://codeclaw.top
     depends_on:
       postgres:
         condition: service_healthy
