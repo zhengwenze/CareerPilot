@@ -61,13 +61,13 @@ services:
       - "8000:8000"
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgresql+asyncpg://career:career@postgres:5432/career_pilot
-      - ALEMBIC_DATABASE_URL=postgresql+psycopg://career:career@postgres:5432/career_pilot
-      - REDIS_URL=redis://redis:6379/0
-      - STORAGE_ENDPOINT=minio:9000
-      - STORAGE_ACCESS_KEY=careerpilot
-      - STORAGE_SECRET_KEY=careerpilot123
-      - CORS_ORIGINS=http://localhost:3000,http://123.56.190.100,http://codeclaw.top,https://codeclaw.top
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://career:career@postgres:5432/career_pilot}
+      - ALEMBIC_DATABASE_URL=${ALEMBIC_DATABASE_URL:-postgresql+psycopg://career:career@postgres:5432/career_pilot}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - STORAGE_ENDPOINT=${STORAGE_ENDPOINT:-minio:9000}
+      - STORAGE_ACCESS_KEY=${STORAGE_ACCESS_KEY:-careerpilot}
+      - STORAGE_SECRET_KEY=${STORAGE_SECRET_KEY:-careerpilot123}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,12 +84,14 @@ services:
       context: ./apps/frontend
       dockerfile: Dockerfile
       target: development
+      args:
+        - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     container_name: career-pilot-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_BASE_URL=https://codeclaw.top
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     depends_on:
       - backend
     volumes:
