@@ -1,4 +1,11 @@
 import { apiRequest } from "@/lib/api/client";
+import type { TaskStateRecord } from "@/lib/api/modules/resume";
+
+export type MockInterviewReviewRecord = {
+  strengths: string[];
+  risks: string[];
+  next_steps: string[];
+};
 
 export type MockInterviewSessionRecord = {
   id: string;
@@ -13,10 +20,12 @@ export type MockInterviewSessionRecord = {
   followup_count_for_current_main: number;
   max_questions: number;
   max_followups_per_main: number;
+  prep_state: TaskStateRecord;
   ending_text: string | null;
   error_message: string | null;
   current_turn: MockInterviewTurnRecord | null;
   turns: MockInterviewTurnRecord[];
+  review: MockInterviewReviewRecord;
   created_at: string;
   updated_at: string;
 };
@@ -124,5 +133,33 @@ export async function deleteMockInterviewSession(
   return apiRequest<{ message: string }>(`/mock-interviews/${sessionId}`, {
     method: "DELETE",
     token,
+  });
+}
+
+export async function retryMockInterviewPrep(
+  token: string,
+  sessionId: string
+): Promise<{ recorded: boolean }> {
+  return apiRequest<{ recorded: boolean }>(
+    `/mock-interviews/${sessionId}/retry-prep`,
+    {
+      method: "POST",
+      token,
+    }
+  );
+}
+
+export async function recordMockInterviewEvent(
+  token: string,
+  sessionId: string,
+  payload: {
+    event_type: string;
+    payload?: Record<string, unknown>;
+  }
+): Promise<{ recorded: boolean }> {
+  return apiRequest<{ recorded: boolean }>(`/mock-interviews/${sessionId}/events`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
   });
 }
