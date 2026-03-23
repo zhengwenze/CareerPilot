@@ -31,6 +31,8 @@ import {
   fetchMockInterviewSession,
   finishMockInterviewSession,
   listMockInterviewSessions,
+  recordMockInterviewEvent,
+  retryMockInterviewPrep,
   submitMockInterviewAnswer,
   type MockInterviewSessionRecord,
 } from "@/lib/api/modules/mock-interviews";
@@ -69,12 +71,8 @@ function getQuestionTypeLabel(value: string) {
 
 function getNextActionMessage(value: unknown) {
   switch (value) {
-    case "followup":
-      return "已生成追问，继续回答当前主题。";
-    case "next_main":
-      return "这一题已完成，系统已切到下一题。";
-    case "end":
-      return "本场模拟已结束。";
+    case "processing":
+      return "回答已提交，系统正在准备下一题。";
     default:
       return "回答已提交。";
   }
@@ -109,6 +107,7 @@ export default function DashboardInterviewsPage() {
   const [isDeletingSessionId, setIsDeletingSessionId] = useState<string | null>(
     null
   );
+  const [isRetryingPrep, setIsRetryingPrep] = useState(false);
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [loadingTitle, setLoadingTitle] = useState("正在加载模拟面试");
@@ -144,7 +143,7 @@ export default function DashboardInterviewsPage() {
         if (jobId && optimizationSessionId && !sessionIdFromQuery) {
           setLoadingTitle("正在准备 AI 面试官");
           setLoadingDescription(
-            "我们正在根据当前用户自己的岗位 JD 和优化简历生成主问题池。这一步通常需要 1 到 2 分钟，请不要刷新页面。"
+            "我们会先快速给出第一题，再在后台准备后续题。"
           );
           const created = await createMockInterviewSession(token!, {
             jobId,
@@ -153,14 +152,10 @@ export default function DashboardInterviewsPage() {
           if (cancelled) {
             return;
           }
-          const detail = await loadSessionDetail(created.id);
-          if (cancelled) {
-            return;
-          }
-          setSessions(upsertSession(list, detail));
-          setSelectedSession(detail);
+          setSessions(upsertSession(list, created));
+          setSelectedSession(created);
           setAnswerText("");
-          setStatusMessage("已创建新的模拟面试会话。");
+          setStatusMessage(created.prep_state.message || "已创建新的模拟面试会话。");
           router.replace(`/dashboard/interviews?sessionId=${created.id}`);
           return;
         }
@@ -197,6 +192,61 @@ export default function DashboardInterviewsPage() {
       cancelled = true;
     };
   }, [jobId, optimizationSessionId, router, sessionIdFromQuery, token]);
+
+  useEffect(() => {
+    if (
+      !token ||
+      !selectedSession?.id ||
+      selectedSession.prep_state.status !== "processing"
+    ) {
+      return;
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const nextSession = await fetchMockInterviewSession(token, selectedSession.id);
+        setSessions((current) => upsertSession(current, nextSession));
+        setSelectedSession(nextSession);
+      } catch {
+        // keep the current visible state until the next retry
+      }
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [selectedSession?.id, selectedSession?.prep_state.status, token]);
+
+  useEffect(() => {
+    if (
+      !token ||
+      !selectedSession?.id ||
+      selectedSession.prep_state.status !== "processing"
+    ) {
+      return;
+    }
+
+    const sendExitEvent = () => {
+      void recordMockInterviewEvent(token, selectedSession.id, {
+        event_type: "interview_page_exit",
+        payload: {
+          phase: selectedSession.prep_state.phase,
+          status: selectedSession.prep_state.status,
+        },
+      }).catch(() => undefined);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        sendExitEvent();
+      }
+    };
+
+    window.addEventListener("beforeunload", sendExitEvent);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", sendExitEvent);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [selectedSession?.id, selectedSession?.prep_state.phase, selectedSession?.prep_state.status, token]);
 
   if (!token) {
     return null;
@@ -326,6 +376,27 @@ export default function DashboardInterviewsPage() {
     }
   }
 
+  async function handleRetryPrep() {
+    if (!token || !selectedSession) {
+      return;
+    }
+
+    setIsRetryingPrep(true);
+    setPageError("");
+
+    try {
+      await retryMockInterviewPrep(token, selectedSession.id);
+      const nextSession = await fetchMockInterviewSession(token, selectedSession.id);
+      setSessions((current) => upsertSession(current, nextSession));
+      setSelectedSession(nextSession);
+      setStatusMessage("正在重新准备后续题。");
+    } catch (error) {
+      setPageError(getErrorMessage(error));
+    } finally {
+      setIsRetryingPrep(false);
+    }
+  }
+
   return (
     <PageShell className="gap-6">
       <PageHeader
@@ -423,6 +494,16 @@ export default function DashboardInterviewsPage() {
                   <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm text-[#1C1C1C]/60">
                     已提问 {selectedSession.question_count} / {selectedSession.max_questions}
                   </div>
+                  {selectedSession.prep_state.status === "failed" ? (
+                    <Button
+                      disabled={isRetryingPrep}
+                      onClick={() => void handleRetryPrep()}
+                      type="button"
+                      variant="secondary"
+                    >
+                      {isRetryingPrep ? "重试中..." : "重试准备"}
+                    </Button>
+                  ) : null}
                   <Button
                     className="border-b border-[#1C1C1C]/20 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5"
                     disabled={isDeletingSessionId === selectedSession.id}
@@ -464,6 +545,15 @@ export default function DashboardInterviewsPage() {
                     {getSessionStatusLabel(selectedSession.status)}
                   </p>
                 </div>
+              </div>
+              <div className="mt-4 rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] p-4">
+                <p className="text-sm font-medium text-[#1C1C1C]">
+                  {selectedSession.prep_state.message || "等待准备状态。"}
+                </p>
+                <p className="mt-2 text-sm text-[#1C1C1C]/60">
+                  阶段：{selectedSession.prep_state.phase || "idle"} · 状态：
+                  {selectedSession.prep_state.status}
+                </p>
               </div>
             </PaperSection>
 
@@ -538,6 +628,57 @@ export default function DashboardInterviewsPage() {
                 ))}
               </div>
             </PaperSection>
+
+            {(selectedSession.review.strengths.length > 0 ||
+              selectedSession.review.risks.length > 0 ||
+              selectedSession.review.next_steps.length > 0) ? (
+              <PaperSection title="结构化复盘" eyebrow="Review">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-[#1C1C1C]/10 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+                      亮点
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm leading-6 text-[#1C1C1C]/70">
+                      {selectedSession.review.strengths.length ? (
+                        selectedSession.review.strengths.map((item) => (
+                          <p key={item}>{item}</p>
+                        ))
+                      ) : (
+                        <p>暂未生成。</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[#1C1C1C]/10 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+                      风险
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm leading-6 text-[#1C1C1C]/70">
+                      {selectedSession.review.risks.length ? (
+                        selectedSession.review.risks.map((item) => (
+                          <p key={item}>{item}</p>
+                        ))
+                      ) : (
+                        <p>暂未生成。</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[#1C1C1C]/10 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+                      下一步
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm leading-6 text-[#1C1C1C]/70">
+                      {selectedSession.review.next_steps.length ? (
+                        selectedSession.review.next_steps.map((item) => (
+                          <p key={item}>{item}</p>
+                        ))
+                      ) : (
+                        <p>暂未生成。</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </PaperSection>
+            ) : null}
 
             {selectedSession.ending_text ? (
               <PaperSection title="结束语" eyebrow="Closing">
