@@ -30,7 +30,7 @@ MODEL_BASE_URL = (
 MODEL_NAME = (
     os.getenv("MATCH_AI_MODEL", "").strip()
     or os.getenv("MINIMAX_MODEL", "").strip()
-    or "MiniMax-M2.5"
+    or "MiniMax-M2.7"
 )
 MODEL_TIMEOUT_SECONDS = int(
     os.getenv("MATCH_AI_TIMEOUT_SECONDS", "").strip()

@@ -8,19 +8,6 @@ Career Pilot 是一个面向中高级开发者的智能求职工作台，通过 
 
 ---
 
-## 📑 目录导航
-
-- [核心功能](#-核心功能)
-- [技术架构](#-技术架构)
-- [快速开始](#-快速开始)
-- [项目结构](#-项目结构)
-- [环境配置](#-环境配置)
-- [开发指南](#-开发指南)
-- [部署指南](#-部署指南)
-- [常见问题](#-常见问题)
-
----
-
 ## 🎯 核心功能
 
 ### 简历管理
@@ -49,9 +36,19 @@ Career Pilot 是一个面向中高级开发者的智能求职工作台，通过 
 
 ---
 
-## 🏗️ 技术架构
+## 🛠️ 项目技术栈
 
-### 前端技术栈
+### 后端
+
+| 技术       | 版本    | 说明       |
+| ---------- | ------- | ---------- |
+| Python     | 3.11.15 | 核心语言   |
+| FastAPI    | 0.116.1 | Web 框架   |
+| SQLAlchemy | 2.0.43  | ORM 框架   |
+| Alembic    | 1.16.5  | 数据库迁移 |
+| Pydantic   | 2.11.0  | 数据校验   |
+
+### 前端
 
 | 技术         | 版本   | 说明              |
 | ------------ | ------ | ----------------- |
@@ -61,15 +58,13 @@ Career Pilot 是一个面向中高级开发者的智能求职工作台，通过 
 | Tailwind CSS | 4.x    | 原子化 CSS        |
 | shadcn/ui    | 4.0.6  | 组件库基座        |
 
-### 后端技术栈
+### 小程序
 
-| 技术       | 版本    | 说明       |
-| ---------- | ------- | ---------- |
-| Python     | 3.11.15 | 核心语言   |
-| FastAPI    | 0.116.1 | Web 框架   |
-| SQLAlchemy | 2.0.43  | ORM 框架   |
-| Alembic    | 1.16.5  | 数据库迁移 |
-| Pydantic   | 2.11.0  | 数据校验   |
+| 技术             | 版本    | 说明              |
+| ---------------- | ------- | ----------------- |
+| 微信小程序框架   | v2      | 原生框架          |
+| Skyline          | -       | 渲染引擎          |
+| Glass Easel      | -       | 组件框架          |
 
 ### 数据库与中间件
 
@@ -84,63 +79,6 @@ Career Pilot 是一个面向中高级开发者的智能求职工作台，通过 
 | 服务      | 模型              | 说明                  |
 | --------- | ----------------- | --------------------- |
 | Anthropic | Claude 3.5 Sonnet | 简历解析、校正        |
-| MiniMax   | MiniMax-M2.5      | 替代方案，兼容 OpenAI |
-
----
-
-## 🚀 快速开始
-
-### 方式一：Docker 一键启动（推荐）
-
-```bash
-# 启动所有服务（后端、前端、数据库、中间件）
-docker compose -f docker-compose.yml up -d
-
-# 查看服务状态
-docker compose -f docker-compose.yml ps
-```
-
-**访问地址**：
-
-- 前端应用：http://localhost:3000
-- 后端 API：http://localhost:8000
-- MinIO 控制台：http://localhost:9001
-
-### 方式二：本地开发模式
-
-#### 1. 启动依赖服务
-
-```bash
-docker compose -f docker-compose.yml up -d postgres redis minio
-```
-
-#### 2. 启动后端
-
-```bash
-cd apps/backend
-
-# 安装依赖（首次运行）
-uv sync --group dev
-
-# 执行数据库迁移
-uv run alembic upgrade head
-
-# 启动开发服务器
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-#### 3. 启动前端
-
-```bash
-cd apps/frontend
-
-# 安装依赖（首次运行）
-npm install
-
-# 启动开发服务器
-npm run dev
-```
-
-**访问地址**：http://localhost:3000
+| MiniMax   | MiniMax-M2.7      | 替代方案，兼容 OpenAI |
 
 ---

@@ -54,6 +54,8 @@ import {
   type TailoredResumeWorkflowRecord,
 } from "@/lib/api/modules/resume";
 import { cn } from "@/lib/utils";
+import { ResumeStatusIndicator } from "@/components/resume-status-indicator";
+import { JobStatusIndicator } from "@/components/job-status-indicator";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
@@ -74,16 +76,6 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function getResumeStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    pending: "待转 MD",
-    processing: "转 MD 中",
-    success: "已可用",
-    failed: "转 MD 失败",
-  };
-  return labels[status] ?? status;
-}
-
 function getFitBandLabel(value: string) {
   const labels: Record<string, string> = {
     excellent: "强适配",
@@ -93,16 +85,6 @@ function getFitBandLabel(value: string) {
     unknown: "待评估",
   };
   return labels[value] ?? value;
-}
-
-function getJobStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    pending: "待解析",
-    processing: "解析中",
-    success: "已可用",
-    failed: "解析失败",
-  };
-  return labels[status] ?? status;
 }
 
 function getCanonicalResumeMarkdown(resume: ResumeRecord | null) {
@@ -669,7 +651,9 @@ export default function DashboardResumePage() {
         {resume ? (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              <MetaChip>{getResumeStatusLabel(resume.parse_status)}</MetaChip>
+              <MetaChip>
+                <ResumeStatusIndicator resume={resume} />
+              </MetaChip>
               <MetaChip>{resume.file_name}</MetaChip>
               <MetaChip>{formatDate(resume.updated_at)}</MetaChip>
             </div>
@@ -701,7 +685,9 @@ export default function DashboardResumePage() {
         rightSlot={
           <div className="flex items-center gap-2">
             {savedJob ? (
-              <MetaChip>{getJobStatusLabel(savedJob.parse_status)}</MetaChip>
+              <MetaChip>
+                <JobStatusIndicator job={savedJob} />
+              </MetaChip>
             ) : null}
             <Button
               disabled={!canSaveJob || isSavingJob}
