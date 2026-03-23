@@ -21,8 +21,19 @@ from app.models import (
     ResumeOptimizationSession,
     User,
 )
+from app.prompts.mock_interview import (
+    get_mock_interview_dynamic_question_prompt,
+    get_mock_interview_feedback_prompt,
+    get_mock_interview_question_generation_prompt,
+    get_mock_interview_recap_prompt,
+    get_mock_interview_resume_summary_prompt,
+    get_mock_interview_role_summary_prompt,
+    get_mock_interview_system_prompt,
+)
+from app.schemas.ai_runtime import TaskState
 from app.schemas.mock_interview import (
     MockInterviewAnswerSubmitResponse,
+    MockInterviewReviewSummary,
     MockInterviewSessionCreateRequest,
     MockInterviewSessionRecord,
     MockInterviewTurnDecision,
@@ -31,134 +42,6 @@ from app.schemas.mock_interview import (
 from app.services.ai_client import AIProviderConfig, request_text_completion
 
 logger = logging.getLogger(__name__)
-
-SYSTEM_PROMPT = """你是一名专业、自然、正式的中文面试官。
-
-任务是基于候选人的目标岗位描述和优化后的简历内容，发起一场模拟面试。
-
-行为规则：
-1. 总提问预算固定，系统会告诉你还剩多少次提问。
-2. 每次只能输出一个问题。
-3. 允许在提问前给出一句非常短的点评，但点评不是必须的。
-4. 点评必须简短、自然、不过度教学。
-5. 对同一个主问题，最多追问 2 次。
-6. 若候选人的回答已经足够完整，就切换到下一个主问题。
-7. 问题必须贴近岗位描述和简历内容。
-8. 不要输出多个并列问题。
-9. 不要输出长段分析。
-10. 不要输出总结报告。
-11. 语气保持真实面试风格，默认正式但不过度施压。
-12. 如果信息不足，也不要抱怨输入格式，而是基于已有内容尽量生成合理问题。
-""".strip()
-
-ROLE_SUMMARY_PROMPT = """请将下面的目标岗位描述压缩为一段简洁摘要，用于后续模拟面试。
-
-要求：
-1. 提取岗位名称、级别线索、核心技能、业务方向、优先关注点。
-2. 不要编造不存在的信息。
-3. 输出中文。
-4. 控制在 150 字以内。
-
-目标岗位描述：
-{target_role_desc}
-""".strip()
-
-RESUME_SUMMARY_PROMPT = """请根据下面的简历 Markdown，提炼一份候选人画像摘要，用于模拟面试。
-
-要求：
-1. 提取核心经历、项目、技能、教育背景、岗位匹配亮点。
-2. 若简历结构混乱，也要尽量提炼有效信息。
-3. 不要编造不存在的经历。
-4. 输出中文。
-5. 控制在 220 字以内。
-
-简历 Markdown：
-{resume_md}
-""".strip()
-
-MAIN_QUESTION_POOL_PROMPT = """你要生成一场模拟面试的主问题池。
-
-输入信息：
-- 岗位摘要：{role_summary}
-- 候选人画像：{candidate_profile}
-
-要求：
-1. 生成 12 个主问题。
-2. 问题要尽量覆盖：
-   - 自我介绍/求职动机
-   - 项目经历
-   - 岗位核心能力
-   - 技术/业务理解
-   - 协作沟通/行为面
-3. 问题必须贴合岗位摘要和候选人画像。
-4. 每个问题都要尽量具体，避免空泛。
-5. 每个问题只问一个点。
-6. 每题附带：
-   - question_id
-   - category
-   - text
-   - intent
-   - followup_hints（给出1~3个可能追问方向）
-7. 输出 JSON 数组，不要输出额外说明。
-""".strip()
-
-TURN_DECISION_PROMPT = """你正在进行一场模拟面试。
-
-输入信息：
-- 岗位摘要：{role_summary}
-- 候选人画像：{candidate_profile}
-- 当前主问题：{current_main_question}
-- 当前问题：{current_question}
-- 当前问题类型：{current_question_type}
-- 当前主问题下已追问次数：{followup_count_for_current_main}
-- 当前总提问次数：{question_count}
-- 最大提问次数：{max_total_questions}
-- 最近对话：{recent_turns}
-- 候选人本轮回答：{candidate_answer}
-
-请你判断：
-1. 是否需要一句短点评
-2. 下一步是追问、切换到下一个主问题，还是结束
-3. 如果追问或切到下一个主问题，请给出下一个问题
-
-强约束：
-1. 点评不是必须的；若给点评，必须非常短。
-2. 同一主问题最多追问 2 次。
-3. 问题必须具体，只问一个点。
-4. 如果总提问次数已经达到上限，则 next_action 必须为 "end"。
-5. 不要输出总结报告。
-6. 输出必须是 JSON 对象。
-""".strip()
-
-DYNAMIC_MAIN_QUESTION_PROMPT = """你要为一场模拟面试补充 1 个新的主问题。
-
-输入：
-- 岗位摘要：{role_summary}
-- 候选人画像：{candidate_profile}
-- 已问过的问题列表：{asked_questions}
-
-要求：
-1. 新问题不能与已问过的问题重复。
-2. 问题要贴合岗位和候选人经历。
-3. 只输出 1 个主问题。
-4. 输出 JSON 对象。
-""".strip()
-
-ENDING_PROMPT = """请为一场已经结束的模拟面试生成极简结束语。
-
-要求：
-1. 只写 2~3 句。
-2. 语气自然、礼貌、正式。
-3. 可以有一句非常轻量的总体反馈，但不要写成总结报告。
-4. 不要分点。
-5. 不要超过 80 个中文字符。
-
-候选人画像：
-{candidate_profile}
-
-最近几轮对话：
-{recent_turns}
-""".strip()
 
 FALLBACK_QUESTIONS = [
     "先请你做一个简短的自我介绍，并重点讲和这个岗位最相关的经历。",
@@ -187,8 +70,73 @@ def utc_now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _deserialize_task_state(payload: dict[str, Any] | None) -> TaskState:
+    return TaskState.model_validate(payload or {})
+
+
+def _serialize_task_state(state: TaskState) -> dict[str, Any]:
+    return state.model_dump(mode="json")
+
+
+def _mark_prep_state(
+    session_record: MockInterviewSession,
+    *,
+    status: str,
+    phase: str,
+    message: str,
+) -> TaskState:
+    plan_json = dict(session_record.plan_json or {})
+    state = _deserialize_task_state(plan_json.get("prep_state"))
+    now = utc_now_naive()
+    if state.started_at is None and status in {"processing", "success", "failed"}:
+        state.started_at = now
+    state.status = status  # type: ignore[assignment]
+    state.phase = phase
+    state.message = message
+    state.last_updated_at = now
+    if status == "success":
+        state.completed_at = now
+    if status == "failed":
+        state.completed_at = now
+    plan_json["prep_state"] = _serialize_task_state(state)
+    session_record.plan_json = plan_json
+    return state
+
+
+def _append_session_event(
+    session_record: MockInterviewSession,
+    *,
+    event_type: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    plan_json = dict(session_record.plan_json or {})
+    events = list(plan_json.get("events") or [])
+    events.append(
+        {
+            "event_type": event_type,
+            "occurred_at": utc_now_naive().isoformat(),
+            "payload": payload or {},
+        }
+    )
+    plan_json["events"] = events[-50:]
+    session_record.plan_json = plan_json
+
+
 def _normalize_text(value: str | None) -> str:
     return " ".join((value or "").split()).strip()
+
+
+def _dedupe_strings(items: list[str]) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        normalized = _normalize_text(item)
+        lowered = normalized.lower()
+        if not normalized or lowered in seen:
+            continue
+        seen.add(lowered)
+        values.append(normalized)
+    return values
 
 
 def _truncate_text(value: str, limit: int) -> str:
@@ -225,6 +173,42 @@ def _build_candidate_profile(*, role_summary: str, resume_summary: str) -> str:
     if next_role_summary and next_resume_summary:
         return f"岗位侧重点：{next_role_summary}\n候选人画像：{next_resume_summary}"
     return next_role_summary or next_resume_summary
+
+
+def _build_first_question(job: JobDescription, workflow: ResumeOptimizationSession) -> MainQuestionPlan:
+    job_title = job.title.strip() or "目标岗位"
+    candidate_title = job.company.strip() if job.company else "你当前最相关的经历"
+    if workflow.tailored_resume_md.strip():
+        text = f"先请你做一个简短自我介绍，并重点讲一段最能证明你适合“{job_title}”的经历。"
+    else:
+        text = f"先请你做一个简短自我介绍，并说明你为什么想申请“{job_title}”。"
+    return MainQuestionPlan(
+        question_id="opening-1",
+        category="开场",
+        text=text,
+        intent=f"快速判断候选人与岗位 {candidate_title} 的直接相关性",
+        followup_hints=["与岗位最相关的经历", "岗位动机"],
+    )
+
+
+def _build_review_summary(turns: list[MockInterviewTurn]) -> MockInterviewReviewSummary:
+    answered_turns = [turn for turn in turns if _normalize_text(turn.answer_text)]
+    strengths: list[str] = []
+    risks: list[str] = []
+    next_steps: list[str] = []
+    if answered_turns:
+        strengths.append("已完成至少一轮真实问答，具备继续训练的基础素材。")
+    if any(len(_normalize_text(turn.answer_text)) < 60 for turn in answered_turns):
+        risks.append("部分回答偏短，建议补足背景、动作和结果。")
+    if any(not _normalize_text(turn.answer_text) for turn in turns[-1:]):
+        risks.append("最新题目尚未完成作答。")
+    if answered_turns:
+        next_steps.append("下一轮优先补充指标、规模和个人决策依据。")
+    return MockInterviewReviewSummary(
+        strengths=_dedupe_strings(strengths),
+        risks=_dedupe_strings(risks),
+        next_steps=_dedupe_strings(next_steps),
+    )
 
 
 def _serialize_turns(turns: list[MockInterviewTurn]) -> list[MockInterviewTurnRecord]:
@@ -265,14 +249,16 @@ def _serialize_session(
         source_resume_version=session_record.source_resume_version,
         status=session_record.status,
         question_count=session_record.current_question_index,
-        main_question_index=int(plan_json.get("main_question_index", 0) or 0),
+        main_question_index=max(0, int(plan_json.get("main_question_index", 0) or 0)),
         followup_count_for_current_main=int(
             plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
         ),
         max_questions=session_record.max_questions,
         max_followups_per_main=session_record.max_follow_ups_per_question,
+        prep_state=_deserialize_task_state(plan_json.get("prep_state")),
         current_turn=current_turn,
         turns=serialized_turns,
+        review=MockInterviewReviewSummary.model_validate(session_record.review_json or {}),
         ending_text=str(plan_json.get("ending_text") or "").strip() or None,
         error_message=session_record.error_message,
         created_at=session_record.created_at,
@@ -320,7 +306,7 @@ async def _request_text(
         raise RuntimeError("Interview AI is not configured")
     return await request_text_completion(
         config=_get_ai_config(settings, model=model),
-        instructions=SYSTEM_PROMPT,
+        instructions=get_mock_interview_system_prompt(),
         payload={"prompt": prompt},
         max_tokens=max_tokens,
     )
@@ -345,7 +331,7 @@ async def summarize_role_desc(settings: Settings, target_role_desc: str) -> str:
     try:
         return await _request_text(
             settings,
-            prompt=ROLE_SUMMARY_PROMPT.format(target_role_desc=target_role_desc),
+            prompt=get_mock_interview_role_summary_prompt().format(target_role_desc=target_role_desc),
             max_tokens=350,
             model=settings.interview_ai_model_planning or settings.interview_ai_model,
         )
@@ -357,7 +343,7 @@ async def summarize_resume(settings: Settings, resume_md: str) -> str:
     try:
         return await _request_text(
             settings,
-            prompt=RESUME_SUMMARY_PROMPT.format(resume_md=resume_md),
+            prompt=get_mock_interview_resume_summary_prompt().format(resume_md=resume_md),
             max_tokens=500,
             model=settings.interview_ai_model_planning or settings.interview_ai_model,
         )
@@ -374,7 +360,7 @@ async def generate_main_questions(
     try:
         content = await _request_text(
             settings,
-            prompt=MAIN_QUESTION_POOL_PROMPT.format(
+            prompt=get_mock_interview_question_generation_prompt().format(
                 role_summary=role_summary,
                 candidate_profile=candidate_profile,
             ),
@@ -427,7 +413,7 @@ async def decide_next_turn(
     try:
         content = await _request_text(
             settings,
-            prompt=TURN_DECISION_PROMPT.format(
+            prompt=get_mock_interview_feedback_prompt().format(
                 role_summary=role_summary,
                 candidate_profile=candidate_profile,
                 current_main_question=current_main_question,
@@ -489,7 +475,7 @@ async def generate_dynamic_main_question(
     try:
         content = await _request_text(
             settings,
-            prompt=DYNAMIC_MAIN_QUESTION_PROMPT.format(
+            prompt=get_mock_interview_dynamic_question_prompt().format(
                 role_summary=role_summary,
                 candidate_profile=candidate_profile,
                 asked_questions=asked_questions,
@@ -521,7 +507,7 @@ async def generate_ending_text(
     try:
         return await _request_text(
             settings,
-            prompt=ENDING_PROMPT.format(
+            prompt=get_mock_interview_recap_prompt().format(
                 candidate_profile=candidate_profile,
                 recent_turns=recent_turns,
             ),
@@ -685,6 +671,304 @@ async def get_mock_interview_session_detail(
     return _serialize_session(session_record, turns)
 
 
+async def retry_mock_interview_prep(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    session_id: UUID,
+) -> MockInterviewSession:
+    session_record = await get_mock_interview_session_or_404(
+        session,
+        current_user=current_user,
+        session_id=session_id,
+    )
+    state = _mark_prep_state(
+        session_record,
+        status="processing",
+        phase="retrying",
+        message="正在重新准备后续题目。",
+    )
+    state.completed_at = None
+    state.first_completed_at = None
+    session_record.plan_json = {**(session_record.plan_json or {}), "prep_state": _serialize_task_state(state)}
+    session_record.error_message = None
+    _append_session_event(session_record, event_type="mock_interview_retry_requested")
+    session.add(session_record)
+    await session.commit()
+    await session.refresh(session_record)
+    return session_record
+
+
+async def record_mock_interview_event(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    session_id: UUID,
+    event_type: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    session_record = await get_mock_interview_session_or_404(
+        session,
+        current_user=current_user,
+        session_id=session_id,
+    )
+    _append_session_event(session_record, event_type=event_type, payload=payload)
+    session.add(session_record)
+    await session.commit()
+
+
+async def process_mock_interview_prep(
+    *,
+    session_id: UUID,
+    session_factory,
+    settings: Settings,
+) -> None:
+    async with session_factory() as session:
+        session_record = await session.get(MockInterviewSession, session_id)
+        if session_record is None:
+            return
+        job = await session.get(JobDescription, session_record.jd_id)
+        workflow = await session.get(ResumeOptimizationSession, session_record.optimization_session_id)
+        if job is None or workflow is None:
+            state = _mark_prep_state(
+                session_record,
+                status="failed",
+                phase="failed",
+                message="准备失败，缺少岗位或优化简历信息。",
+            )
+            state.metrics["failure_reason"] = "missing_dependencies"
+            session_record.plan_json = {**(session_record.plan_json or {}), "prep_state": _serialize_task_state(state)}
+            session_record.error_message = "准备失败，缺少岗位或优化简历信息。"
+            session.add(session_record)
+            await session.commit()
+            return
+
+        try:
+            state = _mark_prep_state(
+                session_record,
+                status="processing",
+                phase="summarizing_context",
+                message="正在准备后续题。",
+            )
+            session_record.plan_json = {**(session_record.plan_json or {}), "prep_state": _serialize_task_state(state)}
+            session.add(session_record)
+            await session.commit()
+
+            tailored_resume_md = workflow.tailored_resume_md or ""
+            role_summary = await summarize_role_desc(settings, job.jd_text)
+            resume_summary = await summarize_resume(settings, tailored_resume_md)
+            candidate_profile = _build_candidate_profile(
+                role_summary=role_summary,
+                resume_summary=resume_summary,
+            )
+            main_questions = await generate_main_questions(
+                settings,
+                role_summary=role_summary,
+                candidate_profile=candidate_profile,
+            )
+
+            plan_json = dict(session_record.plan_json or {})
+            existing_question = plan_json.get("current_question") or ""
+            existing_question_id = plan_json.get("current_main_question_id") or ""
+            if main_questions:
+                if not existing_question:
+                    existing_question = main_questions[0].text
+                    existing_question_id = main_questions[0].question_id
+                remaining_questions = [asdict(item) for item in main_questions if item.question_id != existing_question_id]
+            else:
+                remaining_questions = []
+            plan_json.update(
+                {
+                    "role_summary": role_summary,
+                    "resume_summary": resume_summary,
+                    "candidate_profile": candidate_profile,
+                    "main_questions": remaining_questions,
+                    "prep_state": _serialize_task_state(
+                        TaskState(
+                            status="success",
+                            phase="ready",
+                            message="后续题目已准备完成。",
+                            started_at=state.started_at,
+                            first_completed_at=state.first_completed_at or utc_now_naive(),
+                            completed_at=utc_now_naive(),
+                            last_updated_at=utc_now_naive(),
+                            metrics={
+                                "first_question_latency_ms": int(
+                                    max(
+                                        0,
+                                        (
+                                            (state.first_completed_at or utc_now_naive())
+                                            - (state.started_at or utc_now_naive())
+                                        ).total_seconds()
+                                        * 1000,
+                                    )
+                                )
+                            },
+                        )
+                    ),
+                }
+            )
+            session_record.plan_json = plan_json
+            _append_session_event(session_record, event_type="mock_interview_prep_completed")
+            session.add(session_record)
+            await session.commit()
+        except Exception as exc:
+            state = _mark_prep_state(
+                session_record,
+                status="failed",
+                phase="failed",
+                message="准备后续题目失败，可重试。",
+            )
+            state.metrics["failure_reason"] = str(exc)
+            session_record.plan_json = {**(session_record.plan_json or {}), "prep_state": _serialize_task_state(state)}
+            session_record.error_message = str(exc)
+            _append_session_event(
+                session_record,
+                event_type="mock_interview_prep_failed",
+                payload={"message": str(exc)},
+            )
+            session.add(session_record)
+            await session.commit()
+
+
+async def process_mock_interview_turn(
+    *,
+    session_id: UUID,
+    turn_id: UUID,
+    session_factory,
+    settings: Settings,
+) -> None:
+    async with session_factory() as session:
+        session_record = await session.get(MockInterviewSession, session_id)
+        turn = await session.get(MockInterviewTurn, turn_id)
+        if session_record is None or turn is None:
+            return
+        try:
+            state = _mark_prep_state(
+                session_record,
+                status="processing",
+                phase="preparing_next_turn",
+                message="正在准备下一题。",
+            )
+            session_record.plan_json = {**(session_record.plan_json or {}), "prep_state": _serialize_task_state(state)}
+            session.add(session_record)
+            await session.commit()
+
+            turns = await _list_session_turns(session, session_id=session_record.id)
+            plan_json = dict(session_record.plan_json or {})
+            current_main_question_id = str(plan_json.get("current_main_question_id") or turn.question_topic or "")
+            current_main_question = _find_main_question(plan_json, question_id=current_main_question_id) or {}
+            decision = await decide_next_turn(
+                settings,
+                role_summary=str(plan_json.get("role_summary") or ""),
+                candidate_profile=str(plan_json.get("candidate_profile") or ""),
+                current_main_question=str(current_main_question.get("text") or turn.question_text),
+                current_question=turn.question_text,
+                current_question_type=str(plan_json.get("current_question_type") or "main"),
+                followup_count_for_current_main=int(
+                    plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
+                ),
+                question_count=session_record.current_question_index,
+                max_total_questions=session_record.max_questions,
+                recent_turns=_build_recent_turns_payload(turns),
+                candidate_answer=str(turn.answer_text or ""),
+            )
+
+            turn.decision_json = decision.model_dump()
+            turn.evaluation_json = {"summary": decision.comment_text if decision.need_comment else ""}
+            turn.updated_at = utc_now_naive()
+            session.add(turn)
+
+            interview_ended = _apply_turn_decision(plan_json, decision)
+            session_record.current_follow_up_count = int(
+                plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
+            )
+
+            if not interview_ended and session_record.current_question_index >= session_record.max_questions:
+                interview_ended = True
+
+            if interview_ended:
+                plan_json["queued_followup_question"] = None
+                ending_text = await generate_ending_text(
+                    settings,
+                    candidate_profile=str(plan_json.get("candidate_profile") or ""),
+                    recent_turns=_build_recent_turns_payload(turns),
+                )
+                plan_json["ending_text"] = ending_text
+                session_record.status = "completed"
+            else:
+                question_text, question_type, main_question_id = _get_or_build_next_question(plan_json)
+                if not question_text:
+                    dynamic_main_question = await generate_dynamic_main_question(
+                        settings,
+                        role_summary=str(plan_json.get("role_summary") or ""),
+                        candidate_profile=str(plan_json.get("candidate_profile") or ""),
+                        asked_questions=_build_asked_questions(turns),
+                    )
+                    main_questions = list(plan_json.get("main_questions") or [])
+                    main_questions.append(asdict(dynamic_main_question))
+                    plan_json["main_questions"] = main_questions
+                    question_text, question_type, main_question_id = _get_or_build_next_question(plan_json)
+
+                _assign_current_question(
+                    plan_json,
+                    question_text=question_text,
+                    question_type=question_type,
+                    main_question_id=main_question_id,
+                )
+                session_record.current_follow_up_count = int(
+                    plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
+                )
+                session_record.current_question_index += 1
+                next_turn = MockInterviewTurn(
+                    session_id=session_record.id,
+                    turn_index=session_record.current_question_index,
+                    question_group_index=int(plan_json.get("main_question_index", 0) or 0) + 1,
+                    question_source="follow_up" if question_type == "followup" else "main",
+                    question_topic=str(main_question_id or ""),
+                    question_text=question_text,
+                    question_intent=decision.reason if question_type == "followup" else "",
+                    question_rubric_json=[],
+                    status="asked",
+                    evaluation_json={},
+                    decision_json={},
+                    asked_at=utc_now_naive(),
+                    created_by=session_record.updated_by,
+                    updated_by=session_record.updated_by,
+                )
+                session.add(next_turn)
+
+            ready_state = TaskState(
+                status="success",
+                phase="ready",
+                message="下一轮已准备完成。",
+                started_at=state.started_at,
+                first_completed_at=state.first_completed_at or utc_now_naive(),
+                completed_at=utc_now_naive(),
+                last_updated_at=utc_now_naive(),
+            )
+            session_record.plan_json = {
+                **plan_json,
+                "prep_state": _serialize_task_state(ready_state),
+            }
+            updated_turns = await _list_session_turns(session, session_id=session_record.id)
+            session_record.review_json = _build_review_summary(updated_turns).model_dump(mode="json")
+            session.add(session_record)
+            await session.commit()
+        except Exception as exc:
+            state = _mark_prep_state(
+                session_record,
+                status="failed",
+                phase="failed",
+                message="准备下一题失败，可重试。",
+            )
+            state.metrics["failure_reason"] = str(exc)
+            session_record.plan_json = {**(session_record.plan_json or {}), "prep_state": _serialize_task_state(state)}
+            session_record.error_message = str(exc)
+            session.add(session_record)
+            await session.commit()
+
+
 async def create_mock_interview_session(
     session: AsyncSession,
     *,
@@ -724,18 +1008,15 @@ async def create_mock_interview_session(
             message="Tailored resume markdown is not ready",
         )
 
-    role_summary = await summarize_role_desc(settings, job.jd_text)
-    resume_summary = await summarize_resume(settings, tailored_resume_md)
-    candidate_profile = _build_candidate_profile(
-        role_summary=role_summary,
-        resume_summary=resume_summary,
+    del settings
+    first_question = _build_first_question(job, workflow)
+    prep_state = TaskState(
+        status="processing",
+        phase="preparing_question_pool",
+        message="首题已生成，正在准备后续题。",
+        started_at=utc_now_naive(),
+        last_updated_at=utc_now_naive(),
     )
-    main_questions = await generate_main_questions(
-        settings,
-        role_summary=role_summary,
-        candidate_profile=candidate_profile,
-    )
-    first_question = main_questions[0]
 
     session_record = MockInterviewSession(
         user_id=current_user.id,
@@ -752,18 +1033,20 @@ async def create_mock_interview_session(
         max_questions=16,
         max_follow_ups_per_question=2,
         plan_json={
-            "role_summary": role_summary,
-            "resume_summary": resume_summary,
-            "candidate_profile": candidate_profile,
-            "main_questions": [asdict(item) for item in main_questions],
-            "main_question_index": 0,
+            "role_summary": "",
+            "resume_summary": "",
+            "candidate_profile": "",
+            "main_questions": [],
+            "main_question_index": -1,
             "followup_count_for_current_main": 0,
             "current_question": first_question.text,
             "current_question_type": "main",
             "current_main_question_id": first_question.question_id,
             "queued_followup_question": None,
             "ending_text": None,
+            "prep_state": prep_state.model_dump(mode="json"),
         },
+        review_json=MockInterviewReviewSummary().model_dump(mode="json"),
         created_by=current_user.id,
         updated_by=current_user.id,
     )
@@ -788,6 +1071,7 @@ async def create_mock_interview_session(
         updated_by=current_user.id,
     )
     session.add(turn)
+    _append_session_event(session_record, event_type="mock_interview_created")
     await session.commit()
     return await get_mock_interview_session_detail(
         session,
@@ -830,8 +1114,6 @@ async def submit_mock_interview_answer(
         )
 
     normalized_answer = answer_text.strip()
-    plan_json = dict(session_record.plan_json or {})
-    turns = await _list_session_turns(session, session_id=session_record.id)
     now = utc_now_naive()
 
     turn.answer_text = normalized_answer
@@ -840,98 +1122,25 @@ async def submit_mock_interview_answer(
     turn.evaluated_at = now
     turn.updated_by = current_user.id
     session.add(turn)
-
-    current_main_question_id = str(plan_json.get("current_main_question_id") or turn.question_topic or "")
-    current_main_question = _find_main_question(plan_json, question_id=current_main_question_id) or {}
-    decision = await decide_next_turn(
-        settings,
-        role_summary=str(plan_json.get("role_summary") or ""),
-        candidate_profile=str(plan_json.get("candidate_profile") or ""),
-        current_main_question=str(current_main_question.get("text") or turn.question_text),
-        current_question=turn.question_text,
-        current_question_type=str(plan_json.get("current_question_type") or "main"),
-        followup_count_for_current_main=int(
-            plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
-        ),
-        question_count=session_record.current_question_index,
-        max_total_questions=session_record.max_questions,
-        recent_turns=_build_recent_turns_payload(turns),
-        candidate_answer=normalized_answer,
-    )
-
-    turn.decision_json = decision.model_dump()
-    turn.evaluation_json = {"summary": decision.comment_text if decision.need_comment else ""}
-    session.add(turn)
-
-    interview_ended = _apply_turn_decision(plan_json, decision)
-    session_record.current_follow_up_count = int(
-        plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
-    )
-
-    next_action_payload: dict[str, Any] = {"type": decision.next_action}
-    if not interview_ended and session_record.current_question_index >= session_record.max_questions:
-        interview_ended = True
-
-    if interview_ended:
-        plan_json["queued_followup_question"] = None
-        ending_text = await generate_ending_text(
-            settings,
-            candidate_profile=str(plan_json.get("candidate_profile") or ""),
-            recent_turns=_build_recent_turns_payload(turns),
-        )
-        plan_json["ending_text"] = ending_text
-        session_record.status = "completed"
-        next_action_payload["ending_text"] = ending_text
-    else:
-        question_text, question_type, main_question_id = _get_or_build_next_question(plan_json)
-        if not question_text:
-            dynamic_main_question = await generate_dynamic_main_question(
-                settings,
-                role_summary=str(plan_json.get("role_summary") or ""),
-                candidate_profile=str(plan_json.get("candidate_profile") or ""),
-                asked_questions=_build_asked_questions(turns),
-            )
-            main_questions = list(plan_json.get("main_questions") or [])
-            main_questions.append(asdict(dynamic_main_question))
-            plan_json["main_questions"] = main_questions
-            question_text, question_type, main_question_id = _get_or_build_next_question(plan_json)
-
-        _assign_current_question(
-            plan_json,
-            question_text=question_text,
-            question_type=question_type,
-            main_question_id=main_question_id,
-        )
-        session_record.current_follow_up_count = int(
-            plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
-        )
-        session_record.current_question_index += 1
-        next_turn = MockInterviewTurn(
-            session_id=session_record.id,
-            turn_index=session_record.current_question_index,
-            question_group_index=int(plan_json.get("main_question_index", 0) or 0) + 1,
-            question_source="follow_up" if question_type == "followup" else "main",
-            question_topic=str(main_question_id or ""),
-            question_text=question_text,
-            question_intent=decision.reason if question_type == "followup" else "",
-            question_rubric_json=[],
-            status="asked",
-            evaluation_json={},
-            decision_json={},
-            asked_at=now,
-            created_by=current_user.id,
-            updated_by=current_user.id,
-        )
-        session.add(next_turn)
-
+    plan_json = dict(session_record.plan_json or {})
+    plan_json["prep_state"] = TaskState(
+        status="processing",
+        phase="preparing_next_turn",
+        message="回答已保存，正在准备下一题。",
+        started_at=utc_now_naive(),
+        last_updated_at=utc_now_naive(),
+    ).model_dump(mode="json")
     session_record.plan_json = plan_json
     session_record.updated_by = current_user.id
+    session_record.review_json = _build_review_summary(
+        await _list_session_turns(session, session_id=session_record.id)
+    ).model_dump(mode="json")
     session.add(session_record)
     await session.commit()
     return MockInterviewAnswerSubmitResponse(
         session_id=session_record.id,
         submitted_turn_id=turn.id,
-        next_action=next_action_payload,
+        next_action={"type": "processing"},
     )
 
 
@@ -956,8 +1165,17 @@ async def finish_mock_interview_session(
             recent_turns=_build_recent_turns_payload(turns),
         )
         plan_json["ending_text"] = ending_text
+        plan_json["prep_state"] = TaskState(
+            status="success",
+            phase="completed",
+            message="本场模拟面试已结束。",
+            started_at=_deserialize_task_state(plan_json.get("prep_state")).started_at,
+            completed_at=utc_now_naive(),
+            last_updated_at=utc_now_naive(),
+        ).model_dump(mode="json")
         session_record.plan_json = plan_json
         session_record.status = "completed"
+        session_record.review_json = _build_review_summary(turns).model_dump(mode="json")
         session_record.updated_by = current_user.id
         session.add(session_record)
         await session.commit()
