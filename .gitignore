@@ -62,6 +62,7 @@ dmypy.json
 .pytype/
 
 # Documentation
+docs/
 docs/_build/
 
 # Database
