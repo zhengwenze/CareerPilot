@@ -8,12 +8,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import {
-  ArrowUpRight,
-  Download,
-  FileUp,
-  Sparkles,
-} from "lucide-react";
+import { ArrowUpRight, Download, FileUp, Sparkles } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -74,6 +69,12 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
 function getFitBandLabel(value: string) {
@@ -308,6 +309,9 @@ export default function DashboardResumePage() {
   const [isSavingJob, setIsSavingJob] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [generateStartTime, setGenerateStartTime] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!token) {
@@ -339,7 +343,9 @@ export default function DashboardResumePage() {
           ) ?? null;
 
         setResume(nextResume);
-        setResumeMarkdown((current) => current || getCanonicalResumeMarkdown(nextResume));
+        setResumeMarkdown(
+          (current) => current || getCanonicalResumeMarkdown(nextResume),
+        );
         setSavedJob(nextSavedJob);
         setJobDraft(
           nextSavedJob ? toJobDraft(nextSavedJob) : createEmptyJobDraft(),
@@ -405,6 +411,18 @@ export default function DashboardResumePage() {
     return () => window.clearInterval(timer);
   }, [savedJob?.id, savedJob?.parse_status, token]);
 
+  useEffect(() => {
+    if (!isGenerating || generateStartTime === null) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setGenerateStartTime((current) => current);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isGenerating, generateStartTime]);
+
   const canSaveResume = Boolean(
     token && resume?.id && normalizeMarkdown(resumeMarkdown),
   );
@@ -453,7 +471,9 @@ export default function DashboardResumePage() {
       setResume(autoSaved);
       setResumeMarkdown(getCanonicalResumeMarkdown(autoSaved) || nextMarkdown);
       setWorkflow(null);
-      setStatusMessage("PDF 已上传、自动转换为 Markdown，并已保存到当前用户账户。");
+      setStatusMessage(
+        "PDF 已上传、自动转换为 Markdown，并已保存到当前用户账户。",
+      );
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -525,6 +545,7 @@ export default function DashboardResumePage() {
     }
 
     setIsGenerating(true);
+    setGenerateStartTime(Date.now());
     setPageError("");
     setStatusMessage("");
 
@@ -540,6 +561,7 @@ export default function DashboardResumePage() {
       setPageError(getErrorMessage(error));
     } finally {
       setIsGenerating(false);
+      setGenerateStartTime(null);
     }
   }
 
@@ -798,7 +820,16 @@ export default function DashboardResumePage() {
               onClick={() => void handleGenerateTailoredResume()}
             >
               <Sparkles className="size-4" />
-              {isGenerating ? "生成中" : "生成优化简历"}
+              {isGenerating && generateStartTime !== null ? (
+                <>
+                  生成中{" "}
+                  {formatDuration(
+                    Math.floor((Date.now() - generateStartTime) / 1000),
+                  )}
+                </>
+              ) : (
+                "生成优化简历"
+              )}
             </Button>
             <Button
               disabled={!workflow || isDownloading}
