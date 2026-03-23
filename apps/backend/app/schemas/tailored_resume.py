@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.ai_runtime import ContentSegment, TaskState
 from app.schemas.job import JobResponse
 from app.schemas.resume import ResumeResponse
 
@@ -117,6 +118,8 @@ class TailoredResumeArtifactResponse(BaseModel):
     status: str
     fit_band: str
     overall_score: Decimal
+    task_state: TaskState = Field(default_factory=TaskState)
+    segments: list[ContentSegment] = Field(default_factory=list)
     document: TailoredResumeDocument = Field(default_factory=TailoredResumeDocument)
     has_downloadable_markdown: bool = False
     downloadable_file_name: str | None = None
