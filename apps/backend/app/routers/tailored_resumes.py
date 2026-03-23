@@ -17,6 +17,7 @@ from app.routers.deps import (
     get_settings_dependency,
 )
 from app.schemas.common import ApiSuccessResponse
+from app.schemas.ai_runtime import ClientEventRequest, ClientEventResponse
 from app.schemas.tailored_resume import (
     TailoredResumeGenerateFromSavedJobRequest,
     TailoredResumePdfToMarkdownResponse,
@@ -28,7 +29,10 @@ from app.services.tailored_resume import (
     generate_tailored_resume_for_saved_job,
     get_tailored_resume_workflow,
     list_tailored_resume_workflows,
+    record_tailored_resume_event,
+    retry_tailored_resume_workflow,
 )
+from app.services.tailored_resume_runtime import schedule_tailored_resume_generation
 
 router = APIRouter(prefix="/tailored-resumes", tags=["tailored-resumes"])
 
@@ -117,7 +121,56 @@ async def optimize_tailored_resume_from_saved_records(
         session_factory=resolve_session_factory(request),
         settings=settings,
     )
+    schedule_tailored_resume_generation(
+        request.app,
+        session_id=workflow.tailored_resume.session_id,
+    )
     return success_response(request, workflow)
+
+
+@router.post(
+    "/workflows/{session_id}/retry",
+    response_model=ApiSuccessResponse[TailoredResumeWorkflowResponse],
+)
+async def retry_tailored_resume_generation(
+    request: Request,
+    session_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[TailoredResumeWorkflowResponse]:
+    session_record = await retry_tailored_resume_workflow(
+        session,
+        current_user=current_user,
+        session_id=session_id,
+    )
+    schedule_tailored_resume_generation(request.app, session_id=session_record.id)
+    workflow = await get_tailored_resume_workflow(
+        session,
+        current_user=current_user,
+        session_id=session_record.id,
+    )
+    return success_response(request, workflow)
+
+
+@router.post(
+    "/workflows/{session_id}/events",
+    response_model=ApiSuccessResponse[ClientEventResponse],
+)
+async def record_tailored_resume_client_event(
+    request: Request,
+    session_id: UUID,
+    payload: ClientEventRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApiSuccessResponse[ClientEventResponse]:
+    await record_tailored_resume_event(
+        session,
+        current_user=current_user,
+        session_id=session_id,
+        event_type=payload.event_type,
+        payload=payload.payload,
+    )
+    return success_response(request, ClientEventResponse(recorded=True))
 
 
 @router.get(
