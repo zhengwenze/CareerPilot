@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import re
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import desc, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -19,6 +21,7 @@ from app.models import (
 )
 from app.schemas.job import JobCreateRequest, JobUpdateRequest
 from app.schemas.match_report import MatchReportCreateRequest
+from app.schemas.ai_runtime import ContentSegment, SegmentExplanation, TaskState
 from app.schemas.resume import (
     ResumeCertificationItem,
     ResumeEducationItem,
@@ -42,7 +45,7 @@ from app.schemas.tailored_resume import (
     TailoredResumeProjectItem,
     TailoredResumeWorkflowResponse,
 )
-from app.services.ai_client import AIClientError
+from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
 from app.services.job import (
     build_job_response,
     create_job,
@@ -61,12 +64,53 @@ from app.services.resume_optimizer import (
     build_resume_fact_check_report,
     create_resume_optimization_session,
 )
+from app.prompts.tailored_resume import (
+    get_tailored_resume_rewrite_prompt,
+)
 from app.services.tailored_resume_document_ai import (
     AITailoredResumeDocumentRequest,
     build_tailored_resume_document_ai_provider,
 )
 
 TOKEN_PATTERN = re.compile(r"[a-z0-9+#./-]+|[\u4e00-\u9fff]+", re.IGNORECASE)
+TAILORED_RESUME_SEGMENT_ORDER: tuple[tuple[str, str], ...] = (
+    ("summary", "职业摘要"),
+    ("skills", "技能聚焦"),
+    ("experience", "工作经历"),
+    ("projects", "项目经历"),
+    ("additional", "教育与补充信息"),
+)
+
+
+def utc_now_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+class _RewriteOnlyBullet(BaseModel):
+    id: str
+    text: str = ""
+    kind: str = "responsibility"
+    metrics: list[str] = Field(default_factory=list)
+    skills_used: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+
+
+class _RewriteOnlyWorkItem(BaseModel):
+    id: str
+    bullets: list[_RewriteOnlyBullet] = Field(default_factory=list)
+
+
+class _RewriteOnlyProjectItem(BaseModel):
+    id: str
+    bullets: list[_RewriteOnlyBullet] = Field(default_factory=list)
+
+
+class _RewriteOnlyResponse(BaseModel):
+    summary: str = ""
+    work_experience_items: list[_RewriteOnlyWorkItem] = Field(default_factory=list)
+    project_items: list[_RewriteOnlyProjectItem] = Field(default_factory=list)
+    unresolved_items: list[dict[str, str]] = Field(default_factory=list)
+    editor_notes: list[str] = Field(default_factory=list)
 
 
 def _build_job_create_request(
@@ -101,6 +145,93 @@ def _build_job_update_request(
 
 def _normalize_text(value: str) -> str:
     return " ".join(value.split()).strip()
+
+
+def _serialize_task_state(state: TaskState | dict[str, Any] | None) -> dict[str, Any]:
+    if isinstance(state, TaskState):
+        return state.model_dump(mode="json")
+    if isinstance(state, dict):
+        return TaskState.model_validate(state).model_dump(mode="json")
+    return TaskState().model_dump(mode="json")
+
+
+def _deserialize_task_state(payload: dict[str, Any] | None) -> TaskState:
+    return TaskState.model_validate(payload or {})
+
+
+def _serialize_segment(segment: ContentSegment | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(segment, ContentSegment):
+        return segment.model_dump(mode="json")
+    return ContentSegment.model_validate(segment).model_dump(mode="json")
+
+
+def _deserialize_segments(payload: dict[str, Any] | list[Any] | None) -> list[ContentSegment]:
+    items: list[ContentSegment] = []
+    if isinstance(payload, dict):
+        for value in payload.values():
+            items.append(ContentSegment.model_validate(value))
+    elif isinstance(payload, list):
+        for value in payload:
+            items.append(ContentSegment.model_validate(value))
+    return sorted(items, key=lambda item: (item.sequence, item.key))
+
+
+def _serialize_segments(items: list[ContentSegment]) -> dict[str, Any]:
+    return {item.key: item.model_dump(mode="json") for item in items}
+
+
+def _append_event(container: dict[str, Any], *, event_type: str, payload: dict[str, Any] | None = None) -> None:
+    events = list(container.get("events") or [])
+    events.append(
+        {
+            "event_type": event_type,
+            "occurred_at": utc_now_naive().isoformat(),
+            "payload": payload or {},
+        }
+    )
+    container["events"] = events[-50:]
+
+
+def _mark_task_state(
+    session_record: ResumeOptimizationSession,
+    *,
+    status: str,
+    phase: str,
+    message: str,
+    current_step: int | None = None,
+    total_steps: int | None = None,
+) -> TaskState:
+    state = _deserialize_task_state(session_record.diagnosis_json)
+    now = utc_now_naive()
+    if state.started_at is None and status in {"processing", "success", "failed"}:
+        state.started_at = now
+    state.status = status  # type: ignore[assignment]
+    state.phase = phase
+    state.message = message
+    state.last_updated_at = now
+    if current_step is not None:
+        state.current_step = current_step
+    if total_steps is not None:
+        state.total_steps = total_steps
+    if status == "success":
+        state.completed_at = now
+    if status == "failed":
+        state.completed_at = now
+    session_record.diagnosis_json = _serialize_task_state(state)
+    return state
+
+
+def _store_segment(
+    session_record: ResumeOptimizationSession,
+    *,
+    segment: ContentSegment,
+) -> list[ContentSegment]:
+    items = _deserialize_segments(session_record.draft_sections_json)
+    by_key = {item.key: item for item in items}
+    by_key[segment.key] = segment
+    updated = sorted(by_key.values(), key=lambda item: (item.sequence, item.key))
+    session_record.draft_sections_json = _serialize_segments(updated)
+    return updated
 
 
 def _resolve_user_id(current_user: User) -> UUID:
@@ -190,6 +321,239 @@ def _extract_job_keywords(job: JobDescription, report: MatchReport) -> list[str]
         *(_flatten_string_values(matched_jd_fields)),
     ]
     return _dedupe_strings(collected)[:12]
+
+
+def _build_document_from_structured_resume(
+    *,
+    resume_data: ResumeStructuredData,
+    job: JobDescription,
+    job_keywords: list[str],
+    warnings: list[str] | None = None,
+) -> TailoredResumeDocument:
+    evidence_text = "\n".join(_flatten_string_values(resume_data.model_dump()))
+    matched_keywords = [
+        keyword for keyword in job_keywords if _keyword_supported(keyword, evidence_text)
+    ]
+    missing_keywords = [keyword for keyword in job_keywords if keyword not in matched_keywords]
+    return TailoredResumeDocument(
+        matchSummary=TailoredResumeMatchSummary(
+            targetRole=job.title or "",
+            optimizationLevel="conservative",
+            matchedKeywords=matched_keywords[:8],
+            missingButImportantKeywords=missing_keywords[:8],
+            overallStrategy="在不新增事实的前提下，优先强化与目标岗位直接相关的表达。",
+        ),
+        basic=TailoredResumeBasic(
+            name=resume_data.basic_info.name,
+            title=resume_data.basic_info.title or job.title or resume_data.basic_info.summary,
+            email=resume_data.basic_info.email,
+            phone=resume_data.basic_info.phone,
+            location=resume_data.basic_info.location,
+            links=resume_data.basic_info.links,
+        ),
+        summary=resume_data.basic_info.summary,
+        education=[
+            TailoredResumeEducationItem(
+                school=item.school,
+                major=item.major,
+                degree=item.degree,
+                startDate=item.start_date,
+                endDate=item.end_date,
+                description=_dedupe_strings(item.honors),
+            )
+            for item in resume_data.education_items
+        ],
+        experience=[
+            TailoredResumeExperienceItem(
+                company=item.company,
+                position=item.title,
+                startDate=item.start_date,
+                endDate=item.end_date,
+                bullets=[bullet.text for bullet in item.bullets if bullet.text.strip()],
+            )
+            for item in resume_data.work_experience_items
+        ],
+        projects=[
+            TailoredResumeProjectItem(
+                name=item.name,
+                role=item.role,
+                startDate=item.start_date,
+                endDate=item.end_date,
+                bullets=_dedupe_strings(
+                    [item.summary, *[bullet.text for bullet in item.bullets if bullet.text.strip()]]
+                ),
+                link="",
+            )
+            for item in resume_data.project_items
+        ],
+        skills=_dedupe_strings([*resume_data.skills.technical, *resume_data.skills.tools]),
+        certificates=_dedupe_strings(resume_data.certifications),
+        languages=_dedupe_strings(resume_data.skills.languages),
+        awards=_dedupe_strings(resume_data.awards),
+        customSections=[
+            TailoredResumeCustomSection(
+                title=section.title,
+                items=[
+                    {
+                        "title": item.title,
+                        "subtitle": item.subtitle,
+                        "years": item.years,
+                        "description": item.description,
+                    }
+                    for item in section.items
+                ],
+            )
+            for section in resume_data.custom_sections
+        ],
+        audit=TailoredResumeAudit(
+            truthfulnessStatus="warning" if warnings else "passed",
+            warnings=warnings or [],
+            changedSections=[],
+            addedKeywordsOnlyFromEvidence=True,
+        ),
+    )
+
+
+def _build_summary_text(item: ResumeStructuredData) -> str:
+    return (item.basic_info.summary or "").strip()
+
+
+def _build_experience_text(item: ResumeStructuredData) -> str:
+    lines: list[str] = []
+    for work in item.work_experience_items:
+        header = " | ".join(part for part in [work.company, work.title, work.start_date, work.end_date] if part)
+        if header:
+            lines.append(f"- {header}")
+        for bullet in work.bullets:
+            if bullet.text.strip():
+                lines.append(f"  - {bullet.text.strip()}")
+    return "\n".join(lines).strip()
+
+
+def _build_projects_text(item: ResumeStructuredData) -> str:
+    lines: list[str] = []
+    for project in item.project_items:
+        header = " | ".join(
+            part for part in [project.name, project.role, project.start_date, project.end_date] if part
+        )
+        if header:
+            lines.append(f"- {header}")
+        if project.summary.strip():
+            lines.append(f"  - {project.summary.strip()}")
+        for bullet in project.bullets:
+            if bullet.text.strip():
+                lines.append(f"  - {bullet.text.strip()}")
+    return "\n".join(lines).strip()
+
+
+def _build_skills_text(item: ResumeStructuredData) -> str:
+    lines: list[str] = []
+    if item.skills.technical:
+        lines.append(f"技术：{', '.join(item.skills.technical)}")
+    if item.skills.tools:
+        lines.append(f"工具：{', '.join(item.skills.tools)}")
+    if item.skills.languages:
+        lines.append(f"语言：{', '.join(item.skills.languages)}")
+    return "\n".join(lines).strip()
+
+
+def _build_additional_text(item: ResumeStructuredData) -> str:
+    lines: list[str] = []
+    for edu in item.education_items:
+        value = " | ".join(part for part in [edu.school, edu.major, edu.degree, edu.start_date, edu.end_date] if part)
+        if value:
+            lines.append(f"教育：{value}")
+    for cert in item.certification_items:
+        value = " | ".join(part for part in [cert.name, cert.issuer, cert.date] if part)
+        if value:
+            lines.append(f"证书：{value}")
+    for award in item.awards:
+        if award.strip():
+            lines.append(f"奖项：{award.strip()}")
+    for section in item.custom_sections:
+        if section.title.strip():
+            lines.append(f"补充：{section.title.strip()}")
+    return "\n".join(lines).strip()
+
+
+def _build_resume_preview(segment_key: str, resume_data: ResumeStructuredData) -> str:
+    builders = {
+        "summary": _build_summary_text,
+        "experience": _build_experience_text,
+        "projects": _build_projects_text,
+        "skills": _build_skills_text,
+        "additional": _build_additional_text,
+    }
+    return builders[segment_key](resume_data)
+
+
+def _reorder_skills_for_job(
+    *,
+    resume_data: ResumeStructuredData,
+    job_keywords: list[str],
+) -> ResumeStructuredData:
+    reordered = resume_data.model_copy(deep=True)
+    source_skills = _dedupe_strings([*resume_data.skills.technical, *resume_data.skills.tools])
+    matched = [skill for skill in source_skills if any(_keyword_supported(keyword, skill) for keyword in job_keywords)]
+    remaining = [skill for skill in source_skills if skill not in matched]
+    reordered.skills.technical = _dedupe_strings([*matched, *remaining])
+    reordered.skills.tools = []
+    return reordered
+
+
+def _build_segment_explanation(
+    *,
+    key: str,
+    original_text: str,
+    suggested_text: str,
+    report: MatchReport,
+) -> SegmentExplanation:
+    gap_json = report.gap_json or {}
+    matched = _dedupe_strings([str(item) for item in gap_json.get("strengths", []) if str(item).strip()])[:3]
+    gaps = _dedupe_strings([str(item) for item in gap_json.get("gaps", []) if str(item).strip()])[:3]
+    if original_text.strip() == suggested_text.strip():
+        what = "保留原有事实表达，未做激进改写。"
+    else:
+        what = f"围绕 {key} 模块调整了措辞与排序，保留原始事实不变。"
+    why = "优先贴合岗位高频关键词与职责重点。" if matched or gaps else "优先保证真实、可验证和可读性。"
+    value = (
+        f"让招聘方更快看到与岗位直接相关的证据：{', '.join(matched or gaps)}。"
+        if matched or gaps
+        else "让信息层级更清楚，便于 ATS 和招聘方快速读取。"
+    )
+    return SegmentExplanation(what=what, why=why, value=value)
+
+
+def _build_segment(
+    *,
+    key: str,
+    label: str,
+    sequence: int,
+    original_resume: ResumeStructuredData,
+    suggested_resume: ResumeStructuredData,
+    report: MatchReport,
+    status: str = "success",
+    error_message: str | None = None,
+) -> ContentSegment:
+    original_text = _build_resume_preview(key, original_resume)
+    suggested_text = _build_resume_preview(key, suggested_resume)
+    return ContentSegment(
+        key=key,
+        label=label,
+        sequence=sequence,
+        status=status,  # type: ignore[arg-type]
+        original_text=original_text,
+        suggested_text=suggested_text,
+        markdown=suggested_text,
+        explanation=_build_segment_explanation(
+            key=key,
+            original_text=original_text,
+            suggested_text=suggested_text,
+            report=report,
+        ),
+        error_message=error_message,
+        generated_at=utc_now_naive(),
+    )
 
 
 def _render_tailored_resume_markdown(document: TailoredResumeDocument) -> str:
@@ -351,97 +715,151 @@ def _build_fallback_tailored_resume_document(
     job: JobDescription,
     job_keywords: list[str],
 ) -> TailoredResumeDocument:
-    evidence_text = "\n".join(
-        [
-            original_markdown,
-            *_flatten_string_values(source_resume.model_dump()),
-        ]
-    )
-    matched_keywords = [
-        keyword
-        for keyword in job_keywords
-        if _keyword_supported(keyword, evidence_text)
-    ]
-    missing_keywords = [
-        keyword for keyword in job_keywords if keyword not in matched_keywords
-    ]
-
-    document = TailoredResumeDocument(
-        matchSummary=TailoredResumeMatchSummary(
-            targetRole=job.title or "",
-            optimizationLevel="conservative",
-            matchedKeywords=matched_keywords[:8],
-            missingButImportantKeywords=missing_keywords[:8],
-            overallStrategy="在不新增事实的前提下，保留原简历主体内容，并优先强化与目标岗位直接相关的表达。",
-        ),
-        basic=TailoredResumeBasic(
-            name=source_resume.basic_info.name,
-            title=job.title or source_resume.basic_info.summary,
-            email=source_resume.basic_info.email,
-            phone=source_resume.basic_info.phone,
-            location=source_resume.basic_info.location,
-            links=[],
-        ),
-        summary=source_resume.basic_info.summary,
-        education=[
-            TailoredResumeEducationItem(
-                school=item.school,
-                major=item.major,
-                degree=item.degree,
-                startDate=item.start_date,
-                endDate=item.end_date,
-                description=_dedupe_strings(item.honors),
-            )
-            for item in source_resume.education_items
-        ],
-        experience=[
-            TailoredResumeExperienceItem(
-                company=item.company,
-                position=item.title,
-                startDate=item.start_date,
-                endDate=item.end_date,
-                bullets=[bullet.text for bullet in item.bullets if bullet.text.strip()],
-            )
-            for item in source_resume.work_experience_items
-        ],
-        projects=[
-            TailoredResumeProjectItem(
-                name=item.name,
-                role=item.role,
-                startDate=item.start_date,
-                endDate=item.end_date,
-                bullets=_dedupe_strings(
-                    [
-                        item.summary,
-                        *[
-                            bullet.text
-                            for bullet in item.bullets
-                            if bullet.text.strip()
-                        ],
-                    ]
-                ),
-                link="",
-            )
-            for item in source_resume.project_items
-        ],
-        skills=_dedupe_strings(
-            [*source_resume.skills.technical, *source_resume.skills.tools]
-        ),
-        certificates=_dedupe_strings(source_resume.certifications),
-        languages=_dedupe_strings(source_resume.skills.languages),
-        awards=[],
-        customSections=[],
-        audit=TailoredResumeAudit(
-            truthfulnessStatus="warning",
-            warnings=["AI 不可用，当前结果使用保守 fallback 生成。"],
-            changedSections=[],
-            addedKeywordsOnlyFromEvidence=True,
-        ),
+    document = _build_document_from_structured_resume(
+        resume_data=source_resume,
+        job=job,
+        job_keywords=job_keywords,
+        warnings=["AI 不可用，当前结果使用保守 fallback 生成。"],
     )
     document.markdown = original_markdown.strip() or _render_tailored_resume_markdown(
         document
     )
     return document
+
+
+def _build_resume_ai_config(settings: Settings) -> AIProviderConfig:
+    return AIProviderConfig(
+        provider=settings.resume_ai_provider,
+        base_url=settings.resume_ai_base_url,
+        api_key=settings.resume_ai_api_key,
+        model=settings.resume_ai_model,
+        timeout_seconds=settings.resume_ai_timeout_seconds,
+    )
+
+
+def _build_rewrite_tasks(job: JobDescription, report: MatchReport) -> list[dict[str, Any]]:
+    evidence_map = report.evidence_map_json or {}
+    missing_items = [str(item) for item in evidence_map.get("missing_items", []) if str(item).strip()]
+    tasks: list[dict[str, Any]] = [
+        {
+            "key": "summary-focus",
+            "title": "强化摘要与岗位相关性",
+            "instruction": f"围绕目标岗位 {job.title or '目标岗位'} 强化摘要的岗位贴合表达，禁止新增事实。",
+            "target_section": "summary",
+            "priority": 1,
+            "selected": True,
+        },
+        {
+            "key": "experience-focus",
+            "title": "强化工作经历证据",
+            "instruction": "优先让工作经历里的事实更贴近岗位要求，保留原公司、岗位、时间线和指标。",
+            "target_section": "work_experience",
+            "priority": 2,
+            "selected": True,
+        },
+        {
+            "key": "projects-focus",
+            "title": "强化项目经历证据",
+            "instruction": "优先让项目经历里的成果和职责更贴近岗位要求，禁止新增项目与指标。",
+            "target_section": "projects",
+            "priority": 3,
+            "selected": True,
+        },
+    ]
+    if missing_items:
+        tasks.append(
+            {
+                "key": "missing-keywords",
+                "title": "谨慎处理缺口词",
+                "instruction": f"如果原简历已有证据，再自然吸收这些关键词：{', '.join(missing_items[:6])}",
+                "target_section": "summary",
+                "priority": 4,
+                "selected": True,
+            }
+        )
+    return tasks
+
+
+async def _generate_rewrite_projection(
+    *,
+    source_resume: ResumeStructuredData,
+    job: JobDescription,
+    report: MatchReport,
+    settings: Settings,
+) -> tuple[ResumeStructuredData, list[str]]:
+    if not settings.resume_ai_api_key or not settings.resume_ai_base_url or not settings.resume_ai_model:
+        return source_resume.model_copy(deep=True), ["未配置简历优化 AI，当前保留原始摘要/经历/项目表达。"]
+
+    payload = {
+        "source_resume": source_resume.model_dump(mode="json"),
+        "job_snapshot": {
+            "title": job.title,
+            "company": job.company,
+            "jd_text": job.jd_text,
+        },
+        "match_report_snapshot": {
+            "fit_band": report.fit_band,
+            "overall_score": str(report.overall_score or ""),
+            "gap_json": report.gap_json or {},
+            "evidence_map_json": report.evidence_map_json or {},
+        },
+        "rewrite_tasks": _build_rewrite_tasks(job, report),
+    }
+    try:
+        response = await request_json_completion(
+            config=_build_resume_ai_config(settings),
+            instructions=get_tailored_resume_rewrite_prompt(),
+            payload=payload,
+            max_tokens=3200,
+        )
+        rewrite = _RewriteOnlyResponse.model_validate(response)
+    except (AIClientError, ValidationError):
+        return source_resume.model_copy(deep=True), ["局部改写 AI 返回无效结果，当前保留原始摘要/经历/项目表达。"]
+
+    projected = source_resume.model_copy(deep=True)
+    if rewrite.summary.strip():
+        projected.basic_info.summary = rewrite.summary.strip()
+
+    work_by_id = {item.id: item for item in projected.work_experience_items}
+    for item in rewrite.work_experience_items:
+        target = work_by_id.get(item.id)
+        if target is None:
+            continue
+        bullet_by_id = {bullet.id: bullet for bullet in target.bullets}
+        for bullet in item.bullets:
+            target_bullet = bullet_by_id.get(bullet.id)
+            if target_bullet is None:
+                continue
+            target_bullet.text = bullet.text.strip() or target_bullet.text
+            target_bullet.kind = bullet.kind or target_bullet.kind
+            target_bullet.metrics = _dedupe_strings(bullet.metrics) or target_bullet.metrics
+            target_bullet.skills_used = _dedupe_strings(bullet.skills_used) or target_bullet.skills_used
+
+    project_by_id = {item.id: item for item in projected.project_items}
+    for item in rewrite.project_items:
+        target = project_by_id.get(item.id)
+        if target is None:
+            continue
+        bullet_by_id = {bullet.id: bullet for bullet in target.bullets}
+        for bullet in item.bullets:
+            target_bullet = bullet_by_id.get(bullet.id)
+            if target_bullet is None:
+                continue
+            target_bullet.text = bullet.text.strip() or target_bullet.text
+            target_bullet.kind = bullet.kind or target_bullet.kind
+            target_bullet.metrics = _dedupe_strings(bullet.metrics) or target_bullet.metrics
+            target_bullet.skills_used = _dedupe_strings(bullet.skills_used) or target_bullet.skills_used
+        summary_parts = [bullet.text.strip() for bullet in item.bullets if bullet.text.strip()]
+        if summary_parts and not target.summary.strip():
+            target.summary = summary_parts[0]
+
+    notes = _dedupe_strings(
+        [
+            *rewrite.editor_notes,
+            *[str(item.get("reason") or "").strip() for item in rewrite.unresolved_items if isinstance(item, dict)],
+        ]
+    )
+    return projected, notes
 
 
 def _build_canonical_projection_from_document(
@@ -714,9 +1132,7 @@ def _build_tailored_resume_artifact(
     session_record: ResumeOptimizationSession,
     report: MatchReport,
 ) -> TailoredResumeArtifactResponse:
-    document = TailoredResumeDocument.model_validate(
-        session_record.tailored_resume_json or {}
-    )
+    document = TailoredResumeDocument.model_validate(session_record.tailored_resume_json or {})
     markdown = session_record.tailored_resume_md or document.markdown
     if markdown and markdown != document.markdown:
         document.markdown = markdown
@@ -726,6 +1142,8 @@ def _build_tailored_resume_artifact(
         status=session_record.status,
         fit_band=report.fit_band,
         overall_score=report.overall_score or Decimal("0"),
+        task_state=_deserialize_task_state(session_record.diagnosis_json),
+        segments=_deserialize_segments(session_record.draft_sections_json),
         document=document,
         has_downloadable_markdown=bool(markdown.strip()),
         downloadable_file_name=(
@@ -819,11 +1237,6 @@ async def list_tailored_resume_workflows(
     )
     workflows: list[TailoredResumeWorkflowResponse] = []
     for session_record in result.scalars().all():
-        if (
-            not session_record.tailored_resume_json
-            and not session_record.tailored_resume_md.strip()
-        ):
-            continue
         report = await session.get(MatchReport, session_record.match_report_id)
         if report is None:
             continue
@@ -870,6 +1283,343 @@ async def get_tailored_resume_workflow(
         session_record=session_record,
         report=report,
     )
+
+
+def _build_initial_segments() -> list[ContentSegment]:
+    return [
+        ContentSegment(key=key, label=label, sequence=index, status="pending")
+        for index, (key, label) in enumerate(TAILORED_RESUME_SEGMENT_ORDER, start=1)
+    ]
+
+
+def _reset_failed_segments(existing: list[ContentSegment]) -> list[ContentSegment]:
+    normalized: list[ContentSegment] = []
+    existing_by_key = {segment.key: segment for segment in existing}
+    for index, (key, label) in enumerate(TAILORED_RESUME_SEGMENT_ORDER, start=1):
+        segment = existing_by_key.get(key) or ContentSegment(
+            key=key,
+            label=label,
+            sequence=index,
+            status="pending",
+        )
+        if segment.status == "failed":
+            segment.status = "pending"
+            segment.error_message = None
+        normalized.append(segment)
+    return normalized
+
+
+def _prepare_session_for_tailored_generation(
+    session_record: ResumeOptimizationSession,
+    *,
+    preserve_segments: bool,
+) -> None:
+    existing_segments = _deserialize_segments(session_record.draft_sections_json)
+    segments = _reset_failed_segments(existing_segments) if preserve_segments else _build_initial_segments()
+    session_record.status = "processing"
+    session_record.tailored_resume_json = {}
+    session_record.tailored_resume_md = ""
+    session_record.optimized_resume_md = ""
+    session_record.audit_report_json = {}
+    session_record.draft_sections_json = _serialize_segments(segments)
+    state = TaskState(
+        status="processing",
+        phase="queued",
+        message="已创建任务，准备按段生成专属简历。",
+        current_step=sum(1 for segment in segments if segment.status == "success"),
+        total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
+        started_at=utc_now_naive(),
+        last_updated_at=utc_now_naive(),
+        metrics={},
+    )
+    session_record.diagnosis_json = state.model_dump(mode="json")
+    _append_event(session_record.diagnosis_json, event_type="tailored_resume_started")
+
+
+async def retry_tailored_resume_workflow(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    session_id: UUID,
+) -> ResumeOptimizationSession:
+    result = await session.execute(
+        select(ResumeOptimizationSession).where(
+            ResumeOptimizationSession.id == session_id,
+            ResumeOptimizationSession.user_id == current_user.id,
+        )
+    )
+    session_record = result.scalar_one_or_none()
+    if session_record is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Tailored resume workflow not found",
+        )
+    _prepare_session_for_tailored_generation(
+        session_record,
+        preserve_segments=True,
+    )
+    session_record.updated_by = current_user.id
+    session.add(session_record)
+    await session.commit()
+    await session.refresh(session_record)
+    return session_record
+
+
+async def record_tailored_resume_event(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    session_id: UUID,
+    event_type: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    result = await session.execute(
+        select(ResumeOptimizationSession).where(
+            ResumeOptimizationSession.id == session_id,
+            ResumeOptimizationSession.user_id == current_user.id,
+        )
+    )
+    session_record = result.scalar_one_or_none()
+    if session_record is None:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Tailored resume workflow not found",
+        )
+    diagnosis = dict(session_record.diagnosis_json or {})
+    _append_event(diagnosis, event_type=event_type, payload=payload)
+    session_record.diagnosis_json = diagnosis
+    session.add(session_record)
+    await session.commit()
+
+
+async def process_tailored_resume_workflow(
+    *,
+    session_id: UUID,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    async with session_factory() as session:
+        session_record = await session.get(ResumeOptimizationSession, session_id)
+        if session_record is None:
+            return
+        resume = await session.get(Resume, session_record.resume_id)
+        job = await session.get(JobDescription, session_record.jd_id)
+        report = await session.get(MatchReport, session_record.match_report_id)
+        if resume is None or job is None or report is None:
+            _mark_task_state(
+                session_record,
+                status="failed",
+                phase="failed",
+                message="生成失败，所需的简历或岗位数据不存在。",
+            )
+            session_record.status = "failed"
+            session_record.audit_report_json = {"error": "missing_dependencies"}
+            session.add(session_record)
+            await session.commit()
+            return
+
+        try:
+            if report.status == "pending":
+                _mark_task_state(
+                    session_record,
+                    status="processing",
+                    phase="preparing_match_report",
+                    message="正在准备岗位匹配结果。",
+                    total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
+                )
+                session.add(session_record)
+                await session.commit()
+                await process_match_report(
+                    report_id=report.id,
+                    session_factory=session_factory,
+                    settings=settings,
+                )
+                await session.refresh(session_record)
+                report = await session.get(MatchReport, session_record.match_report_id)
+                if report is None:
+                    raise RuntimeError("Tailored resume match report disappeared after processing")
+
+            source_resume = ResumeStructuredData.model_validate(resume.structured_json or {})
+            original_markdown = _extract_original_resume_markdown(resume)
+            job_keywords = _extract_job_keywords(job, report)
+
+            skills_resume = _reorder_skills_for_job(
+                resume_data=source_resume,
+                job_keywords=job_keywords,
+            )
+            skills_segment = _build_segment(
+                key="skills",
+                label="技能聚焦",
+                sequence=2,
+                original_resume=source_resume,
+                suggested_resume=skills_resume,
+                report=report,
+            )
+            _store_segment(session_record, segment=skills_segment)
+            state = _mark_task_state(
+                session_record,
+                status="processing",
+                phase="optimizing_skills",
+                message="正在整理更贴近岗位的技能呈现。",
+                current_step=1,
+                total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
+            )
+            if state.first_completed_at is None:
+                state.first_completed_at = utc_now_naive()
+            state.metrics["first_segment_latency_ms"] = int(
+                max(
+                    0,
+                    (
+                        state.first_completed_at - (state.started_at or state.first_completed_at)
+                    ).total_seconds()
+                    * 1000,
+                )
+            )
+            session_record.diagnosis_json = state.model_dump(mode="json")
+            session.add(session_record)
+            await session.commit()
+
+            additional_segment = _build_segment(
+                key="additional",
+                label="教育与补充信息",
+                sequence=5,
+                original_resume=source_resume,
+                suggested_resume=skills_resume,
+                report=report,
+            )
+            _store_segment(session_record, segment=additional_segment)
+            _mark_task_state(
+                session_record,
+                status="processing",
+                phase="optimizing_core_sections",
+                message="正在优化摘要、工作经历和项目经历。",
+                current_step=2,
+                total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
+            )
+            session.add(session_record)
+            await session.commit()
+
+            projected_resume, notes = await _generate_rewrite_projection(
+                source_resume=skills_resume,
+                job=job,
+                report=report,
+                settings=settings,
+            )
+
+            for sequence, (key, label) in enumerate(TAILORED_RESUME_SEGMENT_ORDER[:1] + TAILORED_RESUME_SEGMENT_ORDER[2:4], start=1):
+                suggested_resume = projected_resume
+                if key == "summary":
+                    segment = _build_segment(
+                        key=key,
+                        label=label,
+                        sequence=1,
+                        original_resume=source_resume,
+                        suggested_resume=suggested_resume,
+                        report=report,
+                    )
+                elif key == "experience":
+                    segment = _build_segment(
+                        key=key,
+                        label=label,
+                        sequence=3,
+                        original_resume=source_resume,
+                        suggested_resume=suggested_resume,
+                        report=report,
+                    )
+                else:
+                    segment = _build_segment(
+                        key=key,
+                        label=label,
+                        sequence=4,
+                        original_resume=source_resume,
+                        suggested_resume=suggested_resume,
+                        report=report,
+                    )
+                _store_segment(session_record, segment=segment)
+                completed_count = sum(
+                    1
+                    for item in _deserialize_segments(session_record.draft_sections_json)
+                    if item.status == "success"
+                )
+                _mark_task_state(
+                    session_record,
+                    status="processing",
+                    phase=f"optimizing_{key}",
+                    message=f"正在完成{label}。",
+                    current_step=completed_count,
+                    total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
+                )
+                session.add(session_record)
+                await session.commit()
+
+            document = _build_document_from_structured_resume(
+                resume_data=projected_resume,
+                job=job,
+                job_keywords=job_keywords,
+                warnings=notes,
+            )
+            document.markdown = _render_tailored_resume_markdown(document)
+            document, canonical_projection, fact_check_report = _finalize_document(
+                document=document,
+                source_resume=source_resume,
+                original_markdown=original_markdown,
+                job=job,
+                job_keywords=job_keywords,
+            )
+            session_record.optimized_resume_json = canonical_projection.model_dump()
+            session_record.optimized_resume_md = document.markdown
+            session_record.tailored_resume_json = document.model_dump(mode="json")
+            session_record.tailored_resume_md = document.markdown
+            session_record.audit_report_json = {
+                "document_audit": document.audit.model_dump(mode="json"),
+                "fact_check_report": fact_check_report,
+                "editor_notes": notes,
+            }
+            session_record.status = "success"
+            final_state = _mark_task_state(
+                session_record,
+                status="success",
+                phase="completed",
+                message="专属简历已按分段生成完成。",
+                current_step=len(TAILORED_RESUME_SEGMENT_ORDER),
+                total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
+            )
+            final_state.metrics["total_duration_ms"] = int(
+                max(
+                    0,
+                    (
+                        (final_state.completed_at or utc_now_naive()) - (final_state.started_at or utc_now_naive())
+                    ).total_seconds()
+                    * 1000,
+                )
+            )
+            session_record.diagnosis_json = final_state.model_dump(mode="json")
+            _append_event(session_record.diagnosis_json, event_type="tailored_resume_completed")
+            session.add(session_record)
+            await session.commit()
+        except Exception as exc:
+            failure_state = _mark_task_state(
+                session_record,
+                status="failed",
+                phase="failed",
+                message="专属简历生成失败，可保留已完成内容并重试。",
+            )
+            failure_state.metrics["failure_reason"] = str(exc)
+            session_record.diagnosis_json = failure_state.model_dump(mode="json")
+            session_record.status = "failed"
+            session_record.audit_report_json = {
+                **(session_record.audit_report_json or {}),
+                "error": str(exc),
+            }
+            _append_event(
+                session_record.diagnosis_json,
+                event_type="tailored_resume_failed",
+                payload={"message": str(exc)},
+            )
+            session.add(session_record)
+            await session.commit()
 
 
 async def generate_tailored_resume_workflow(
@@ -985,25 +1735,10 @@ async def generate_tailored_resume_workflow(
         or not session_record.tailored_resume_json
     )
     if should_regenerate:
-        document, canonical_projection, fact_check_report = (
-            await _generate_tailored_resume_document(
-                resume=resume,
-                job=job,
-                report=report,
-                payload=payload,
-                settings=settings,
-            )
+        _prepare_session_for_tailored_generation(
+            session_record,
+            preserve_segments=False,
         )
-        # Legacy compatibility projection only; canonical facts are not updated in this workflow.
-        session_record.optimized_resume_json = canonical_projection.model_dump()
-        session_record.optimized_resume_md = document.markdown
-        session_record.tailored_resume_json = document.model_dump()
-        session_record.tailored_resume_md = document.markdown
-        session_record.audit_report_json = {
-            "document_audit": document.audit.model_dump(),
-            "fact_check_report": fact_check_report,
-        }
-        session_record.status = "ready"
         session_record.updated_by = current_user_id
         session.add(session_record)
         await session.commit()
@@ -1114,37 +1849,10 @@ async def generate_tailored_resume_for_saved_job(
         or not session_record.tailored_resume_json
     )
     if should_regenerate:
-        document, canonical_projection, fact_check_report = (
-            await _generate_tailored_resume_document(
-                resume=resume,
-                job=job,
-                report=report,
-                payload=TailoredResumeGenerateRequest(
-                    resume_id=resume.id,
-                    job_id=job.id,
-                    title=job.title,
-                    company=job.company,
-                    job_city=job.job_city,
-                    employment_type=job.employment_type,
-                    source_name=job.source_name,
-                    source_url=job.source_url,
-                    priority=job.priority,
-                    jd_text=job.jd_text,
-                    force_refresh=payload.force_refresh,
-                    optimization_level=payload.optimization_level,
-                ),
-                settings=settings,
-            )
+        _prepare_session_for_tailored_generation(
+            session_record,
+            preserve_segments=False,
         )
-        session_record.optimized_resume_json = canonical_projection.model_dump()
-        session_record.optimized_resume_md = document.markdown
-        session_record.tailored_resume_json = document.model_dump()
-        session_record.tailored_resume_md = document.markdown
-        session_record.audit_report_json = {
-            "document_audit": document.audit.model_dump(),
-            "fact_check_report": fact_check_report,
-        }
-        session_record.status = "ready"
         session_record.updated_by = current_user_id
         session.add(session_record)
         await session.commit()
