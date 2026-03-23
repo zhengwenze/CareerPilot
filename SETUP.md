@@ -173,9 +173,9 @@ python scripts/codex2gpt/server.py
 
 ## 访问地址
 
-| URL                                | 说明                |
-| ---------------------------------- | ------------------- |
-| **http://localhost:3000**          | 主应用（本地）      |
-| **https://codeclaw.top**           | 主应用（服务器）    |
-| **http://localhost:8000**          | 后端 API（本地）    |
-| **http://localhost:9001**          | MinIO 控制台        |
+| URL                       | 说明             |
+| ------------------------- | ---------------- |
+| **http://localhost:3000** | 主应用（本地）   |
+| **https://codeclaw.top**  | 主应用（服务器） |
+| **http://localhost:8000** | 后端 API（本地） |
+| **http://localhost:9001** | MinIO 控制台     |
