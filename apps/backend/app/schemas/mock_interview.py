@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.ai_runtime import TaskState
+
 
 class MockInterviewSessionCreateRequest(BaseModel):
     job_id: UUID
@@ -20,12 +22,22 @@ class MockInterviewDeleteResponse(BaseModel):
     message: str
 
 
+class MockInterviewRetryPrepResponse(BaseModel):
+    recorded: bool = True
+
+
 class MockInterviewTurnDecision(BaseModel):
     need_comment: bool = False
     comment_text: str = ""
     next_action: Literal["followup", "next_main", "end"] = "next_main"
     next_question: str = ""
     reason: str = ""
+
+
+class MockInterviewReviewSummary(BaseModel):
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
 
 
 class MockInterviewTurnRecord(BaseModel):
@@ -57,8 +69,10 @@ class MockInterviewSessionRecord(BaseModel):
     followup_count_for_current_main: int
     max_questions: int
     max_followups_per_main: int
+    prep_state: TaskState = Field(default_factory=TaskState)
     current_turn: MockInterviewTurnRecord | None = None
     turns: list[MockInterviewTurnRecord] = Field(default_factory=list)
+    review: MockInterviewReviewSummary = Field(default_factory=MockInterviewReviewSummary)
     ending_text: str | None = None
     error_message: str | None = None
     created_at: datetime
