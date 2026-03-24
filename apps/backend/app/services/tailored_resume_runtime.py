@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from app.services.tailored_resume import process_tailored_resume_workflow
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_session_factory(app: FastAPI) -> "async_sessionmaker[AsyncSession]":
@@ -51,5 +54,14 @@ def schedule_tailored_resume_generation(
     def _cleanup(finished_task: asyncio.Task[None]) -> None:
         tasks.discard(finished_task)
         active_task_ids.discard(session_id)
+        if finished_task.cancelled():
+            return
+        exception = finished_task.exception()
+        if exception is not None:
+            logger.exception(
+                "Tailored resume background task failed session_id=%s",
+                session_id,
+                exc_info=exception,
+            )
 
     task.add_done_callback(_cleanup)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import logging
 import re
 from decimal import Decimal
 from typing import Any
@@ -37,6 +38,7 @@ from app.schemas.tailored_resume import (
     TailoredResumeBasic,
     TailoredResumeCustomSection,
     TailoredResumeDocument,
+    TailoredResumeDisplayStatus,
     TailoredResumeEducationItem,
     TailoredResumeExperienceItem,
     TailoredResumeGenerateRequest,
@@ -80,6 +82,30 @@ TAILORED_RESUME_SEGMENT_ORDER: tuple[tuple[str, str], ...] = (
     ("projects", "项目经历"),
     ("additional", "教育与补充信息"),
 )
+TASK_STATE_STATUSES = {
+    "pending",
+    "processing",
+    "success",
+    "failed",
+    "ready",
+    "cancelled",
+    "returned",
+    "aborted",
+}
+SEGMENT_STATUSES = {
+    "pending",
+    "processing",
+    "success",
+    "failed",
+    "cancelled",
+    "returned",
+    "aborted",
+}
+TERMINAL_TASK_STATUSES = {"success", "failed", "ready", "cancelled", "returned", "aborted"}
+RETRYABLE_DISPLAY_STATUSES = {"failed", "empty_result", "cancelled", "returned", "aborted"}
+DISPLAY_TERMINAL_STATUSES = {"success", "failed", "cancelled", "returned", "aborted", "empty_result"}
+
+logger = logging.getLogger(__name__)
 
 
 def utc_now_naive() -> datetime:
@@ -151,28 +177,83 @@ def _serialize_task_state(state: TaskState | dict[str, Any] | None) -> dict[str,
     if isinstance(state, TaskState):
         return state.model_dump(mode="json")
     if isinstance(state, dict):
-        return TaskState.model_validate(state).model_dump(mode="json")
+        return _deserialize_task_state(state).model_dump(mode="json")
     return TaskState().model_dump(mode="json")
 
 
+def _normalize_task_state_status(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    aliases = {
+        "canceled": "cancelled",
+        "complete": "success",
+        "completed": "success",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in TASK_STATE_STATUSES else "pending"
+
+
+def _normalize_segment_status(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    aliases = {"canceled": "cancelled"}
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in SEGMENT_STATUSES else "pending"
+
+
+def _normalize_session_status(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    aliases = {
+        "queued": "processing",
+        "canceled": "cancelled",
+        "complete": "success",
+        "completed": "success",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized in TASK_STATE_STATUSES:
+        return normalized
+    if normalized in {"draft", ""}:
+        return "pending"
+    return "pending"
+
+
 def _deserialize_task_state(payload: dict[str, Any] | None) -> TaskState:
-    return TaskState.model_validate(payload or {})
+    data = dict(payload or {})
+    data["status"] = _normalize_task_state_status(data.get("status"))
+    try:
+        return TaskState.model_validate(data)
+    except ValidationError:
+        return TaskState(
+            status=_normalize_task_state_status(data.get("status")),
+            phase=str(data.get("phase") or ""),
+            message=str(data.get("message") or ""),
+        )
 
 
 def _serialize_segment(segment: ContentSegment | dict[str, Any]) -> dict[str, Any]:
     if isinstance(segment, ContentSegment):
         return segment.model_dump(mode="json")
-    return ContentSegment.model_validate(segment).model_dump(mode="json")
+    data = dict(segment)
+    data["status"] = _normalize_segment_status(data.get("status"))
+    return ContentSegment.model_validate(data).model_dump(mode="json")
 
 
 def _deserialize_segments(payload: dict[str, Any] | list[Any] | None) -> list[ContentSegment]:
     items: list[ContentSegment] = []
     if isinstance(payload, dict):
         for value in payload.values():
-            items.append(ContentSegment.model_validate(value))
+            data = dict(value) if isinstance(value, dict) else {}
+            data["status"] = _normalize_segment_status(data.get("status"))
+            try:
+                items.append(ContentSegment.model_validate(data))
+            except ValidationError:
+                continue
     elif isinstance(payload, list):
         for value in payload:
-            items.append(ContentSegment.model_validate(value))
+            data = dict(value) if isinstance(value, dict) else {}
+            data["status"] = _normalize_segment_status(data.get("status"))
+            try:
+                items.append(ContentSegment.model_validate(data))
+            except ValidationError:
+                continue
     return sorted(items, key=lambda item: (item.sequence, item.key))
 
 
@@ -203,9 +284,9 @@ def _mark_task_state(
 ) -> TaskState:
     state = _deserialize_task_state(session_record.diagnosis_json)
     now = utc_now_naive()
-    if state.started_at is None and status in {"processing", "success", "failed"}:
+    if state.started_at is None and status in {"processing", *TERMINAL_TASK_STATUSES}:
         state.started_at = now
-    state.status = status  # type: ignore[assignment]
+    state.status = _normalize_task_state_status(status)  # type: ignore[assignment]
     state.phase = phase
     state.message = message
     state.last_updated_at = now
@@ -213,9 +294,7 @@ def _mark_task_state(
         state.current_step = current_step
     if total_steps is not None:
         state.total_steps = total_steps
-    if status == "success":
-        state.completed_at = now
-    if status == "failed":
+    if status in TERMINAL_TASK_STATUSES:
         state.completed_at = now
     session_record.diagnosis_json = _serialize_task_state(state)
     return state
@@ -1084,6 +1163,73 @@ def _build_downloadable_file_name(
     return f"{safe_name}_tailored_{str(session_record.id)[:8]}.md"
 
 
+def _resolve_tailored_resume_display_status(
+    *,
+    session_status: str,
+    task_state: TaskState,
+    segments: list[ContentSegment],
+    has_markdown: bool,
+) -> TailoredResumeDisplayStatus:
+    normalized_session_status = _normalize_session_status(session_status)
+    normalized_task_status = _normalize_task_state_status(task_state.status)
+
+    for status in (normalized_task_status, normalized_session_status):
+        if status in {"cancelled", "returned", "aborted"}:
+            return status
+
+    if normalized_task_status == "processing" or normalized_session_status == "processing":
+        has_segment_progress = any(
+            segment.status in {"processing", "success"} for segment in segments
+        )
+        return "segment_progress" if has_segment_progress else "processing"
+
+    if normalized_task_status in {"success", "ready"} or normalized_session_status in {"success", "ready"}:
+        return "success" if has_markdown else "empty_result"
+
+    if normalized_task_status == "failed" or normalized_session_status == "failed":
+        return "failed"
+
+    return "idle"
+
+
+def _build_runtime_error_message(raw_error: str | None) -> str:
+    normalized = _normalize_text(raw_error or "")
+    lowered = normalized.lower()
+    if not normalized:
+        return "优化简历生成失败，请重试。"
+    if any(token in lowered for token in {"auth", "permission", "403", "401"}):
+        return "优化简历服务当前鉴权失败，请稍后重试。"
+    if any(token in lowered for token in {"timeout", "connection", "provider error", "http_5"}):
+        return "优化简历服务暂时不可用，请稍后重试。"
+    if any(token in lowered for token in {"invalid response format", "json", "validation"}):
+        return "生成结果格式无效，本次任务已终止，请重试。"
+    return normalized if len(normalized) <= 240 else "优化简历生成失败，请重试。"
+
+
+def _extract_tailored_resume_error_message(
+    *,
+    session_record: ResumeOptimizationSession,
+    task_state: TaskState,
+    display_status: TailoredResumeDisplayStatus,
+) -> str | None:
+    if display_status == "empty_result":
+        return "生成流程已结束，但未产出可下载的优化简历内容。"
+    if display_status in {"cancelled", "returned", "aborted"}:
+        return task_state.message or "本次生成任务未正常完成。"
+    if display_status != "failed":
+        return None
+
+    audit_payload = session_record.audit_report_json or {}
+    metrics = task_state.metrics or {}
+    raw_error = (
+        str(audit_payload.get("error_message") or "").strip()
+        or str(audit_payload.get("error") or "").strip()
+        or str(metrics.get("failure_reason") or "").strip()
+        or task_state.message
+    )
+    return _build_runtime_error_message(raw_error)
+
+
 async def _generate_tailored_resume_document(
     *,
     resume: Resume,
@@ -1132,26 +1278,49 @@ def _build_tailored_resume_artifact(
     session_record: ResumeOptimizationSession,
     report: MatchReport,
 ) -> TailoredResumeArtifactResponse:
-    document = TailoredResumeDocument.model_validate(session_record.tailored_resume_json or {})
+    try:
+        document = TailoredResumeDocument.model_validate(session_record.tailored_resume_json or {})
+    except ValidationError:
+        document = TailoredResumeDocument()
     markdown = session_record.tailored_resume_md or document.markdown
     if markdown and markdown != document.markdown:
         document.markdown = markdown
+    task_state = _deserialize_task_state(session_record.diagnosis_json)
+    segments = _deserialize_segments(session_record.draft_sections_json)
+    has_markdown = bool(markdown.strip())
+    display_status = _resolve_tailored_resume_display_status(
+        session_status=session_record.status,
+        task_state=task_state,
+        segments=segments,
+        has_markdown=has_markdown,
+    )
+    error_message = _extract_tailored_resume_error_message(
+        session_record=session_record,
+        task_state=task_state,
+        display_status=display_status,
+    )
+    downloadable = display_status == "success" and has_markdown
     return TailoredResumeArtifactResponse(
         session_id=session_record.id,
         match_report_id=report.id,
         status=session_record.status,
+        display_status=display_status,
         fit_band=report.fit_band,
         overall_score=report.overall_score or Decimal("0"),
-        task_state=_deserialize_task_state(session_record.diagnosis_json),
-        segments=_deserialize_segments(session_record.draft_sections_json),
+        task_state=task_state,
+        segments=segments,
         document=document,
-        has_downloadable_markdown=bool(markdown.strip()),
+        error_message=error_message,
+        retryable=display_status in RETRYABLE_DISPLAY_STATUSES,
+        downloadable=downloadable,
+        result_is_empty=display_status == "empty_result",
+        has_downloadable_markdown=downloadable,
         downloadable_file_name=(
             _build_downloadable_file_name(
                 session_record=session_record,
                 document=document,
             )
-            if markdown.strip()
+            if downloadable
             else None
         ),
         created_at=session_record.created_at,
@@ -1415,7 +1584,10 @@ async def process_tailored_resume_workflow(
                 message="生成失败，所需的简历或岗位数据不存在。",
             )
             session_record.status = "failed"
-            session_record.audit_report_json = {"error": "missing_dependencies"}
+            session_record.audit_report_json = {
+                "error": "missing_dependencies",
+                "error_message": "生成失败，所需的简历或岗位数据不存在。",
+            }
             session.add(session_record)
             await session.commit()
             return
@@ -1578,11 +1750,16 @@ async def process_tailored_resume_workflow(
                 "editor_notes": notes,
             }
             session_record.status = "success"
+            completion_message = (
+                "专属简历已按分段生成完成。"
+                if document.markdown.strip()
+                else "生成流程已完成，但未产出可下载的优化简历内容。"
+            )
             final_state = _mark_task_state(
                 session_record,
                 status="success",
                 phase="completed",
-                message="专属简历已按分段生成完成。",
+                message=completion_message,
                 current_step=len(TAILORED_RESUME_SEGMENT_ORDER),
                 total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
             )
@@ -1600,23 +1777,31 @@ async def process_tailored_resume_workflow(
             session.add(session_record)
             await session.commit()
         except Exception as exc:
+            raw_error = str(exc)
+            user_error_message = _build_runtime_error_message(raw_error)
+            logger.exception(
+                "Tailored resume workflow failed session_id=%s",
+                session_id,
+                exc_info=exc,
+            )
             failure_state = _mark_task_state(
                 session_record,
                 status="failed",
                 phase="failed",
-                message="专属简历生成失败，可保留已完成内容并重试。",
+                message=user_error_message,
             )
-            failure_state.metrics["failure_reason"] = str(exc)
+            failure_state.metrics["failure_reason"] = raw_error
             session_record.diagnosis_json = failure_state.model_dump(mode="json")
             session_record.status = "failed"
             session_record.audit_report_json = {
                 **(session_record.audit_report_json or {}),
-                "error": str(exc),
+                "error": raw_error,
+                "error_message": user_error_message,
             }
             _append_event(
                 session_record.diagnosis_json,
                 event_type="tailored_resume_failed",
-                payload={"message": str(exc)},
+                payload={"message": raw_error},
             )
             session.add(session_record)
             await session.commit()
