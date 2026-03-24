@@ -6,8 +6,30 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+TaskStateStatus = Literal[
+    "pending",
+    "processing",
+    "success",
+    "failed",
+    "ready",
+    "cancelled",
+    "returned",
+    "aborted",
+]
+
+ContentSegmentStatus = Literal[
+    "pending",
+    "processing",
+    "success",
+    "failed",
+    "cancelled",
+    "returned",
+    "aborted",
+]
+
+
 class TaskState(BaseModel):
-    status: Literal["pending", "processing", "success", "failed"] = "pending"
+    status: TaskStateStatus = "pending"
     phase: str = ""
     message: str = ""
     current_step: int = 0
@@ -29,7 +51,7 @@ class ContentSegment(BaseModel):
     key: str
     label: str
     sequence: int
-    status: Literal["pending", "processing", "success", "failed"] = "pending"
+    status: ContentSegmentStatus = "pending"
     original_text: str = ""
     suggested_text: str = ""
     markdown: str = ""

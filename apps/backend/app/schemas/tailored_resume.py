@@ -11,6 +11,18 @@ from app.schemas.ai_runtime import ContentSegment, TaskState
 from app.schemas.job import JobResponse
 from app.schemas.resume import ResumeResponse
 
+TailoredResumeDisplayStatus = Literal[
+    "idle",
+    "processing",
+    "segment_progress",
+    "success",
+    "failed",
+    "cancelled",
+    "returned",
+    "aborted",
+    "empty_result",
+]
+
 
 class TailoredResumeGenerateRequest(BaseModel):
     resume_id: UUID
@@ -116,11 +128,16 @@ class TailoredResumeArtifactResponse(BaseModel):
     session_id: UUID
     match_report_id: UUID
     status: str
+    display_status: TailoredResumeDisplayStatus = "idle"
     fit_band: str
     overall_score: Decimal
     task_state: TaskState = Field(default_factory=TaskState)
     segments: list[ContentSegment] = Field(default_factory=list)
     document: TailoredResumeDocument = Field(default_factory=TailoredResumeDocument)
+    error_message: str | None = None
+    retryable: bool = False
+    downloadable: bool = False
+    result_is_empty: bool = False
     has_downloadable_markdown: bool = False
     downloadable_file_name: str | None = None
     created_at: datetime
