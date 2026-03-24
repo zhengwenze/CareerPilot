@@ -24,6 +24,7 @@ import {
 import { PageEmptyState } from "@/components/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Timer } from "@/components/ui/timer";
 import { ApiError } from "@/lib/api/client";
 import {
   createJob,
@@ -50,7 +51,7 @@ import {
   type ContentSegmentRecord,
   type ResumeRecord,
   type ResumeStructuredData,
-  type TaskStateRecord,
+  type TailoredResumeArtifactRecord,
   type TailoredResumeWorkflowRecord,
 } from "@/lib/api/modules/resume";
 import { cn } from "@/lib/utils";
@@ -76,11 +77,16 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-}
+type WorkflowDisplayStatus = TailoredResumeArtifactRecord["display_status"];
+
+const TERMINAL_WORKFLOW_STATUSES = new Set<WorkflowDisplayStatus>([
+  "success",
+  "failed",
+  "cancelled",
+  "returned",
+  "aborted",
+  "empty_result",
+]);
 
 function getFitBandLabel(value: string) {
   const labels: Record<string, string> = {
@@ -295,16 +301,100 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
   return <div className="space-y-1">{nodes}</div>;
 }
 
-function getTaskStateTone(taskState: TaskStateRecord | null | undefined) {
-  switch (taskState?.status) {
+function isTerminalWorkflowStatus(
+  status: WorkflowDisplayStatus | null | undefined,
+) {
+  return status ? TERMINAL_WORKFLOW_STATUSES.has(status) : false;
+}
+
+function getWorkflowStatusLabel(status: WorkflowDisplayStatus | null | undefined) {
+  switch (status) {
     case "success":
-      return "已完成";
+      return "生成成功";
     case "failed":
-      return "已失败";
+      return "生成失败";
     case "processing":
-      return "进行中";
+      return "后台处理中";
+    case "segment_progress":
+      return "分段生成中";
+    case "cancelled":
+      return "任务已取消";
+    case "returned":
+      return "任务已退回";
+    case "aborted":
+      return "任务已中断";
+    case "empty_result":
+      return "生成结束但无结果";
     default:
-      return "待处理";
+      return "未开始";
+  }
+}
+
+function getWorkflowStatusTone(status: WorkflowDisplayStatus | null | undefined) {
+  switch (status) {
+    case "success":
+      return "border-[#12B76A]/20 bg-[#ECFDF3] text-[#067647]";
+    case "failed":
+    case "cancelled":
+    case "returned":
+    case "aborted":
+    case "empty_result":
+      return "border-[#F04438]/20 bg-[#FEF3F2] text-[#B42318]";
+    case "processing":
+    case "segment_progress":
+      return "border-[#1D4ED8]/15 bg-[#EFF6FF] text-[#1D4ED8]";
+    default:
+      return "border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]";
+  }
+}
+
+function getWorkflowPrimaryMessage(
+  workflow: TailoredResumeWorkflowRecord | null,
+) {
+  if (!workflow) {
+    return "还没有开始生成优化简历。";
+  }
+  return (
+    workflow.tailored_resume.error_message ||
+    workflow.tailored_resume.task_state?.message ||
+    "等待任务状态。"
+  );
+}
+
+function getWorkflowSecondaryMessage(
+  workflow: TailoredResumeWorkflowRecord | null,
+) {
+  if (!workflow) {
+    return "先完成简历和岗位 JD 保存，再发起生成。";
+  }
+
+  const displayStatus = workflow.tailored_resume.display_status;
+  const totalSteps =
+    workflow.tailored_resume.task_state?.total_steps ||
+    workflow.tailored_resume.segments?.length ||
+    0;
+  const currentStep = workflow.tailored_resume.task_state?.current_step || 0;
+
+  switch (displayStatus) {
+    case "processing":
+    case "segment_progress":
+      return `阶段：${workflow.tailored_resume.task_state?.phase || "queued"} · 进度 ${currentStep}/${totalSteps || 1}`;
+    case "success":
+      return workflow.tailored_resume.downloadable
+        ? "当前最新结果已可下载。"
+        : "当前任务已结束，但下载结果不可用。";
+    case "empty_result":
+      return "流程已结束，但没有产出可下载的优化简历内容，可直接重试。";
+    case "failed":
+      return workflow.tailored_resume.retryable
+        ? "本次生成失败，可直接重试。"
+        : "本次生成失败。";
+    case "cancelled":
+    case "returned":
+    case "aborted":
+      return "本次任务未正常完成，可重新发起生成。";
+    default:
+      return "任务尚未开始。";
   }
 }
 
@@ -354,13 +444,17 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
           </p>
         </div>
         <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4">
-          <p className="text-xs font-semibold text-[#1C1C1C]/50">为什么这样改</p>
+          <p className="text-xs font-semibold text-[#1C1C1C]/50">
+            为什么这样改
+          </p>
           <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/72">
             {segment.explanation.why || "优先贴合岗位重点，但不新增事实。"}
           </p>
         </div>
         <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4">
-          <p className="text-xs font-semibold text-[#1C1C1C]/50">这样改的价值</p>
+          <p className="text-xs font-semibold text-[#1C1C1C]/50">
+            这样改的价值
+          </p>
           <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/72">
             {segment.explanation.value || "让招聘方更快看到相关证据。"}
           </p>
@@ -373,6 +467,21 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
   );
 }
 
+function upsertWorkflowRecord(
+  current: TailoredResumeWorkflowRecord[],
+  nextWorkflow: TailoredResumeWorkflowRecord,
+) {
+  const filtered = current.filter(
+    (item) =>
+      item.tailored_resume.session_id !== nextWorkflow.tailored_resume.session_id,
+  );
+  return [nextWorkflow, ...filtered].sort(
+    (left, right) =>
+      Date.parse(right.tailored_resume.updated_at) -
+      Date.parse(left.tailored_resume.updated_at),
+  );
+}
+
 export default function DashboardResumePage() {
   const { token } = useAuth();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -381,6 +490,9 @@ export default function DashboardResumePage() {
   const [resumeMarkdown, setResumeMarkdown] = useState("");
   const [jobDraft, setJobDraft] = useState<JobDraft>(createEmptyJobDraft());
   const [savedJob, setSavedJob] = useState<JobRecord | null>(null);
+  const [workflowList, setWorkflowList] = useState<TailoredResumeWorkflowRecord[]>(
+    [],
+  );
   const [workflow, setWorkflow] = useState<TailoredResumeWorkflowRecord | null>(
     null,
   );
@@ -396,12 +508,35 @@ export default function DashboardResumePage() {
   const [generateStartTime, setGenerateStartTime] = useState<number | null>(
     null,
   );
-  const workflowTaskState = workflow?.tailored_resume.task_state ?? null;
-  const isWorkflowProcessing = workflowTaskState?.status === "processing";
+
+  const workflowDisplayStatus = workflow?.tailored_resume.display_status ?? "idle";
+  const isWorkflowProcessing =
+    workflowDisplayStatus === "processing" ||
+    workflowDisplayStatus === "segment_progress";
+  const latestSuccessfulWorkflow =
+    workflowList.find((item) => {
+      if (!resume?.id || !savedJob?.id || !workflow?.tailored_resume.session_id) {
+        return false;
+      }
+      return (
+        item.resume.id === resume.id &&
+        item.target_job.id === savedJob.id &&
+        item.tailored_resume.display_status === "success" &&
+        item.tailored_resume.session_id !== workflow.tailored_resume.session_id
+      );
+    }) ?? null;
+  const canDownloadCurrentWorkflow = Boolean(
+    workflow &&
+      workflow.tailored_resume.display_status === "success" &&
+      workflow.tailored_resume.downloadable,
+  );
+  const canRetryWorkflow = Boolean(
+    workflow && workflow.tailored_resume.retryable,
+  );
   const canStartInterview = Boolean(
     workflow &&
-      workflow.tailored_resume.task_state.status === "success" &&
-      workflow.tailored_resume.document.markdown.trim(),
+      workflow.tailored_resume.display_status === "success" &&
+      workflow.tailored_resume.document?.markdown?.trim(),
   );
 
   useEffect(() => {
@@ -441,6 +576,7 @@ export default function DashboardResumePage() {
         setJobDraft(
           nextSavedJob ? toJobDraft(nextSavedJob) : createEmptyJobDraft(),
         );
+        setWorkflowList(workflows);
         setWorkflow(nextWorkflow);
       } catch (error) {
         if (!cancelled) {
@@ -503,19 +639,11 @@ export default function DashboardResumePage() {
   }, [savedJob?.id, savedJob?.parse_status, token]);
 
   useEffect(() => {
-    if (!(isGenerating || isWorkflowProcessing) || generateStartTime === null) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setGenerateStartTime((current) => current);
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [generateStartTime, isGenerating, isWorkflowProcessing]);
-
-  useEffect(() => {
-    if (!token || !workflow?.tailored_resume.session_id || !isWorkflowProcessing) {
+    if (
+      !token ||
+      !workflow?.tailored_resume.session_id ||
+      !isWorkflowProcessing
+    ) {
       return;
     }
 
@@ -526,13 +654,28 @@ export default function DashboardResumePage() {
           workflow.tailored_resume.session_id,
         );
         setWorkflow(nextWorkflow);
-        if (nextWorkflow.tailored_resume.task_state.status !== "processing") {
+        setWorkflowList((current) => upsertWorkflowRecord(current, nextWorkflow));
+        if (
+          isTerminalWorkflowStatus(nextWorkflow.tailored_resume.display_status)
+        ) {
           setIsGenerating(false);
           setGenerateStartTime(null);
-          if (nextWorkflow.tailored_resume.task_state.status === "success") {
-            setStatusMessage("优化简历已按分段完成，可继续下载或进入模拟面试。");
-          } else if (nextWorkflow.tailored_resume.task_state.status === "failed") {
-            setStatusMessage(nextWorkflow.tailored_resume.task_state.message);
+          if (nextWorkflow.tailored_resume.display_status === "success") {
+            setStatusMessage(
+              "优化简历已按分段完成，可下载当前结果或进入模拟面试。",
+            );
+          } else if (
+            nextWorkflow.tailored_resume.display_status === "empty_result"
+          ) {
+            setStatusMessage(
+              nextWorkflow.tailored_resume.error_message ||
+                "生成结束但没有产出可下载内容。",
+            );
+          } else {
+            setStatusMessage(
+              nextWorkflow.tailored_resume.error_message ||
+                nextWorkflow.tailored_resume.task_state.message,
+            );
           }
         }
       } catch {
@@ -544,18 +687,26 @@ export default function DashboardResumePage() {
   }, [isWorkflowProcessing, token, workflow?.tailored_resume.session_id]);
 
   useEffect(() => {
-    if (!token || !workflow?.tailored_resume.session_id || !isWorkflowProcessing) {
+    if (
+      !token ||
+      !workflow?.tailored_resume.session_id ||
+      !isWorkflowProcessing
+    ) {
       return;
     }
 
     const sendExitEvent = () => {
-      void recordTailoredResumeEvent(token, workflow.tailored_resume.session_id, {
-        event_type: "workflow_page_exit",
-        payload: {
-          status: workflow.tailored_resume.task_state.status,
-          phase: workflow.tailored_resume.task_state.phase,
+      void recordTailoredResumeEvent(
+        token,
+        workflow.tailored_resume.session_id,
+        {
+          event_type: "workflow_page_exit",
+          payload: {
+            status: workflow.tailored_resume.task_state.status,
+            phase: workflow.tailored_resume.task_state.phase,
+          },
         },
-      }).catch(() => undefined);
+      ).catch(() => undefined);
     };
 
     const handleVisibilityChange = () => {
@@ -570,7 +721,13 @@ export default function DashboardResumePage() {
       window.removeEventListener("beforeunload", sendExitEvent);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isWorkflowProcessing, token, workflow?.tailored_resume.session_id, workflow?.tailored_resume.task_state.phase, workflow?.tailored_resume.task_state.status]);
+  }, [
+    isWorkflowProcessing,
+    token,
+    workflow?.tailored_resume?.session_id,
+    workflow?.tailored_resume?.task_state?.phase,
+    workflow?.tailored_resume?.task_state?.status,
+  ]);
 
   const canSaveResume = Boolean(
     token && resume?.id && normalizeMarkdown(resumeMarkdown),
@@ -619,6 +776,7 @@ export default function DashboardResumePage() {
       );
       setResume(autoSaved);
       setResumeMarkdown(getCanonicalResumeMarkdown(autoSaved) || nextMarkdown);
+      setWorkflowList([]);
       setWorkflow(null);
       setStatusMessage(
         "PDF 已上传、自动转换为 Markdown，并已保存到当前用户账户。",
@@ -705,8 +863,11 @@ export default function DashboardResumePage() {
         force_refresh: true,
       });
       setWorkflow(generated);
+      setWorkflowList((current) => upsertWorkflowRecord(current, generated));
       if (generated.tailored_resume.task_state.started_at) {
-        setGenerateStartTime(Date.parse(generated.tailored_resume.task_state.started_at));
+        setGenerateStartTime(
+          Date.parse(generated.tailored_resume.task_state.started_at),
+        );
       }
       setStatusMessage(
         generated.tailored_resume.task_state.message || "优化任务已启动。",
@@ -733,12 +894,15 @@ export default function DashboardResumePage() {
         workflow.tailored_resume.session_id,
       );
       setWorkflow(nextWorkflow);
+      setWorkflowList((current) => upsertWorkflowRecord(current, nextWorkflow));
       setGenerateStartTime(
         nextWorkflow.tailored_resume.task_state.started_at
           ? Date.parse(nextWorkflow.tailored_resume.task_state.started_at)
           : Date.now(),
       );
-      setStatusMessage(nextWorkflow.tailored_resume.task_state.message);
+      setStatusMessage(
+        nextWorkflow.tailored_resume.task_state.message || "已重新发起生成。",
+      );
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -746,8 +910,8 @@ export default function DashboardResumePage() {
     }
   }
 
-  async function handleDownload() {
-    if (!token || !workflow) {
+  async function handleDownload(targetWorkflow: TailoredResumeWorkflowRecord) {
+    if (!token) {
       return;
     }
 
@@ -758,20 +922,28 @@ export default function DashboardResumePage() {
     try {
       const result = await downloadTailoredResumeMarkdown(
         token,
-        workflow.tailored_resume.session_id,
+        targetWorkflow.tailored_resume.session_id,
       );
       const objectUrl = window.URL.createObjectURL(result.blob);
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download =
         result.fileName ||
-        workflow.tailored_resume.downloadable_file_name ||
+        targetWorkflow.tailored_resume.downloadable_file_name ||
         "optimized_resume.md";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(objectUrl);
-      setStatusMessage("Markdown 已下载。");
+      setStatusMessage(
+        workflow &&
+          workflow.tailored_resume.session_id ===
+            targetWorkflow.tailored_resume.session_id
+          ? "已下载当前优化简历。"
+          : `已下载上一份成功结果（${formatDate(
+              targetWorkflow.tailored_resume.updated_at,
+            )}）。`,
+      );
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -1001,28 +1173,30 @@ export default function DashboardResumePage() {
               onClick={() => void handleGenerateTailoredResume()}
             >
               <Sparkles className="size-4" />
-              {(isGenerating || isWorkflowProcessing) && generateStartTime !== null ? (
+              {(isGenerating || isWorkflowProcessing) &&
+              generateStartTime !== null ? (
                 <>
                   生成中{" "}
-                  {formatDuration(
-                    Math.floor((Date.now() - generateStartTime) / 1000),
-                  )}
+                  <Timer
+                    startTime={generateStartTime}
+                    isActive={true}
+                  />
                 </>
               ) : (
                 "生成优化简历"
               )}
             </Button>
             <Button
-              disabled={!workflow || isDownloading}
+              disabled={!canDownloadCurrentWorkflow || isDownloading}
               size="sm"
               type="button"
               variant="secondary"
-              onClick={() => void handleDownload()}
+              onClick={() => workflow && void handleDownload(workflow)}
             >
               <Download className="size-4" />
-              {isDownloading ? "下载中" : "下载 MD"}
+              {isDownloading ? "下载中" : "下载当前结果"}
             </Button>
-            {workflowTaskState?.status === "failed" ? (
+            {canRetryWorkflow ? (
               <Button
                 disabled={isRetryingWorkflow}
                 size="sm"
@@ -1033,10 +1207,22 @@ export default function DashboardResumePage() {
                 {isRetryingWorkflow ? "重试中" : "重试生成"}
               </Button>
             ) : null}
+            {latestSuccessfulWorkflow ? (
+              <Button
+                disabled={isDownloading}
+                size="sm"
+                type="button"
+                variant="secondary"
+                onClick={() => void handleDownload(latestSuccessfulWorkflow)}
+              >
+                <Download className="size-4" />
+                {isDownloading ? "下载中" : "下载上一份成功结果"}
+              </Button>
+            ) : null}
             {canStartInterview ? (
               <Button asChild size="sm" type="button" variant="secondary">
                 <Link
-                  href={`/dashboard/interviews?jobId=${workflow.target_job.id}&optimizationSessionId=${workflow.tailored_resume.session_id}`}
+                  href={`/dashboard/interviews?jobId=${workflow?.target_job.id}&optimizationSessionId=${workflow?.tailored_resume?.session_id}`}
                 >
                   开始模拟面试
                   <ArrowUpRight className="size-4" />
@@ -1063,19 +1249,49 @@ export default function DashboardResumePage() {
               <MetaChip>
                 Score {workflow.tailored_resume.overall_score}
               </MetaChip>
-              <MetaChip>{getTaskStateTone(workflowTaskState)}</MetaChip>
+              <MetaChip>{getWorkflowStatusLabel(workflowDisplayStatus)}</MetaChip>
+              <MetaChip>
+                {workflow.tailored_resume.downloadable
+                  ? "当前结果可下载"
+                  : "当前结果不可下载"}
+              </MetaChip>
             </div>
-            <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] p-4">
-              <p className="text-sm font-medium text-[#1C1C1C]">
-                {workflowTaskState?.message || "等待任务状态。"}
+            <div
+              className={cn(
+                "rounded-2xl border p-4",
+                getWorkflowStatusTone(workflowDisplayStatus),
+              )}
+            >
+              <p className="text-sm font-medium">
+                {getWorkflowPrimaryMessage(workflow)}
               </p>
-              <p className="mt-2 text-sm text-[#1C1C1C]/60">
-                {workflowTaskState
-                  ? `阶段：${workflowTaskState.phase || "queued"} · 进度 ${workflowTaskState.current_step}/${workflowTaskState.total_steps || workflow.tailored_resume.segments.length || 1}`
-                  : "任务尚未开始。"}
+              <p className="mt-2 text-sm opacity-80">
+                {getWorkflowSecondaryMessage(workflow)}
               </p>
+              {workflow.tailored_resume.display_status !== "success" &&
+              latestSuccessfulWorkflow ? (
+                <p className="mt-2 text-sm opacity-80">
+                  上一份成功结果仍可下载：
+                  {latestSuccessfulWorkflow.tailored_resume.downloadable_file_name ||
+                    "optimized_resume.md"}{" "}
+                  · {formatDate(latestSuccessfulWorkflow.tailored_resume.updated_at)}
+                </p>
+              ) : null}
+              {workflow.tailored_resume.display_status === "success" ? (
+                <p className="mt-2 text-sm opacity-80">
+                  当前可下载文件：
+                  {workflow.tailored_resume.downloadable_file_name ||
+                    "optimized_resume.md"}
+                </p>
+              ) : null}
+              {!workflow.tailored_resume.downloadable &&
+              workflow.tailored_resume.display_status !== "success" ? (
+                <p className="mt-2 text-sm opacity-80">
+                  当前任务未成功生成最新结果，因此不能下载当前结果。
+                </p>
+              ) : null}
             </div>
-            {workflow.tailored_resume.segments.length ? (
+            {workflow.tailored_resume?.segments?.length ? (
               <div className="space-y-4">
                 {workflow.tailored_resume.segments
                   .slice()
@@ -1084,14 +1300,24 @@ export default function DashboardResumePage() {
                     <SegmentCard key={segment.key} segment={segment} />
                   ))}
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                尚未进入分段生成，后端任务启动后会在这里持续更新每一段状态。
+              </div>
+            )}
             {workflow.tailored_resume.document.markdown.trim() ? (
               <PaperTextarea
                 value={workflow.tailored_resume.document.markdown}
                 readOnly
                 className="min-h-[320px]"
               />
-            ) : null}
+            ) : (
+              <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                {workflow.tailored_resume.result_is_empty
+                  ? "本次流程已结束，但没有产出可下载的优化简历内容。"
+                  : "当前还没有生成可展示的优化简历内容。"}
+              </div>
+            )}
           </div>
         ) : (
           <PageEmptyState
