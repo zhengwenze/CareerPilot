@@ -2,7 +2,15 @@ import { apiRequest, apiRequestBlob } from "@/lib/api/client";
 import type { JobRecord } from "@/lib/api/modules/jobs";
 
 export type TaskStateRecord = {
-  status: "pending" | "processing" | "success" | "failed";
+  status:
+    | "pending"
+    | "processing"
+    | "success"
+    | "failed"
+    | "ready"
+    | "cancelled"
+    | "returned"
+    | "aborted";
   phase: string;
   message: string;
   current_step: number;
@@ -24,7 +32,14 @@ export type ContentSegmentRecord = {
   key: string;
   label: string;
   sequence: number;
-  status: "pending" | "processing" | "success" | "failed";
+  status:
+    | "pending"
+    | "processing"
+    | "success"
+    | "failed"
+    | "cancelled"
+    | "returned"
+    | "aborted";
   original_text: string;
   suggested_text: string;
   markdown: string;
@@ -181,12 +196,26 @@ export type TailoredResumeArtifactRecord = {
   session_id: string;
   match_report_id: string;
   status: string;
+  display_status:
+    | "idle"
+    | "processing"
+    | "segment_progress"
+    | "success"
+    | "failed"
+    | "cancelled"
+    | "returned"
+    | "aborted"
+    | "empty_result";
   fit_band: string;
   overall_score: string;
   task_state: TaskStateRecord;
   segments: ContentSegmentRecord[];
-  has_downloadable_markdown: boolean;
+  error_message: string | null;
+  retryable: boolean;
+  downloadable: boolean;
+  result_is_empty: boolean;
   downloadable_file_name: string | null;
+  has_downloadable_markdown: boolean;
   created_at: string;
   updated_at: string;
 };
