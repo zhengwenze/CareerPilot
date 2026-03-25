@@ -87,8 +87,8 @@ async def convert_resume_pdf_to_markdown(
         file,
         settings=settings,
     )
-    markdown = await convert_pdf_bytes_to_markdown(content, file_name)
-    if not markdown:
+    result = await convert_pdf_bytes_to_markdown(content, file_name, settings=settings)
+    if not result.markdown:
         raise ApiException(
             status_code=422,
             code=ErrorCode.BAD_REQUEST,
@@ -98,7 +98,7 @@ async def convert_resume_pdf_to_markdown(
         request,
         TailoredResumePdfToMarkdownResponse(
             file_name=file_name,
-            markdown=markdown,
+            markdown=result.markdown,
         ),
     )
 

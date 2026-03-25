@@ -47,6 +47,22 @@ class SegmentExplanation(BaseModel):
     value: str = ""
 
 
+ContentChangeType = Literal["rewrite", "reorder", "trim", "highlight", "unchanged"]
+
+
+class ContentChangeItem(BaseModel):
+    id: str
+    segment_key: str
+    section_label: str
+    item_label: str
+    change_type: ContentChangeType = "rewrite"
+    before_text: str = ""
+    after_text: str = ""
+    why: str = ""
+    suggestion: str = ""
+    evidence: list[str] = Field(default_factory=list)
+
+
 class ContentSegment(BaseModel):
     key: str
     label: str

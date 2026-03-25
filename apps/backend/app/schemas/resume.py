@@ -312,5 +312,4 @@ class ResumeDeleteResponse(BaseModel):
 
 
 class ResumeStructuredUpdateRequest(BaseModel):
-    structured_json: ResumeStructuredData
-    markdown: str | None = None
+    markdown: str = Field(min_length=1)

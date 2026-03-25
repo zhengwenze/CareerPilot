@@ -22,7 +22,7 @@ from app.models import (
 )
 from app.schemas.job import JobCreateRequest, JobUpdateRequest
 from app.schemas.match_report import MatchReportCreateRequest
-from app.schemas.ai_runtime import ContentSegment, SegmentExplanation, TaskState
+from app.schemas.ai_runtime import ContentChangeItem, ContentSegment, SegmentExplanation, TaskState
 from app.schemas.resume import (
     ResumeCertificationItem,
     ResumeEducationItem,
@@ -635,6 +635,171 @@ def _build_segment(
     )
 
 
+def _select_change_type(*, before_text: str, after_text: str) -> str:
+    before = _normalize_text(before_text)
+    after = _normalize_text(after_text)
+    if before == after:
+        return "unchanged"
+    if before and after and before in after:
+        return "highlight"
+    if before and after and len(after) < len(before):
+        return "trim"
+    return "rewrite"
+
+
+def _build_change_evidence(*, after_text: str, report: MatchReport) -> list[str]:
+    gap_json = report.gap_json or {}
+    evidence: list[str] = []
+    for item in [*gap_json.get("strengths", []), *gap_json.get("gaps", [])]:
+        value = str(item).strip()
+        if value and _keyword_supported(value, after_text):
+            evidence.append(value)
+    return _dedupe_strings(evidence)[:4]
+
+
+def _build_change_reason(*, change_type: str, report: MatchReport, fallback: str) -> str:
+    evidence = _build_change_evidence(after_text=fallback, report=report)
+    if change_type == "reorder":
+        return "优先把与岗位更相关的证据放在更靠前的位置。"
+    if change_type == "trim":
+        return "删去与目标岗位弱相关或重复的表达，保留关键信息。"
+    if change_type == "highlight":
+        return (
+            f"在不新增事实的前提下，强化与岗位相关的证据：{', '.join(evidence)}。"
+            if evidence
+            else "在不新增事实的前提下，强化与岗位最相关的关键词和成果。"
+        )
+    if change_type == "unchanged":
+        return "当前内容已经是可保留事实，本次未建议修改。"
+    return "在不新增事实的前提下，调整表达以更贴近岗位职责和关键词。"
+
+
+def _build_change_suggestion(*, change_type: str, section_label: str) -> str:
+    if change_type == "unchanged":
+        return f"{section_label} 当前无需改动，可继续保留。"
+    if change_type == "highlight":
+        return f"保留原事实，优先把 {section_label} 中更贴近岗位的表达前置。"
+    if change_type == "trim":
+        return f"保留结论与证据，精简 {section_label} 中弱相关或重复表述。"
+    if change_type == "reorder":
+        return f"调整 {section_label} 的顺序，让招聘方先看到最相关内容。"
+    return f"改写 {section_label} 的措辞，但不要新增无法证明的事实。"
+
+
+def _append_change_item(
+    items: list[ContentChangeItem],
+    *,
+    segment_key: str,
+    section_label: str,
+    item_label: str,
+    before_text: str,
+    after_text: str,
+    report: MatchReport,
+    index: int,
+) -> None:
+    if not _normalize_text(before_text) and not _normalize_text(after_text):
+        return
+    change_type = _select_change_type(before_text=before_text, after_text=after_text)
+    why = _build_change_reason(change_type=change_type, report=report, fallback=after_text or before_text)
+    items.append(
+        ContentChangeItem(
+            id=f"{segment_key}_{index}",
+            segment_key=segment_key,
+            section_label=section_label,
+            item_label=item_label,
+            change_type=change_type,  # type: ignore[arg-type]
+            before_text=before_text.strip(),
+            after_text=after_text.strip(),
+            why=why,
+            suggestion=_build_change_suggestion(change_type=change_type, section_label=section_label),
+            evidence=_build_change_evidence(after_text=after_text or before_text, report=report),
+        )
+    )
+
+
+def _build_change_items(
+    *,
+    source_resume: ResumeStructuredData,
+    projected_resume: ResumeStructuredData,
+    report: MatchReport,
+) -> list[ContentChangeItem]:
+    items: list[ContentChangeItem] = []
+
+    _append_change_item(
+        items,
+        segment_key="summary",
+        section_label="职业摘要",
+        item_label="摘要",
+        before_text=source_resume.basic_info.summary,
+        after_text=projected_resume.basic_info.summary,
+        report=report,
+        index=1,
+    )
+
+    for index, (before_item, after_item) in enumerate(
+        zip(source_resume.work_experience_items, projected_resume.work_experience_items, strict=False),
+        start=1,
+    ):
+        before_label = _join_non_empty([before_item.company, before_item.title]) or f"工作经历 {index}"
+        before_bullets = [bullet.text.strip() for bullet in before_item.bullets if bullet.text.strip()]
+        after_bullets = [bullet.text.strip() for bullet in after_item.bullets if bullet.text.strip()]
+        max_count = max(len(before_bullets), len(after_bullets))
+        for bullet_index in range(max_count):
+            _append_change_item(
+                items,
+                segment_key="experience",
+                section_label="工作经历",
+                item_label=f"{before_label} · 要点 {bullet_index + 1}",
+                before_text=before_bullets[bullet_index] if bullet_index < len(before_bullets) else "",
+                after_text=after_bullets[bullet_index] if bullet_index < len(after_bullets) else "",
+                report=report,
+                index=index * 100 + bullet_index + 1,
+            )
+
+    for index, (before_item, after_item) in enumerate(
+        zip(source_resume.project_items, projected_resume.project_items, strict=False),
+        start=1,
+    ):
+        before_label = _join_non_empty([before_item.name, before_item.role]) or f"项目经历 {index}"
+        before_bullets = [bullet.text.strip() for bullet in before_item.bullets if bullet.text.strip()]
+        if before_item.summary.strip():
+            before_bullets = [before_item.summary.strip(), *before_bullets]
+        after_bullets = [bullet.text.strip() for bullet in after_item.bullets if bullet.text.strip()]
+        if after_item.summary.strip():
+            after_bullets = [after_item.summary.strip(), *after_bullets]
+        max_count = max(len(before_bullets), len(after_bullets))
+        for bullet_index in range(max_count):
+            _append_change_item(
+                items,
+                segment_key="projects",
+                section_label="项目经历",
+                item_label=f"{before_label} · 要点 {bullet_index + 1}",
+                before_text=before_bullets[bullet_index] if bullet_index < len(before_bullets) else "",
+                after_text=after_bullets[bullet_index] if bullet_index < len(after_bullets) else "",
+                report=report,
+                index=index * 100 + bullet_index + 1,
+            )
+
+    source_skills = _dedupe_strings([*source_resume.skills.technical, *source_resume.skills.tools])
+    projected_skills = _dedupe_strings([*projected_resume.skills.technical, *projected_resume.skills.tools])
+    if source_skills or projected_skills:
+        top_after = projected_skills[: min(5, len(projected_skills))]
+        top_before = source_skills[: len(top_after)]
+        if top_before != top_after:
+            _append_change_item(
+                items,
+                segment_key="skills",
+                section_label="技能聚焦",
+                item_label="技能排序",
+                before_text="，".join(top_before),
+                after_text="，".join(top_after),
+                report=report,
+                index=1,
+            )
+
+    return [item for item in items if item.change_type != "unchanged"]
+
+
 def _render_tailored_resume_markdown(document: TailoredResumeDocument) -> str:
     lines: list[str] = []
     name = document.basic.name.strip() or "Tailored Resume"
@@ -1060,6 +1225,12 @@ def _infer_changed_sections(
     return changed
 
 
+def _derive_changed_sections_from_change_items(items: list[ContentChangeItem]) -> list[str]:
+    return _dedupe_strings(
+        [item.segment_key for item in items if item.change_type != "unchanged"]
+    )
+
+
 def _finalize_document(
     *,
     document: TailoredResumeDocument,
@@ -1287,6 +1458,17 @@ def _build_tailored_resume_artifact(
         document.markdown = markdown
     task_state = _deserialize_task_state(session_record.diagnosis_json)
     segments = _deserialize_segments(session_record.draft_sections_json)
+    audit_payload = session_record.audit_report_json or {}
+    change_items_payload = audit_payload.get("change_items") or []
+    change_items: list[ContentChangeItem] = []
+    if isinstance(change_items_payload, list):
+        for value in change_items_payload:
+            if not isinstance(value, dict):
+                continue
+            try:
+                change_items.append(ContentChangeItem.model_validate(value))
+            except ValidationError:
+                continue
     has_markdown = bool(markdown.strip())
     display_status = _resolve_tailored_resume_display_status(
         session_status=session_record.status,
@@ -1309,6 +1491,7 @@ def _build_tailored_resume_artifact(
         overall_score=report.overall_score or Decimal("0"),
         task_state=task_state,
         segments=segments,
+        change_items=change_items,
         document=document,
         error_message=error_message,
         retryable=display_status in RETRYABLE_DISPLAY_STATUSES,
@@ -1740,6 +1923,21 @@ async def process_tailored_resume_workflow(
                 job=job,
                 job_keywords=job_keywords,
             )
+            change_items = _build_change_items(
+                source_resume=source_resume,
+                projected_resume=canonical_projection,
+                report=report,
+            )
+            document.audit.changedSections = _derive_changed_sections_from_change_items(
+                change_items
+            )
+            if not change_items and document.audit.warnings:
+                document.audit.warnings = _dedupe_strings(
+                    [
+                        "本次未建议修改，原因是输入内容缺少足够的可安全改写事实或岗位相关证据。",
+                        *document.audit.warnings,
+                    ]
+                )
             session_record.optimized_resume_json = canonical_projection.model_dump()
             session_record.optimized_resume_md = document.markdown
             session_record.tailored_resume_json = document.model_dump(mode="json")
@@ -1748,6 +1946,7 @@ async def process_tailored_resume_workflow(
                 "document_audit": document.audit.model_dump(mode="json"),
                 "fact_check_report": fact_check_report,
                 "editor_notes": notes,
+                "change_items": [item.model_dump(mode="json") for item in change_items],
             }
             session_record.status = "success"
             completion_message = (
