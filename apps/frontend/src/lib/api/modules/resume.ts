@@ -28,6 +28,19 @@ export type SegmentExplanationRecord = {
   value: string;
 };
 
+export type ContentChangeItemRecord = {
+  id: string;
+  segment_key: string;
+  section_label: string;
+  item_label: string;
+  change_type: "rewrite" | "reorder" | "trim" | "highlight" | "unchanged";
+  before_text: string;
+  after_text: string;
+  why: string;
+  suggestion: string;
+  evidence: string[];
+};
+
 export type ContentSegmentRecord = {
   key: string;
   label: string;
@@ -94,6 +107,9 @@ export type ResumeParseArtifacts = {
     source_type?: string;
     parser_version?: string;
     ai_correction_applied?: boolean;
+    ai_fallback_used?: boolean;
+    ai_error_category?: string | null;
+    ai_error_message?: string | null;
   };
 };
 
@@ -210,6 +226,7 @@ export type TailoredResumeArtifactRecord = {
   overall_score: string;
   task_state: TaskStateRecord;
   segments: ContentSegmentRecord[];
+  change_items: ContentChangeItemRecord[];
   error_message: string | null;
   retryable: boolean;
   downloadable: boolean;
@@ -589,14 +606,11 @@ export async function retryResumeParse(
 export async function updateResumeStructuredData(
   token: string,
   resumeId: string,
-  structuredJson: ResumeStructuredData,
-  markdown?: string
+  markdown: string
 ): Promise<ResumeRecord> {
   logResumeApi("save-structured:start", {
     resumeId,
-    educationCount: structuredJson.education.length,
-    workCount: structuredJson.work_experience.length,
-    projectCount: structuredJson.projects.length,
+    markdownLength: markdown.trim().length,
   });
   const response = await apiRequest<ResumeRecord>(
     `/resumes/${resumeId}/structured`,
@@ -604,8 +618,7 @@ export async function updateResumeStructuredData(
       method: "PUT",
       token,
       body: JSON.stringify({
-        structured_json: structuredJson,
-        markdown: markdown?.trim() || undefined,
+        markdown: markdown.trim(),
       }),
     }
   );
