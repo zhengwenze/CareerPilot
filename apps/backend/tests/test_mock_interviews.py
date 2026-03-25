@@ -293,6 +293,48 @@ async def test_mock_interview_returns_first_question_then_prepares_followups_asy
     assert any(call[0] == "generate_ending_text" for call in calls)
 
 
+async def test_mock_interview_list_and_finish_return_structured_runtime_state(
+    app, client, db_session, monkeypatch
+):
+    monkeypatch.setattr("app.routers.mock_interviews.schedule_mock_interview_prep", lambda *args, **kwargs: None)
+
+    user, token = await create_test_user(db_session, email="interview-list@example.com")
+    job, workflow = await _seed_interview_dependencies(db_session, user=user, suffix="list")
+
+    response = await client.post(
+        "/mock-interviews",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "job_id": str(job.id),
+            "resume_optimization_session_id": str(workflow.id),
+        },
+    )
+    assert response.status_code == 201
+    session = response.json()["data"]
+
+    response = await client.get(
+        f"/mock-interviews?job_id={job.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    sessions = response.json()["data"]
+    listed = next(item for item in sessions if item["id"] == session["id"])
+    assert listed["prep_state"]["status"] == "processing"
+    assert listed["review"] == {"strengths": [], "risks": [], "next_steps": []}
+
+    response = await client.post(
+        f"/mock-interviews/{session['id']}/finish",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    finished = response.json()["data"]
+    assert finished["status"] == "completed"
+    assert finished["prep_state"]["status"] == "success"
+    assert isinstance(finished["review"]["strengths"], list)
+    assert isinstance(finished["review"]["risks"], list)
+    assert isinstance(finished["review"]["next_steps"], list)
+
+
 async def test_mock_interview_rejects_cross_user_supports_retry_and_events(
     app, client, db_session, monkeypatch
 ):
