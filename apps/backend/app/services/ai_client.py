@@ -343,14 +343,22 @@ def _anthropic_response_text(response: object) -> str:
         raise ValueError("AI response did not contain content items")
 
     chunks: list[str] = []
+    content_types: list[str] = []
     for block in content:
-        if getattr(block, "type", None) == "text":
+        block_type = getattr(block, "type", None)
+        if isinstance(block_type, str) and block_type:
+            content_types.append(block_type)
+        if block_type == "text":
             text = getattr(block, "text", None)
             if isinstance(text, str):
                 chunks.append(text)
 
     if not chunks:
-        raise ValueError("AI response did not contain assistant text")
+        stop_reason = getattr(response, "stop_reason", None)
+        raise ValueError(
+            "AI response did not contain assistant text "
+            f"(stop_reason={stop_reason}, content_types={content_types})"
+        )
 
     logger.info(
         "AI Anthropic text extracted content_items=%s text_chunks=%s text_chars=%s",

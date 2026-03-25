@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 def _normalize_localhost_url(value: str | None) -> str | None:
@@ -43,6 +46,14 @@ def _normalize_ai_base_url(value: str | None) -> str | None:
     if not normalized:
         return normalized
     return normalized.replace("api.minimax.io", "api.minimaxi.com")
+
+
+def _first_non_empty_env(*names: str) -> str | None:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return None
 
 
 class Settings(BaseSettings):
@@ -90,7 +101,7 @@ class Settings(BaseSettings):
     interview_ai_timeout_seconds: int = 60
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(BACKEND_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -122,7 +133,7 @@ class Settings(BaseSettings):
     @classmethod
     def resolve_ai_base_url(cls, value: str | None) -> str | None:
         if value is None or not str(value).strip():
-            value = os.getenv("ANTHROPIC_BASE_URL")
+            value = _first_non_empty_env("MINIMAX_BASE_URL", "ANTHROPIC_BASE_URL")
         return _normalize_ai_base_url(value)
 
     @field_validator("match_ai_api_key", mode="before")
@@ -130,62 +141,48 @@ class Settings(BaseSettings):
     def resolve_match_ai_api_key(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
-        anthropic_auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
-        if anthropic_auth_token:
-            return anthropic_auth_token
-        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        return anthropic_api_key or None
+        return _first_non_empty_env(
+            "MINIMAX_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+        )
 
     @field_validator("resume_ai_api_key", mode="before")
     @classmethod
     def resolve_resume_ai_api_key(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
-        anthropic_auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
-        if anthropic_auth_token:
-            return anthropic_auth_token
-        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        return anthropic_api_key or None
+        return _first_non_empty_env(
+            "MINIMAX_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+        )
 
     @field_validator("interview_ai_api_key", mode="before")
     @classmethod
     def resolve_interview_ai_api_key(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
-        match_ai_api_key = os.getenv("MATCH_AI_API_KEY", "").strip()
-        if match_ai_api_key:
-            return match_ai_api_key
-        minimax_api_key = os.getenv("MINIMAX_API_KEY", "").strip()
-        if minimax_api_key:
-            return minimax_api_key
-        anthropic_auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
-        if anthropic_auth_token:
-            return anthropic_auth_token
-        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        return anthropic_api_key or None
+        return _first_non_empty_env(
+            "MATCH_AI_API_KEY",
+            "MINIMAX_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+        )
 
     @field_validator("interview_ai_model_planning", mode="before")
     @classmethod
     def resolve_interview_ai_model_planning(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
-        match_ai_model = os.getenv("MATCH_AI_MODEL", "").strip()
-        if match_ai_model:
-            return match_ai_model
-        minimax_model_planning = os.getenv("MINIMAX_MODEL_PLANNING", "").strip()
-        if minimax_model_planning:
-            return minimax_model_planning
-        return None
+        return _first_non_empty_env("MATCH_AI_MODEL", "MINIMAX_MODEL_PLANNING")
 
     @field_validator("interview_ai_model_realtime", mode="before")
     @classmethod
     def resolve_interview_ai_model_realtime(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
-        minimax_model_realtime = os.getenv("MINIMAX_MODEL_REALTIME", "").strip()
-        if minimax_model_realtime:
-            return minimax_model_realtime
-        return None
+        return _first_non_empty_env("MINIMAX_MODEL_REALTIME")
 
     @model_validator(mode="after")
     def resolve_match_ai_fallbacks(self) -> "Settings":
@@ -200,34 +197,44 @@ class Settings(BaseSettings):
             self.match_ai_model = self.resume_ai_model
 
         if not (self.match_ai_api_key or "").strip():
-            fallback_key = (self.resume_ai_api_key or "").strip() or os.getenv(
-                "ANTHROPIC_API_KEY", ""
-            ).strip()
+            fallback_key = (self.resume_ai_api_key or "").strip() or (
+                _first_non_empty_env(
+                    "MINIMAX_API_KEY",
+                    "ANTHROPIC_AUTH_TOKEN",
+                    "ANTHROPIC_API_KEY",
+                )
+                or ""
+            )
             self.match_ai_api_key = fallback_key or None
 
         if not (self.interview_ai_base_url or "").strip():
-            fallback_base_url = (self.match_ai_base_url or "").strip() or os.getenv(
-                "MINIMAX_BASE_URL", ""
-            ).strip()
+            fallback_base_url = (self.match_ai_base_url or "").strip() or (
+                _first_non_empty_env("MINIMAX_BASE_URL", "ANTHROPIC_BASE_URL") or ""
+            )
             self.interview_ai_base_url = fallback_base_url or self.resume_ai_base_url
 
         if not (self.interview_ai_api_key or "").strip():
-            fallback_key = (self.match_ai_api_key or "").strip() or os.getenv(
-                "MINIMAX_API_KEY", ""
-            ).strip()
+            fallback_key = (self.match_ai_api_key or "").strip() or (
+                _first_non_empty_env(
+                    "MINIMAX_API_KEY",
+                    "ANTHROPIC_AUTH_TOKEN",
+                    "ANTHROPIC_API_KEY",
+                )
+                or ""
+            )
             self.interview_ai_api_key = fallback_key or None
 
         if not (self.interview_ai_model_planning or "").strip():
-            fallback_model = (self.match_ai_model or "").strip() or os.getenv(
-                "MINIMAX_MODEL_PLANNING", ""
-            ).strip()
+            fallback_model = (self.match_ai_model or "").strip() or (
+                _first_non_empty_env("MINIMAX_MODEL_PLANNING") or ""
+            )
             self.interview_ai_model_planning = fallback_model or self.interview_ai_model
 
         if not (self.interview_ai_model_realtime or "").strip():
-            fallback_model = os.getenv("MINIMAX_MODEL_REALTIME", "").strip()
+            fallback_model = _first_non_empty_env("MINIMAX_MODEL_REALTIME") or ""
             self.interview_ai_model_realtime = fallback_model or self.interview_ai_model
 
-        explicit_interview_timeout = os.getenv("INTERVIEW_AI_TIMEOUT_SECONDS", "").strip()
+        explicit_interview_timeout = _first_non_empty_env("INTERVIEW_AI_TIMEOUT_SECONDS") or ""
         if not explicit_interview_timeout and self.interview_ai_timeout_seconds == 60:
             if self.match_ai_timeout_seconds and self.match_ai_timeout_seconds > 0:
                 self.interview_ai_timeout_seconds = self.match_ai_timeout_seconds
