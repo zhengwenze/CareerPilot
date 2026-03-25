@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import FastAPI
 
+from app.core.config import Settings
 from app.db.session import get_session_factory
 from app.services.resume import process_resume_parse_job
 from app.services.storage import ObjectStorage
@@ -13,9 +15,15 @@ from app.services.storage import ObjectStorage
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+logger = logging.getLogger(__name__)
+
 
 def resolve_session_factory(app: FastAPI) -> "async_sessionmaker[AsyncSession]":
     return getattr(app.state, "session_factory", get_session_factory())
+
+
+def resolve_settings(app: FastAPI) -> Settings | None:
+    return getattr(app.state, "settings", None)
 
 
 async def run_resume_parse_job(
@@ -30,6 +38,7 @@ async def run_resume_parse_job(
         parse_job_id=parse_job_id,
         storage=storage,
         session_factory=resolve_session_factory(app),
+        settings=resolve_settings(app),
     )
 
 
@@ -62,5 +71,15 @@ def schedule_resume_parse_job(
     def _cleanup(finished_task: asyncio.Task[None]) -> None:
         tasks.discard(finished_task)
         active_task_ids.discard(parse_job_id)
+        if finished_task.cancelled():
+            logger.warning("resume parse task cancelled parse_job_id=%s", parse_job_id)
+            return
+        exc = finished_task.exception()
+        if exc is not None:
+            logger.exception(
+                "resume parse task failed parse_job_id=%s",
+                parse_job_id,
+                exc_info=exc,
+            )
 
     task.add_done_callback(_cleanup)

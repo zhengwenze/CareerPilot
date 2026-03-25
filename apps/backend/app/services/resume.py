@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import logging
 import re
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
@@ -13,7 +14,7 @@ from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.errors import ApiException, ErrorCode
 from app.db.session import get_session_factory
 from app.models import Resume, ResumeParseJob, User
@@ -26,6 +27,7 @@ from app.schemas.resume import (
     ResumeStructuredUpdateRequest,
 )
 from app.services.match_support import mark_reports_stale_for_resume
+from app.services.resume_markdown_parser import parse_resume_markdown
 from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -33,6 +35,7 @@ SUPPORTED_RESUME_SUFFIXES = {".pdf"}
 RESUME_PARSE_TIMEOUT_SECONDS = 180
 AI_STATUS_PENDING = "pending"
 AI_STATUS_APPLIED = "applied"
+AI_STATUS_FALLBACK = "fallback"
 PARSE_PROGRESS_PREPARING = "排队完成，准备解析"
 PARSE_PROGRESS_READING_FILE = "读取文件中"
 PARSE_PROGRESS_PDF_TO_MARKDOWN = "PDF 转 Markdown 中"
@@ -78,6 +81,9 @@ def build_resume_parse_artifacts(
     raw_text: str | None,
     canonical_resume_md: str | None,
     ai_status: str | None,
+    ai_correction_applied: bool,
+    ai_error_category: str | None,
+    ai_error_message: str | None,
     parse_status: str,
     parse_error: str | None,
     source_type: str,
@@ -94,7 +100,11 @@ def build_resume_parse_artifacts(
         "meta": {
             "source_type": source_type,
             "parser_version": "demo-pdf-to-md",
-            "ai_correction_applied": bool(canonical_resume_md),
+            "ai_correction_applied": ai_correction_applied,
+            "ai_status": ai_status,
+            "ai_fallback_used": ai_status == AI_STATUS_FALLBACK,
+            "ai_error_category": ai_error_category,
+            "ai_error_message": ai_error_message,
             "ocr_used": ocr_used,
             "ocr_engine": ocr_engine,
         },
@@ -128,19 +138,40 @@ def load_resume_pdf_to_md_module() -> ModuleType:
         raise RuntimeError(f"Unable to load resume PDF to Markdown core: {module_path}")
 
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     _RESUME_PDF_TO_MD_MODULE = module
     return module
 
 
-async def convert_pdf_bytes_to_markdown(pdf_bytes: bytes, file_name: str) -> str:
+def build_resume_ai_config(settings: Settings) -> "AIProviderConfig":
+    from app.services.ai_client import AIProviderConfig
+
+    return AIProviderConfig(
+        provider=(settings.resume_ai_provider or "minimax").strip() or "minimax",
+        base_url=(settings.resume_ai_base_url or "").strip(),
+        api_key=(settings.resume_ai_api_key or "").strip() or None,
+        model=(settings.resume_ai_model or "MiniMax-M2.7").strip(),
+        timeout_seconds=settings.resume_ai_timeout_seconds,
+    )
+
+
+async def convert_pdf_bytes_to_markdown(
+    pdf_bytes: bytes,
+    file_name: str,
+    *,
+    settings: Settings,
+):
     module = load_resume_pdf_to_md_module()
     pdf_to_markdown = getattr(module, "pdf_to_markdown", None)
     if pdf_to_markdown is None:
         raise RuntimeError("resume-pdf-to-md.py does not export pdf_to_markdown")
 
-    markdown = await pdf_to_markdown(pdf_bytes, file_name)
-    return str(markdown or "").strip()
+    return await pdf_to_markdown(
+        pdf_bytes,
+        file_name,
+        ai_config=build_resume_ai_config(settings),
+    )
 
 
 def sanitize_file_name(file_name: str) -> str:
@@ -377,7 +408,7 @@ async def process_resume_parse_job(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     settings: Settings | None = None,
 ) -> None:
-    del settings
+    config = settings or get_settings()
     session_maker = session_factory or get_session_factory()
     async with session_maker() as session:
         resume = await session.get(Resume, resume_id)
@@ -417,6 +448,8 @@ async def process_resume_parse_job(
     parse_job_error_message: str | None = "Unexpected parse failure"
     ai_status: str | None = None
     ai_message: str | None = None
+    ai_error_category: str | None = None
+    ai_error_message: str | None = None
 
     try:
         async with asyncio.timeout(RESUME_PARSE_TIMEOUT_SECONDS):
@@ -437,19 +470,34 @@ async def process_resume_parse_job(
                 owner_user_id=owner_user_id,
                 message=PARSE_PROGRESS_PDF_TO_MARKDOWN,
             )
-            canonical_resume_md = await convert_pdf_bytes_to_markdown(
+            pdf_to_md_result = await convert_pdf_bytes_to_markdown(
                 file_bytes,
                 resume.file_name,
+                settings=config,
             )
+            canonical_resume_md = pdf_to_md_result.markdown
             if not canonical_resume_md:
                 raise ApiException(
                     status_code=422,
                     code=ErrorCode.BAD_REQUEST,
                     message="PDF 转 Markdown 失败，未生成可用内容",
                 )
-            raw_text = canonical_resume_md
-            ai_status = AI_STATUS_APPLIED
-            ai_message = "已通过 resume-pdf-to-md 生成 Markdown"
+            raw_text = pdf_to_md_result.raw_markdown or canonical_resume_md
+            ai_error_category = pdf_to_md_result.ai_error_category
+            ai_error_message = pdf_to_md_result.ai_error_message
+            if pdf_to_md_result.ai_applied:
+                ai_status = AI_STATUS_APPLIED
+                ai_message = "已通过 AI 整理生成最终 Markdown"
+            elif pdf_to_md_result.fallback_used:
+                ai_status = AI_STATUS_FALLBACK
+                ai_message = (
+                    "AI 整理失败，已回退原始 Markdown"
+                    if ai_error_category or ai_error_message
+                    else "未应用 AI 整理，已使用原始 Markdown"
+                )
+            else:
+                ai_status = None
+                ai_message = None
 
         resume_parse_status = "success"
         resume_parse_error = None
@@ -460,11 +508,15 @@ async def process_resume_parse_job(
         ai_message = None
         resume_parse_error = "Resume parse timed out"
         parse_job_error_message = "简历解析超时（E_PARSE_TIMEOUT）"
+        ai_error_category = "timeout"
+        ai_error_message = resume_parse_error
     except ApiException as exc:
         ai_status = None
         ai_message = None
         resume_parse_error = exc.message
         parse_job_error_message = f"{exc.message}（E_PARSE_API）"
+        ai_error_category = "parse_failure"
+        ai_error_message = exc.message
     except Exception as exc:
         ai_status = None
         ai_message = None
@@ -472,6 +524,8 @@ async def process_resume_parse_job(
         parse_job_error_message = (
             f"{build_unexpected_parse_error_message(exc)}（E_PARSE_UNEXPECTED）"
         )
+        ai_error_category = "provider_error"
+        ai_error_message = build_unexpected_parse_error_message(exc)
 
     async with session_maker() as session:
         resume = await session.get(Resume, resume_id)
@@ -505,6 +559,9 @@ async def process_resume_parse_job(
                 raw_text=raw_text,
                 canonical_resume_md=canonical_resume_md,
                 ai_status=ai_status,
+                ai_correction_applied=ai_status == AI_STATUS_APPLIED,
+                ai_error_category=ai_error_category,
+                ai_error_message=ai_error_message,
                 parse_status=resume_parse_status,
                 parse_error=resume_parse_error,
                 source_type=extraction_source_type,
@@ -694,18 +751,27 @@ async def update_resume_structured_data(
         session, current_user=current_user, resume_id=resume_id
     )
     normalized_markdown = str(payload.markdown or "").strip()
-    resume.structured_json = payload.structured_json.model_dump()
-    if normalized_markdown:
-        resume.raw_text = normalized_markdown
-        artifacts = dict(resume.parse_artifacts_json or {})
-        artifacts["canonical_resume_md"] = normalized_markdown
-        meta = dict(artifacts.get("meta") or {})
-        if "source_type" not in meta:
-            meta["source_type"] = "pdf_to_md"
-        artifacts["meta"] = meta
-        resume.parse_artifacts_json = artifacts
+    try:
+        structured = parse_resume_markdown(normalized_markdown)
+    except ValueError as exc:
+        raise ApiException(
+            status_code=422,
+            code=ErrorCode.VALIDATION_ERROR,
+            message=str(exc),
+        ) from exc
+
+    resume.structured_json = structured.model_dump(mode="json")
+    resume.raw_text = normalized_markdown
+    artifacts = dict(resume.parse_artifacts_json or {})
+    artifacts["canonical_resume_md"] = normalized_markdown
+    meta = dict(artifacts.get("meta") or {})
+    meta["source_type"] = "markdown"
+    meta["parser_version"] = structured.meta.parser_version
+    artifacts["meta"] = meta
+    resume.parse_artifacts_json = artifacts
     resume.latest_version += 1
     resume.updated_by = current_user.id
+    log_renderer_snapshot(structured=structured, markdown=normalized_markdown)
 
     if resume.parse_status != "success":
         resume.parse_status = "success"
