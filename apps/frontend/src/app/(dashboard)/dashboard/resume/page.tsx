@@ -209,6 +209,68 @@ function markdownToStructuredResume(markdown: string): ResumeStructuredData {
   };
 }
 
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern =
+    /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`|\*([^*]+)\*|_([^_]+)_)/g;
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const matched = match[0];
+    const start = match.index ?? 0;
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start));
+    }
+
+    if (match[2] && match[3]) {
+      nodes.push(
+        <a
+          key={`inline-${key}`}
+          href={match[3]}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[#1D4ED8] underline underline-offset-2"
+        >
+          {match[2]}
+        </a>,
+      );
+    } else if (match[4] || match[5]) {
+      nodes.push(
+        <strong key={`inline-${key}`} className="font-semibold text-[#1C1C1C]">
+          {match[4] ?? match[5]}
+        </strong>,
+      );
+    } else if (match[6]) {
+      nodes.push(
+        <code
+          key={`inline-${key}`}
+          className="rounded bg-[#1C1C1C]/6 px-1 py-0.5 text-[0.95em] text-[#1C1C1C]"
+        >
+          {match[6]}
+        </code>,
+      );
+    } else if (match[7] || match[8]) {
+      nodes.push(
+        <em key={`inline-${key}`} className="italic">
+          {match[7] ?? match[8]}
+        </em>,
+      );
+    } else {
+      nodes.push(matched);
+    }
+
+    lastIndex = start + matched.length;
+    key += 1;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes.length ? nodes : [text];
+}
+
 function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
   const lines = markdown.split("\n");
   const nodes: ReactNode[] = [];
@@ -224,7 +286,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
         className="my-3 list-disc space-y-2 pl-5 text-sm leading-7 text-[#1C1C1C]"
       >
         {listItems.map((item, index) => (
-          <li key={`${key}-${index}`}>{item}</li>
+          <li key={`${key}-${index}`}>{renderInlineMarkdown(item)}</li>
         ))}
       </ul>,
     );
@@ -251,7 +313,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
           key={`h3-${index}`}
           className="mt-5 text-base font-semibold text-[#1C1C1C]"
         >
-          {line.slice(4)}
+          {renderInlineMarkdown(line.slice(4))}
         </h3>,
       );
       return;
@@ -263,7 +325,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
           key={`h2-${index}`}
           className="mt-6 border-t border-[#1C1C1C]/10 pt-6 text-lg font-semibold text-[#1C1C1C]"
         >
-          {line.slice(3)}
+          {renderInlineMarkdown(line.slice(3))}
         </h2>,
       );
       return;
@@ -275,7 +337,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
           key={`h1-${index}`}
           className="text-2xl font-semibold text-[#1C1C1C]"
         >
-          {line.slice(2)}
+          {renderInlineMarkdown(line.slice(2))}
         </h1>,
       );
       return;
@@ -292,7 +354,7 @@ function ResumeMarkdownPreview({ markdown }: { markdown: string }) {
             : "",
         )}
       >
-        {line}
+        {renderInlineMarkdown(line)}
       </p>,
     );
   });
@@ -771,7 +833,6 @@ export default function DashboardResumePage() {
       const autoSaved = await updateResumeStructuredData(
         token,
         uploaded.id,
-        markdownToStructuredResume(nextMarkdown),
         nextMarkdown,
       );
       setResume(autoSaved);
@@ -800,11 +861,9 @@ export default function DashboardResumePage() {
     setStatusMessage("");
 
     try {
-      const payload = markdownToStructuredResume(resumeMarkdown);
       const saved = await updateResumeStructuredData(
         token,
         resume.id,
-        payload,
         normalizeMarkdown(resumeMarkdown),
       );
       const nextMarkdown =
