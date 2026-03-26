@@ -369,6 +369,16 @@ function isTerminalWorkflowStatus(
   return status ? TERMINAL_WORKFLOW_STATUSES.has(status) : false;
 }
 
+function isInterviewReadyWorkflow(workflow: TailoredResumeWorkflowRecord | null) {
+  return Boolean(
+    workflow &&
+      workflow.target_job.id &&
+      workflow.tailored_resume.session_id &&
+      workflow.tailored_resume.display_status === "success" &&
+      workflow.tailored_resume.downloadable,
+  );
+}
+
 function getWorkflowStatusLabel(status: WorkflowDisplayStatus | null | undefined) {
   switch (status) {
     case "success":
@@ -595,11 +605,12 @@ export default function DashboardResumePage() {
   const canRetryWorkflow = Boolean(
     workflow && workflow.tailored_resume.retryable,
   );
-  const canStartInterview = Boolean(
-    workflow &&
-      workflow.tailored_resume.display_status === "success" &&
-      workflow.tailored_resume.document?.markdown?.trim(),
-  );
+  const interviewEntryWorkflow = isInterviewReadyWorkflow(workflow)
+    ? workflow
+    : isInterviewReadyWorkflow(latestSuccessfulWorkflow)
+      ? latestSuccessfulWorkflow
+      : null;
+  const canStartInterview = Boolean(interviewEntryWorkflow);
 
   useEffect(() => {
     if (!token) {
@@ -1281,7 +1292,7 @@ export default function DashboardResumePage() {
             {canStartInterview ? (
               <Button asChild size="sm" type="button" variant="secondary">
                 <Link
-                  href={`/dashboard/interviews?jobId=${workflow?.target_job.id}&optimizationSessionId=${workflow?.tailored_resume?.session_id}`}
+                  href={`/dashboard/interviews?jobId=${interviewEntryWorkflow?.target_job.id}&optimizationSessionId=${interviewEntryWorkflow?.tailored_resume.session_id}`}
                 >
                   开始模拟面试
                   <ArrowUpRight className="size-4" />
