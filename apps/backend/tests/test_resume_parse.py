@@ -207,6 +207,50 @@ async def test_pdf_to_md_endpoint_still_fails_when_raw_markdown_is_empty(
     assert response.json()["error"]["message"] == "PDF 转 Markdown 失败，未生成可用内容"
 
 
+@pytest.mark.asyncio
+async def test_save_resume_structured_data_normalizes_noncanonical_markdown(
+    client,
+    db_session,
+    pdf_bytes: bytes,
+) -> None:
+    _, token = await create_test_user(db_session, email="resume-save@example.com")
+
+    upload_response = await client.post(
+        "/resumes/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("resume.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload_response.status_code == 201
+    resume_id = upload_response.json()["data"]["id"]
+
+    response = await client.put(
+        f"/resumes/{resume_id}/structured",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "markdown": "\n".join(
+                [
+                    "张三",
+                    "教育背景",
+                    "新疆大学（211 / 双一流）",
+                    "本科 / 软件工程 | 2023.09 – 2027.06 | GPA 3.73，专业排名 50/800",
+                    "",
+                    "**竞赛获奖：** 百度之星省赛金奖；RoboCup 新疆一等奖",
+                    "**科研成果：** 发表 RV-DANet 相关论文",
+                ]
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["parse_status"] == "success"
+    assert payload["structured_json"]["basic_info"]["name"] == "张三"
+    assert payload["structured_json"]["education_items"][0]["school"] == "新疆大学（211 / 双一流）"
+    assert payload["parse_artifacts_json"]["canonical_resume_md"].startswith("# 张三")
+    assert "## 教育背景" in payload["parse_artifacts_json"]["canonical_resume_md"]
+    assert "### 新疆大学（211 / 双一流）" in payload["parse_artifacts_json"]["canonical_resume_md"]
+
+
 def test_anthropic_response_text_reports_stop_reason_for_thinking_only() -> None:
     class ThinkingBlock:
         type = "thinking"

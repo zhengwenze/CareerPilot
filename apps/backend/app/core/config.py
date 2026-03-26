@@ -80,7 +80,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     cors_origins: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["http://localhost:3000"]
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+        ]
     )
     match_ai_provider: str = "minimax"
     match_ai_base_url: str | None = "https://api.minimaxi.com/anthropic"
@@ -234,7 +239,9 @@ class Settings(BaseSettings):
             fallback_model = _first_non_empty_env("MINIMAX_MODEL_REALTIME") or ""
             self.interview_ai_model_realtime = fallback_model or self.interview_ai_model
 
-        explicit_interview_timeout = _first_non_empty_env("INTERVIEW_AI_TIMEOUT_SECONDS") or ""
+        explicit_interview_timeout = (
+            _first_non_empty_env("INTERVIEW_AI_TIMEOUT_SECONDS") or ""
+        )
         if not explicit_interview_timeout and self.interview_ai_timeout_seconds == 60:
             if self.match_ai_timeout_seconds and self.match_ai_timeout_seconds > 0:
                 self.interview_ai_timeout_seconds = self.match_ai_timeout_seconds

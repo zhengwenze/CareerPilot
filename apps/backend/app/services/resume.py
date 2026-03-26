@@ -27,7 +27,10 @@ from app.schemas.resume import (
     ResumeStructuredUpdateRequest,
 )
 from app.services.match_support import mark_reports_stale_for_resume
-from app.services.resume_markdown_parser import parse_resume_markdown
+from app.services.resume_markdown_parser import (
+    normalize_resume_markdown_for_parser,
+    parse_resume_markdown,
+)
 from app.services.storage import ObjectStorage
 
 SAFE_FILE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -754,11 +757,23 @@ async def update_resume_structured_data(
     try:
         structured = parse_resume_markdown(normalized_markdown)
     except ValueError as exc:
-        raise ApiException(
-            status_code=422,
-            code=ErrorCode.VALIDATION_ERROR,
-            message=str(exc),
-        ) from exc
+        fallback_markdown = normalize_resume_markdown_for_parser(normalized_markdown)
+        if fallback_markdown and fallback_markdown != normalized_markdown:
+            try:
+                structured = parse_resume_markdown(fallback_markdown)
+                normalized_markdown = fallback_markdown
+            except ValueError:
+                raise ApiException(
+                    status_code=422,
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message=str(exc),
+                ) from exc
+        else:
+            raise ApiException(
+                status_code=422,
+                code=ErrorCode.VALIDATION_ERROR,
+                message=str(exc),
+            ) from exc
 
     resume.structured_json = structured.model_dump(mode="json")
     resume.raw_text = normalized_markdown

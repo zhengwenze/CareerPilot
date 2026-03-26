@@ -43,6 +43,7 @@ SECTION_TITLE_MAP = {
     "languages": "languages",
     "个人优势": "custom",
 }
+SECTION_SUBSECTION_KEYS = {"education", "experience", "projects"}
 SKILL_LABEL_TO_GROUP = {
     "编程语言": "languages",
     "语言": "languages",
@@ -51,6 +52,7 @@ SKILL_LABEL_TO_GROUP = {
     "工具": "tools",
     "开发工具": "tools",
 }
+INLINE_STRONG_LABEL_RE = re.compile(r"^\*\*([^*]+)\*\*\s*(.+)?$")
 
 
 @dataclass(slots=True)
@@ -109,6 +111,89 @@ def parse_resume_markdown(markdown: str) -> ResumeStructuredData:
             "Markdown 缺少可识别的简历结构，至少需要姓名和一个有效 section（如工作经历、项目经历、教育经历或专业技能）。"
         )
     return structured
+
+
+def normalize_resume_markdown_for_parser(markdown: str) -> str:
+    normalized = markdown.replace("\r\n", "\n").strip()
+    if not normalized:
+        return ""
+
+    source_lines = [line.rstrip() for line in normalized.split("\n")]
+    normalized_lines: list[str] = []
+    current_section_key = ""
+    has_subsection = False
+
+    first_content_index = next(
+        (index for index, line in enumerate(source_lines) if line.strip()),
+        None,
+    )
+
+    for index, raw_line in enumerate(source_lines):
+        stripped = raw_line.strip()
+        if not stripped:
+            normalized_lines.append("")
+            continue
+
+        if index == first_content_index and not stripped.startswith("# "):
+            normalized_lines.append(f"# {stripped.lstrip('#').strip()}")
+            current_section_key = ""
+            has_subsection = False
+            continue
+
+        if stripped.startswith("# "):
+            normalized_lines.append(stripped)
+            current_section_key = ""
+            has_subsection = False
+            continue
+
+        if stripped.startswith("## "):
+            normalized_lines.append(stripped)
+            current_section_key = SECTION_TITLE_MAP.get(
+                stripped.removeprefix("## ").strip().lower(),
+                "custom",
+            )
+            has_subsection = False
+            continue
+
+        if stripped.startswith("### "):
+            normalized_lines.append(stripped)
+            has_subsection = True
+            continue
+
+        section_key = SECTION_TITLE_MAP.get(stripped.lower())
+        if section_key:
+            normalized_lines.append(f"## {stripped}")
+            current_section_key = section_key
+            has_subsection = False
+            continue
+
+        if current_section_key in SECTION_SUBSECTION_KEYS and not has_subsection:
+            normalized_lines.append(f"### {stripped}")
+            has_subsection = True
+            continue
+
+        if current_section_key == "education":
+            strong_label_match = INLINE_STRONG_LABEL_RE.match(stripped)
+            if strong_label_match:
+                label = strong_label_match.group(1).strip()
+                rest = (strong_label_match.group(2) or "").strip()
+                normalized_lines.append(f"- {label}{rest}")
+                continue
+
+        if (
+            current_section_key in {"experience", "projects", "skills", "certificates", "awards", "languages"}
+            and not stripped.startswith("- ")
+            and not stripped.startswith("* ")
+            and not stripped.startswith("http://")
+            and not stripped.startswith("https://")
+            and not _looks_like_date_line(stripped)
+        ):
+            normalized_lines.append(f"- {stripped}")
+            continue
+
+        normalized_lines.append(stripped)
+
+    return "\n".join(normalized_lines).strip()
 
 
 def _split_resume_markdown(lines: list[str]) -> tuple[str, list[str], list[str]]:
