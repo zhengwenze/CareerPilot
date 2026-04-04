@@ -42,6 +42,7 @@ async def register(
     payload: RegisterRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[AuthTokenResponse]:
+    """注册新用户"""
     user = await register_user(
         session, payload.email, payload.password, payload.nickname
     )
@@ -64,6 +65,7 @@ async def login(
     payload: LoginRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ApiSuccessResponse[AuthTokenResponse]:
+    """用户登录"""
     user = await authenticate_user(session, payload.email, payload.password)
 
     access_token, expires_in = create_access_token(str(user.id))
@@ -84,6 +86,7 @@ async def logout(
     token_payload: Annotated[dict[str, object], Depends(get_current_token_payload)],
     blocklist: Annotated[TokenBlocklist, Depends(get_token_blocklist)],
 ) -> ApiSuccessResponse[LogoutResponse]:
+    """用户登出，将当前 token 加入黑名单"""
     expires_at = datetime.fromtimestamp(int(token_payload["exp"]), tz=UTC)
     await blocklist.add(str(token_payload["jti"]), expires_at)
     return success_response(request, LogoutResponse(message="Logged out successfully"))
@@ -94,4 +97,5 @@ async def me(
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiSuccessResponse[UserResponse]:
+    """获取当前登录用户信息"""
     return success_response(request, UserResponse.model_validate(current_user))
