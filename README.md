@@ -161,29 +161,70 @@ career-pilot/
 └── SETUP.md
 ```
 
-## 启动方式
+## 快速启动
 
-如果你只想快速跑起来，优先看 [SETUP.md](/Users/zhengwenze/Desktop/codex/career-pilot/SETUP.md)。
-
-最常见的本地启动方式如下：
+### 1. 克隆仓库
 
 ```bash
-docker compose up -d postgres redis minio
+git clone https://gitee.com/zwz050418/career-pilot.git
+cd career-pilot
+```
 
+### 2. 启动依赖服务
+
+```bash
+docker compose -f docker-compose.yml up -d postgres redis minio
+```
+
+### 3. 启动后端
+
+```bash
 cd apps/backend
+cp .env.example .env
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
+```
 
+### 4. 启动前端
+
+```bash
 cd ../frontend
 npm install
 npm run dev
 ```
 
-访问地址：
+访问 **http://localhost:3000** 即可。
 
-- 前端：`http://localhost:3000`
-- 后端：`http://localhost:8000`
+### 配置 AI 提供商
+
+编辑 `apps/backend/.env`，选择以下方案之一：
+
+**MiniMax（推荐）**
+```env
+RESUME_AI_PROVIDER=minimax
+RESUME_AI_BASE_URL=https://api.minimaxi.com/anthropid
+RESUME_AI_API_KEY=your_key
+RESUME_AI_MODEL=MiniMax-M2.5
+```
+
+**本地免费模型**
+```bash
+python scripts/codex2gpt/server.py
+```
+```env
+RESUME_AI_PROVIDER=openai-compatible
+RESUME_AI_BASE_URL=http://localhost:8001/v1
+```
+
+## 访问地址
+
+| URL | 说明 |
+|-----|------|
+| http://localhost:3000 | 前端 |
+| http://localhost:8000 | 后端 API |
+| http://localhost:9001 | MinIO 控制台 |
+| https://codeclaw.top | 服务器部署地址 |
 
 ## 适合谁使用
 
@@ -194,7 +235,6 @@ Career Pilot 当前更适合以下用户：
 - 希望把“岗位定制简历”和“模拟面试训练”串成一条流程的用户
 - 希望在一个工作台内持续维护简历、岗位与训练记录的用户
 
-## 后续文档
+## 相关文档
 
-- 安装与部署说明见 [SETUP.md](/Users/zhengwenze/Desktop/codex/career-pilot/SETUP.md)
 - 更细的代码入口与代理约束见 [AGENTS.md](/Users/zhengwenze/Desktop/codex/career-pilot/AGENTS.md)
