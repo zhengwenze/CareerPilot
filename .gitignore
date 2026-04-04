@@ -61,8 +61,7 @@ dmypy.json
 .pyre/
 .pytype/
 
-# Documentation
-docs/
+# Documentation build artifacts
 docs/_build/
 
 # Database
