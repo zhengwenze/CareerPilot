@@ -1,9 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# CareerPilot 启动脚本
-# 用途：一键启动所有中间件服务和后端服务
+# CareerPilot 本地开发启动脚本
+# 用途：在本地机器启动所有服务（中间件 + 后端），前端单独手动启动
 # 用法：./docker/start.sh
+#
+# 注意：这是本地开发脚本，不是服务器部署脚本
+#       服务器部署请使用 ./docker/deploy.sh
 
 # 颜色定义
 RED='\033[0;31m'
@@ -39,7 +42,7 @@ check_dependencies() {
     fi
 
     if ! command -v uv &> /dev/null; then
-        log_error "uv 未安装，请先安装 uv"
+        log_error "uv 未安装，请先安装 uv (https://github.com/astral-sh/uv)"
         exit 1
     fi
 
@@ -74,7 +77,7 @@ start_middleware() {
     if ! docker compose -f docker-compose.yml ps &> /dev/null; then
         log_info "正在启动中间件服务..."
         docker compose -f docker-compose.yml up -d
-        log_info "中间件服务启动命令已执行""等待中间件服务就绪..."
+        log_info "中间件服务启动命令已执行，等待中间件服务就绪..."
         sleep 5
 
         # 检查服务状态
@@ -135,8 +138,12 @@ start_backend() {
 
 # 主流程
 main() {
-    log_info "=== CareerPilot 启动脚本 ==="
+    log_info "=== CareerPilot 本地开发启动脚本 ==="
     log_info "开始启动服务..."
+    echo ""
+    echo "提示：前端服务请单独运行以下命令启动："
+    echo "  cd apps/frontend && npm run dev"
+    echo ""
 
     check_dependencies
     check_env_files

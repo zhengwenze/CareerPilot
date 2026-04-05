@@ -1,9 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# CareerPilot Linux 服务器一键部署脚本
+# CareerPilot Linux 服务器部署脚本
 # 用途：在 Linux 服务器上快速部署完整应用（Docker Compose）
-# 用法：./docker/deploy.sh
+# 用法：./docker/deploy.sh [dev|prod]
+#
+#   dev   - 开发/测试环境（默认），热更新、调试模式
+#   prod  - 生产环境，优化构建、无卷挂载
 
 # 颜色定义
 RED='\033[0;31m'
@@ -76,13 +79,13 @@ check_env_files() {
     cd - > /dev/null
 }
 
-# 启动所有服务
-start_services() {
-    log_step "启动所有服务..."
+# 启动开发环境
+start_dev() {
+    log_step "启动开发环境..."
 
     cd "$(dirname "$0")/.."
 
-    log_info "正在启动 PostgreSQL, Redis, MinIO, Backend, Frontend..."
+    log_info "正在启动 PostgreSQL, Redis, MinIO, Backend, Frontend (开发模式)..."
     docker compose -f docker-compose.yml up -d
 
     log_info "服务启动命令已执行，等待服务就绪..."
@@ -94,20 +97,42 @@ start_services() {
     cd - > /dev/null
 }
 
+# 启动生产环境
+start_prod() {
+    log_step "启动生产环境..."
+
+    cd "$(dirname "$0")/.."
+
+    log_info "正在构建并启动所有服务 (生产模式)..."
+    log_info "这可能需要几分钟进行 Docker 镜像构建..."
+
+    docker compose -f docker-compose.prod.yml up -d --build
+
+    log_info "服务启动命令已执行，等待服务就绪..."
+    sleep 10
+
+    log_info "服务状态："
+    docker compose -f docker-compose.prod.yml ps
+
+    cd - > /dev/null
+}
+
 # 查看服务日志
 show_logs() {
+    local compose_file="${1:-docker-compose.yml}"
     log_step "查看服务日志..."
 
     cd "$(dirname "$0")/.."
 
     echo "按 Ctrl+C 停止查看"
-    docker compose -f docker-compose.yml logs -f
+    docker compose -f "$compose_file" logs -f
 
     cd - > /dev/null
 }
 
 # 显示部署完成信息
 show_completion_info() {
+    local mode="${1:-dev}"
     cd "$(dirname "$0")/.."
 
     echo ""
@@ -115,17 +140,38 @@ show_completion_info() {
     echo -e "${GREEN}部署完成！${NC}"
     echo "=============================================="
     echo ""
+    echo "部署模式: $mode"
+    echo ""
     echo "访问地址："
-    echo "  - 应用前端：  http://<服务器IP>:3000"
-    echo "  - 后端 API：  http://<服务器IP>:8000"
-    echo "  - API 文档：  http://<服务器IP>:8000/docs"
-    echo "  - MinIO 控制台：http://<服务器IP>:9001"
+
+    if [[ "$mode" == "prod" ]]; then
+        echo "  - 应用前端：  http://<服务器IP>"
+        echo "  - 后端 API：  http://<服务器IP>:8000"
+        echo "  - API 文档：  http://<服务器IP>:8000/docs"
+        echo "  - MinIO 控制台：http://<服务器IP>:9001"
+    else
+        echo "  - 应用前端：  http://localhost:3000"
+        echo "  - 后端 API：  http://localhost:8000"
+        echo "  - API 文档：  http://localhost:8000/docs"
+        echo "  - MinIO 控制台：http://localhost:9001"
+    fi
+
     echo ""
     echo "常用命令："
-    echo "  - 查看服务状态：  docker compose -f docker-compose.yml ps"
-    echo "  - 查看服务日志：  docker compose -f docker-compose.yml logs -f"
-    echo "  - 停止所有服务：  docker compose -f docker-compose.yml down"
-    echo "  - 重启服务：      docker compose -f docker-compose.yml restart"
+
+    if [[ "$mode" == "prod" ]]; then
+        echo "  - 查看服务状态：  docker compose -f docker-compose.prod.yml ps"
+        echo "  - 查看服务日志：  docker compose -f docker-compose.prod.yml logs -f"
+        echo "  - 停止所有服务：  docker compose -f docker-compose.prod.yml down"
+        echo "  - 重启服务：      docker compose -f docker-compose.prod.yml restart"
+        echo "  - 重新构建并启动：docker compose -f docker-compose.prod.yml up -d --build"
+    else
+        echo "  - 查看服务状态：  docker compose -f docker-compose.yml ps"
+        echo "  - 查看服务日志：  docker compose -f docker-compose.yml logs -f"
+        echo "  - 停止所有服务：  docker compose -f docker-compose.yml down"
+        echo "  - 重启服务：      docker compose -f docker-compose.yml restart"
+    fi
+
     echo ""
     echo "如需查看实时日志，请运行："
     echo "  ./docker/deploy.sh logs"
@@ -138,53 +184,87 @@ show_completion_info() {
 
 # 主流程
 main() {
+    local mode="${1:-dev}"
+
+    if [[ "$mode" != "dev" && "$mode" != "prod" ]]; then
+        echo "用法：$0 {dev|prod|logs|stop|restart|status}"
+        echo ""
+        echo "模式说明："
+        echo "  dev   - 开发/测试环境（默认），热更新、调试模式"
+        echo "  prod  - 生产环境，优化构建、无卷挂载"
+        echo ""
+        echo "命令说明："
+        echo "  deploy dev  - 部署并启动所有服务（开发模式，默认）"
+        echo "  deploy prod - 部署并启动所有服务（生产模式）"
+        echo "  logs        - 查看服务日志"
+        echo "  stop        - 停止所有服务"
+        echo "  restart     - 重启所有服务"
+        echo "  status      - 查看服务状态"
+        exit 1
+    fi
+
     log_step "=== CareerPilot Linux 服务器部署脚本 ==="
     echo ""
 
     check_dependencies
     check_env_files
-    start_services
-    show_completion_info
+
+    if [[ "$mode" == "prod" ]]; then
+        start_prod
+    else
+        start_dev
+    fi
+
+    show_completion_info "$mode"
 }
 
 # 命令行参数处理
 case "${1:-deploy}" in
     deploy)
-        main
+        main "${2:-dev}"
+        ;;
+    dev)
+        main "dev"
+        ;;
+    prod)
+        main "prod"
         ;;
     logs)
         cd "$(dirname "$0")/.."
-        log_step "查看服务日志（按 Ctrl+C 停止）..."
-        docker compose -f docker-compose.yml logs -f
+        if [[ -f "docker-compose.prod.yml" ]] && docker compose -f docker-compose.prod.yml ps &> /dev/null; then
+            log_step "查看生产环境服务日志（按 Ctrl+C 停止）..."
+            docker compose -f docker-compose.prod.yml logs -f
+        else
+            log_step "查看开发环境服务日志（按 Ctrl+C 停止）..."
+            docker compose -f docker-compose.yml logs -f
+        fi
         cd - > /dev/null
         ;;
     stop)
         cd "$(dirname "$0")/.."
         log_step "停止所有服务..."
-        docker compose -f docker-compose.yml down
+        docker compose -f docker-compose.yml down 2>/dev/null || true
+        docker compose -f docker-compose.prod.yml down 2>/dev/null || true
         cd - > /dev/null
         ;;
     restart)
         cd "$(dirname "$0")/.."
         log_step "重启所有服务..."
-        docker compose -f docker-compose.yml restart
+        docker compose -f docker-compose.yml restart 2>/dev/null || true
+        docker compose -f docker-compose.prod.yml restart 2>/dev/null || true
         cd - > /dev/null
         ;;
     status)
         cd "$(dirname "$0")/.."
         log_step "服务状态："
-        docker compose -f docker-compose.yml ps
+        echo "--- 开发环境 ---"
+        docker compose -f docker-compose.yml ps 2>/dev/null || echo "未运行"
+        echo ""
+        echo "--- 生产环境 ---"
+        docker compose -f docker-compose.prod.yml ps 2>/dev/null || echo "未运行"
         cd - > /dev/null
         ;;
     *)
-        echo "用法：$0 {deploy|logs|stop|restart|status}"
-        echo ""
-        echo "命令说明："
-        echo "  deploy  - 部署并启动所有服务（默认）"
-        echo "  logs    - 查看服务日志"
-        echo "  stop    - 停止所有服务"
-        echo "  restart - 重启所有服务"
-        echo "  status  - 查看服务状态"
-        exit 1
+        main "dev"
         ;;
 esac

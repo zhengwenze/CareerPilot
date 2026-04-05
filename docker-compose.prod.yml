@@ -2,13 +2,13 @@ services:
   postgres:
     image: pgvector/pgvector:pg17
     container_name: career-pilot-postgres
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_DB: career_pilot
       POSTGRES_USER: career
       POSTGRES_PASSWORD: career
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - career-pilot-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -20,10 +20,10 @@ services:
   redis:
     image: redis:7.4-alpine
     container_name: career-pilot-redis
-    restart: unless-stopped
-    command: [ "redis-server", "--appendonly", "yes" ]
+    restart: always
+    command: [ "redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru" ]
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - career-pilot-redis-data:/data
     healthcheck:
@@ -35,14 +35,14 @@ services:
   minio:
     image: minio/minio:latest
     container_name: career-pilot-minio
-    restart: unless-stopped
+    restart: always
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: careerpilot
       MINIO_ROOT_PASSWORD: careerpilot123
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - career-pilot-minio-data:/data
     healthcheck:
@@ -55,20 +55,20 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
-      target: development
+      target: production
     container_name: career-pilot-backend
-    restart: unless-stopped
+    restart: always
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      - APP_ENV=development
+      - APP_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://career:career@postgres:5432/career_pilot}
       - ALEMBIC_DATABASE_URL=${ALEMBIC_DATABASE_URL:-postgresql+psycopg://career:career@postgres:5432/career_pilot}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - STORAGE_ENDPOINT=${STORAGE_ENDPOINT:-minio:9000}
       - STORAGE_ACCESS_KEY=${STORAGE_ACCESS_KEY:-careerpilot}
       - STORAGE_SECRET_KEY=${STORAGE_SECRET_KEY:-careerpilot123}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,29 +78,24 @@ services:
         condition: service_healthy
     volumes:
       - career-pilot-backend-data:/app/data
-      - ./apps/backend:/app
       - ./apps/backend/.env:/app/.env:ro
 
   frontend:
     build:
       context: ./apps/frontend
       dockerfile: Dockerfile
-      target: development
+      target: production
       args:
         - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     container_name: career-pilot-frontend
-    restart: unless-stopped
+    restart: always
     ports:
-      - "3000:3000"
+      - "80:3000"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     depends_on:
       - backend
-    volumes:
-      - ./apps/frontend:/app
-      - /app/node_modules
-      - /app/.next
 
 volumes:
   career-pilot-postgres-data:
