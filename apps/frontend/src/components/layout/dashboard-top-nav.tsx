@@ -5,9 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { DashboardModuleSwitcher } from "@/components/layout/dashboard-module-switcher";
 import { Button } from "@/components/ui/button";
 import { dashboardNavItems } from "@/config/nav-config";
-import { DashboardModuleSwitcher } from "@/components/layout/dashboard-module-switcher";
+import { cn } from "@/lib/utils";
 
 export function DashboardTopNav() {
   const pathname = usePathname();
@@ -25,57 +26,41 @@ export function DashboardTopNav() {
 
   return (
     <header className="border-b border-[#e5e5e5] bg-white">
-      <div className="mx-auto max-w-[1360px] px-4 py-5 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0">
-              <p className="bw-kicker">Career Pilot Workspace</p>
-              <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
-                <Link
-                  href="/dashboard/overview"
-                  className="text-[1.75rem] font-semibold text-[#111111] no-underline hover:text-[#666666]"
-                  style={{
-                    fontFamily: "var(--font-heading)",
-                    letterSpacing: "-0.03em",
-                  }}
-                >
-                  CareerPilot
-                </Link>
-                <p className="pb-1 text-sm text-[#666666]">
-                  Resume / Interview / Settings
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 lg:items-end">
-              {user ? (
-                <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-[#888888]">
-                    当前账户
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-[#111111]">
-                    {user.nickname || "CareerPilot Member"}
-                  </p>
-                  <p className="mt-1 text-xs text-[#666666]">{user.email}</p>
-                </div>
-              ) : null}
-
-              <Button
-                disabled={isLoggingOut}
-                onClick={() => void handleLogout()}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {isLoggingOut ? "Logging out" : "Logout"}
-              </Button>
-            </div>
-          </div>
+      <div className="mx-auto max-w-[1360px] py-px px-4 sm:px-6 lg:px-8">
+        <div className="bw-topbar">
+          <Link href="/dashboard/overview" className="bw-topbar-brand">
+            CareerPilot
+          </Link>
 
           <DashboardModuleSwitcher
             items={dashboardNavItems}
             pathname={pathname}
           />
+
+          <div className="bw-topbar-actions">
+            <div className={cn("bw-topbar-account", !user && "px-2")}>
+              {user ? (
+                <span className="bw-topbar-user">
+                  {user.nickname || "CareerPilot Member"}
+                </span>
+              ) : null}
+
+              <Button
+                aria-busy={isLoggingOut}
+                className={cn(
+                  "bw-topbar-logout",
+                  !user && "bw-topbar-logout-solo",
+                )}
+                disabled={isLoggingOut}
+                onClick={() => void handleLogout()}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {isLoggingOut ? "Logging out" : "Logout"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </header>

@@ -53,8 +53,8 @@ function SidebarNavItem({
     item.disabled
       ? "cursor-not-allowed opacity-55"
       : active
-      ? "bg-black text-white"
-      : "bg-white text-black hover:bg-gray-100"
+        ? "bg-black text-white"
+        : "bg-white text-black hover:bg-gray-100",
   );
 
   const itemBody = (
@@ -62,9 +62,7 @@ function SidebarNavItem({
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center border-2 border-black font-mono text-sm",
-          active
-            ? "bg-white text-black"
-            : "bg-white text-black"
+          active ? "bg-white text-black" : "bg-white text-black",
         )}
       >
         <Icon className="size-4" />
@@ -82,10 +80,7 @@ function SidebarNavItem({
         </span>
       )}
       {!collapsed && item.badge ? (
-        <Badge
-          className="shrink-0 bg-black text-white"
-          variant="default"
-        >
+        <Badge className="shrink-0 bg-black text-white" variant="default">
           {item.badge}
         </Badge>
       ) : null}
@@ -132,8 +127,6 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [, startTransition] = useTransition();
-
-
 
   async function handleLogout() {
     await logout();
@@ -258,7 +251,7 @@ export function AppSidebar() {
         <div
           className={cn(
             "h-screen border-r-2 border-black transition-all duration-0",
-            collapsed ? "w-16" : "w-64"
+            collapsed ? "w-16" : "w-64",
           )}
         >
           {sidebarContent}
