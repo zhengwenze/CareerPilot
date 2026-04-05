@@ -7,6 +7,7 @@ This repository is organized for continuous Codex-assisted work, not just one-of
 The goal is to make these layers explicit:
 
 - product code
+- shared contracts and tools
 - repo rules
 - reusable agent workflows
 - plan documents
@@ -28,10 +29,15 @@ The goal is to make these layers explicit:
 - `.agents/plans/`: feature plans, migration plans, and investigation plans
 - `docs/`: stable documentation that should outlive a single coding session
 
+### Shared layers
+
+- `packages/contracts/`: shared workflow contracts, domain entities, and payload examples
+- `packages/api-client/`: extracted reusable frontend API client foundation
+- `packages/configs/`: shared lint and TypeScript config building blocks
+
 ### Reference-only assets
 
-- `demo/`: standalone scripts, sample resumes, prompt experiments, and console demos
-- `monochrome/`: design tokens and theme references
+- `references/monochrome/`: design tokens and theme references
 
 These reference directories are useful, but they are not the source of truth for shipped product behavior.
 
@@ -41,9 +47,11 @@ Use the narrowest directory that matches the task:
 
 - frontend UI, routes, client state, and API clients: `apps/frontend/`
 - backend routes, services, models, schemas, prompts, migrations: `apps/backend/`
+- shared contracts, API foundations, and reusable configs: `packages/`
 - reusable Codex workflow instructions: `.agents/skills/<skill-name>/SKILL.md`
 - multi-step plans or investigations: `.agents/plans/`
 - durable architecture, runbooks, and setup notes: `docs/`
+- references and historical materials: `references/`
 
 Avoid creating new top-level directories when one of these lanes already fits.
 
@@ -52,10 +60,11 @@ Avoid creating new top-level directories when one of these lanes already fits.
 For cross-cutting tasks, read in this order:
 
 1. `AGENTS.md`
-2. `docs/codex-workspace.md`
+2. `docs/index.md`
 3. the nearest child `AGENTS.md`
 4. relevant `.agents/skills/*/SKILL.md`
-5. product code in the affected app
+5. `packages/contracts/` when the task touches shared workflow meaning
+6. product code in the affected app
 
 ## Generated paths to ignore first
 

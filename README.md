@@ -165,9 +165,9 @@ career-pilot/
 │   │   ├── alembic/
 │   │   └── tests/
 │   └── miniprogram/               # 微信小程序
-├── docs/                          # 仓库地图、MCP 说明等稳定文档
-├── demo/                          # 独立原型与样例资产，不是产品源码
-├── monochrome/                    # 设计参考资产
+├── packages/                      # 共享契约、API 客户端与配置
+├── docs/                          # 仓库地图、业务知识与运行说明
+├── references/                    # 参考资产，不是产品源码
 ├── docker/                        # 部署与启动脚本
 ├── docker-compose.yml             # 中间件编排
 └── README.md
@@ -176,9 +176,10 @@ career-pilot/
 目录整理原则：
 
 - 业务代码尽量只放在 `apps/`
+- 共享契约与工程配置尽量只放在 `packages/`
 - agent 规则、skills、plans 明确放在根目录的 `AGENTS.md` 与 `.agents/`
-- `docs/` 放长期有效的项目文档，不把结构说明散落在 README 之外
-- `demo/` 和 `monochrome/` 保留为参考资产，但不作为产品行为事实来源
+- `docs/` 放长期有效的项目文档与业务知识入口
+- `references/` 放参考资产，但不作为产品行为事实来源
 
 ## 快速启动
 
@@ -258,5 +259,6 @@ Career Pilot 当前更适合以下用户：
 ## 相关文档
 
 - 更细的代码入口与代理约束见 [AGENTS.md](/Users/zhengwenze/Desktop/codex/career-pilot/AGENTS.md)
+- 文档总入口见 [docs/index.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/index.md)
 - 仓库如何按 Codex 友好方式组织见 [docs/codex-workspace.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/codex-workspace.md)
 - 外部工具与 MCP 接入约定见 [docs/mcp-setup.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/mcp-setup.md)

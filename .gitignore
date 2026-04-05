@@ -75,10 +75,6 @@ docs/_build/
 # Docker
 .dockerignore
 
-# Demo files (local development, do not commit)
-demo/
-scripts/demo.py
-
 # Scripts with local development tools
 scripts/codex2gpt/__pycache__/
 scripts/resume_parser/__pycache__/
@@ -94,9 +90,6 @@ pdf/
 
 # uv cache
 .uv-cache/
-
-# Theme files (local development, do not commit)
-monochrome/
 
 # Node modules (if not using in apps/web)
 # node_modules/
