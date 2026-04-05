@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.prompts.resume import get_resume_pdf_to_md_prompt
 from app.services.ai_client import AIClientError, AIProviderConfig, request_text_completion
+from app.services.resume_ai import is_ai_configured
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +98,14 @@ async def pdf_to_markdown(
             ai_error_message="PDF 原始 Markdown 提取失败或为空",
         )
 
-    if ai_config is None or not (ai_config.api_key or "").strip():
+    if ai_config is None or not is_ai_configured(
+        provider=ai_config.provider,
+        base_url=ai_config.base_url,
+        model=ai_config.model,
+        api_key=ai_config.api_key,
+    ):
         logger.warning(
-            "resume-pdf-to-md AI normalization skipped due to missing API key "
+            "resume-pdf-to-md AI normalization skipped due to incomplete AI config "
             "file=%s provider=%s model=%s base_url=%s fallback_used=true",
             file_name,
             getattr(ai_config, "provider", ""),
@@ -111,8 +117,8 @@ async def pdf_to_markdown(
             raw_markdown=raw_markdown,
             ai_applied=False,
             fallback_used=True,
-            ai_error_category="auth_error",
-            ai_error_message="AI API Key 缺失，已回退原始 Markdown",
+            ai_error_category="config_error",
+            ai_error_message="AI 配置不完整，已回退原始 Markdown",
         )
 
     try:

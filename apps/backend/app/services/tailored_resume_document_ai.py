@@ -8,8 +8,7 @@ from app.core.config import Settings
 from app.prompts.tailored_resume import get_tailored_resume_full_document_prompt
 from app.schemas.tailored_resume import TailoredResumeDocument
 from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
-
-EMPTY_PROVIDER_VALUES = {"", "disabled", "none", "off"}
+from app.services.resume_ai import is_ai_configured
 
 
 @dataclass(slots=True)
@@ -108,7 +107,12 @@ def build_tailored_resume_document_ai_provider(
     model = (settings.resume_ai_model or "").strip()
     base_url = (settings.resume_ai_base_url or "").strip()
     api_key = (settings.resume_ai_api_key or "").strip() or None
-    if provider in EMPTY_PROVIDER_VALUES or not model or not base_url or not api_key:
+    if not is_ai_configured(
+        provider=provider,
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+    ):
         return DisabledTailoredResumeDocumentProvider()
 
     return ConfiguredTailoredResumeDocumentProvider(

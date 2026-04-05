@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from app.services.resume_ai import normalize_ai_provider, provider_requires_api_key
 
 BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
@@ -136,15 +138,21 @@ class Settings(BaseSettings):
         mode="before",
     )
     @classmethod
-    def resolve_ai_base_url(cls, value: str | None) -> str | None:
+    def resolve_ai_base_url(cls, value: str | None, info: ValidationInfo) -> str | None:
+        provider_field = info.field_name.replace("_base_url", "_provider")
+        provider = normalize_ai_provider(info.data.get(provider_field))
         if value is None or not str(value).strip():
+            if provider == "ollama":
+                return value
             value = _first_non_empty_env("MINIMAX_BASE_URL", "ANTHROPIC_BASE_URL")
         return _normalize_ai_base_url(value)
 
     @field_validator("match_ai_api_key", mode="before")
     @classmethod
-    def resolve_match_ai_api_key(cls, value: str | None) -> str | None:
+    def resolve_match_ai_api_key(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is not None and value.strip():
+            return value
+        if not provider_requires_api_key(info.data.get("match_ai_provider")):
             return value
         return _first_non_empty_env(
             "MINIMAX_API_KEY",
@@ -154,8 +162,10 @@ class Settings(BaseSettings):
 
     @field_validator("resume_ai_api_key", mode="before")
     @classmethod
-    def resolve_resume_ai_api_key(cls, value: str | None) -> str | None:
+    def resolve_resume_ai_api_key(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is not None and value.strip():
+            return value
+        if not provider_requires_api_key(info.data.get("resume_ai_provider")):
             return value
         return _first_non_empty_env(
             "MINIMAX_API_KEY",
@@ -165,8 +175,10 @@ class Settings(BaseSettings):
 
     @field_validator("interview_ai_api_key", mode="before")
     @classmethod
-    def resolve_interview_ai_api_key(cls, value: str | None) -> str | None:
+    def resolve_interview_ai_api_key(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is not None and value.strip():
+            return value
+        if not provider_requires_api_key(info.data.get("interview_ai_provider")):
             return value
         return _first_non_empty_env(
             "MATCH_AI_API_KEY",
@@ -180,28 +192,30 @@ class Settings(BaseSettings):
     def resolve_interview_ai_model_planning(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
-        return _first_non_empty_env("MATCH_AI_MODEL", "MINIMAX_MODEL_PLANNING")
+        return _first_non_empty_env("INTERVIEW_AI_MODEL", "MATCH_AI_MODEL", "MINIMAX_MODEL_PLANNING")
 
     @field_validator("interview_ai_model_realtime", mode="before")
     @classmethod
     def resolve_interview_ai_model_realtime(cls, value: str | None) -> str | None:
         if value is not None and value.strip():
             return value
-        return _first_non_empty_env("MINIMAX_MODEL_REALTIME")
+        return _first_non_empty_env("INTERVIEW_AI_MODEL", "MINIMAX_MODEL_REALTIME")
 
     @model_validator(mode="after")
     def resolve_match_ai_fallbacks(self) -> "Settings":
-        match_provider = (self.match_ai_provider or "").strip().lower()
+        match_provider = normalize_ai_provider(self.match_ai_provider)
+        interview_provider = normalize_ai_provider(self.interview_ai_provider)
         if match_provider == "":
             self.match_ai_provider = (self.resume_ai_provider or "minimax").strip()
+            match_provider = normalize_ai_provider(self.match_ai_provider)
 
-        if not (self.match_ai_base_url or "").strip():
+        if match_provider != "ollama" and not (self.match_ai_base_url or "").strip():
             self.match_ai_base_url = self.resume_ai_base_url
 
         if not (self.match_ai_model or "").strip():
             self.match_ai_model = self.resume_ai_model
 
-        if not (self.match_ai_api_key or "").strip():
+        if provider_requires_api_key(match_provider) and not (self.match_ai_api_key or "").strip():
             fallback_key = (self.resume_ai_api_key or "").strip() or (
                 _first_non_empty_env(
                     "MINIMAX_API_KEY",
@@ -212,13 +226,13 @@ class Settings(BaseSettings):
             )
             self.match_ai_api_key = fallback_key or None
 
-        if not (self.interview_ai_base_url or "").strip():
+        if interview_provider != "ollama" and not (self.interview_ai_base_url or "").strip():
             fallback_base_url = (self.match_ai_base_url or "").strip() or (
                 _first_non_empty_env("MINIMAX_BASE_URL", "ANTHROPIC_BASE_URL") or ""
             )
             self.interview_ai_base_url = fallback_base_url or self.resume_ai_base_url
 
-        if not (self.interview_ai_api_key or "").strip():
+        if provider_requires_api_key(interview_provider) and not (self.interview_ai_api_key or "").strip():
             fallback_key = (self.match_ai_api_key or "").strip() or (
                 _first_non_empty_env(
                     "MINIMAX_API_KEY",
@@ -230,13 +244,18 @@ class Settings(BaseSettings):
             self.interview_ai_api_key = fallback_key or None
 
         if not (self.interview_ai_model_planning or "").strip():
-            fallback_model = (self.match_ai_model or "").strip() or (
+            fallback_model = (self.interview_ai_model or "").strip() or (
+                _first_non_empty_env("INTERVIEW_AI_MODEL") or ""
+            ) or (self.match_ai_model or "").strip() or (
                 _first_non_empty_env("MINIMAX_MODEL_PLANNING") or ""
             )
             self.interview_ai_model_planning = fallback_model or self.interview_ai_model
 
         if not (self.interview_ai_model_realtime or "").strip():
-            fallback_model = _first_non_empty_env("MINIMAX_MODEL_REALTIME") or ""
+            fallback_model = (
+                (self.interview_ai_model or "").strip()
+                or (_first_non_empty_env("INTERVIEW_AI_MODEL", "MINIMAX_MODEL_REALTIME") or "")
+            )
             self.interview_ai_model_realtime = fallback_model or self.interview_ai_model
 
         explicit_interview_timeout = (

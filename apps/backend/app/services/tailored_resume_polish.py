@@ -11,7 +11,7 @@ from app.services.ai_client import (
     AIProviderConfig,
     request_text_completion,
 )
-from app.services.resume_ai import EMPTY_PROVIDER_VALUES
+from app.services.resume_ai import is_ai_configured
 
 
 @dataclass(slots=True)
@@ -75,9 +75,12 @@ def build_tailored_resume_polish_provider(
     settings: Settings,
 ) -> TailoredResumePolishProvider:
     provider = settings.resume_ai_provider.strip().lower()
-    if provider in EMPTY_PROVIDER_VALUES:
-        return DisabledTailoredResumePolishProvider()
-    if not settings.resume_ai_base_url or not settings.resume_ai_model:
+    if not is_ai_configured(
+        provider=provider,
+        base_url=settings.resume_ai_base_url,
+        model=settings.resume_ai_model,
+        api_key=settings.resume_ai_api_key,
+    ):
         return DisabledTailoredResumePolishProvider()
 
     return ConfiguredTailoredResumePolishProvider(

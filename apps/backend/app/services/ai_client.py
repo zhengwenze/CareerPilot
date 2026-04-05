@@ -8,12 +8,14 @@ from dataclasses import asdict, dataclass, is_dataclass
 from json import JSONDecodeError
 
 import anthropic
+import httpx
 
 logger = logging.getLogger(__name__)
 RETRYABLE_AI_ERROR_CATEGORIES = {"timeout", "connection_error"}
 MAX_AI_REQUEST_RETRIES = 1
 AI_RETRY_BACKOFF_SECONDS = 0.8
 DEFAULT_MINIMAX_ANTHROPIC_BASE_URL = "https://api.minimaxi.com/anthropic"
+DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +56,7 @@ async def request_text_completion(
         content = ""
         for attempt in range(1, total_attempts + 1):
             try:
-                content = await _request_anthropic_text(
+                content = await _request_provider_text(
                     config=config,
                     instructions=instructions,
                     payload=payload,
@@ -129,7 +131,7 @@ async def request_json_completion(
         content = ""
         for attempt in range(1, total_attempts + 1):
             try:
-                content = await _request_anthropic_text(
+                content = await _request_provider_text(
                     config=config,
                     instructions=instructions,
                     payload=payload,
@@ -208,6 +210,29 @@ async def request_json_completion(
             category="invalid_response_format",
             detail=str(exc),
         ) from exc
+
+
+async def _request_provider_text(
+    *,
+    config: AIProviderConfig,
+    instructions: str,
+    payload: object,
+    max_tokens: int,
+) -> str:
+    provider = (config.provider or "").strip().lower()
+    if provider == "ollama":
+        return await _request_ollama_text(
+            config=config,
+            instructions=instructions,
+            payload=payload,
+            max_tokens=max_tokens,
+        )
+    return await _request_anthropic_text(
+        config=config,
+        instructions=instructions,
+        payload=payload,
+        max_tokens=max_tokens,
+    )
 
 
 async def _request_anthropic_text(
@@ -297,6 +322,86 @@ async def _request_anthropic_text(
     return _anthropic_response_text(response)
 
 
+async def _request_ollama_text(
+    *,
+    config: AIProviderConfig,
+    instructions: str,
+    payload: object,
+    max_tokens: int,
+) -> str:
+    serialized_payload = _serialize_payload(payload)
+    request_body = {
+        "model": config.model,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": serialized_payload},
+        ],
+        "options": {"num_predict": max_tokens},
+    }
+    base_url = _resolve_ollama_base_url(config)
+
+    logger.info(
+        "AI Ollama request building provider=%s model=%s "
+        "base_url=%s timeout_seconds=%s max_tokens=%s",
+        config.provider,
+        config.model,
+        base_url,
+        config.timeout_seconds,
+        max_tokens,
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
+            logger.info(
+                "AI Ollama request sending provider=%s model=%s",
+                config.provider,
+                config.model,
+            )
+            response = await client.post(
+                f"{base_url}/api/chat",
+                json=request_body,
+            )
+            response.raise_for_status()
+            response_json = response.json()
+            logger.info(
+                "AI Ollama response received provider=%s model=%s done=%s",
+                config.provider,
+                config.model,
+                response_json.get("done"),
+            )
+    except httpx.TimeoutException as exc:
+        raise AIClientError(
+            category="timeout",
+            detail=f"AI request timed out: {exc}",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        detail = exc.response.text.strip() or str(exc)
+        if status_code == 401:
+            category = "auth_error"
+        elif status_code == 403:
+            category = "permission_error"
+        else:
+            category = f"http_{status_code}"
+        raise AIClientError(
+            category=category,
+            detail=f"AI request failed with HTTP {status_code}: {detail}",
+        ) from exc
+    except httpx.RequestError as exc:
+        raise AIClientError(
+            category="connection_error",
+            detail=f"AI connection failed: {exc}",
+        ) from exc
+    except ValueError as exc:
+        raise AIClientError(
+            category="invalid_response_format",
+            detail=f"AI response JSON decoding failed: {exc}",
+        ) from exc
+
+    return _ollama_response_text(response_json)
+
+
 def _serialize_payload(payload: object) -> str:
     if is_dataclass(payload):
         payload = asdict(payload)
@@ -370,6 +475,28 @@ def _anthropic_response_text(response: object) -> str:
     return "".join(chunks)
 
 
+def _ollama_response_text(response: object) -> str:
+    if not isinstance(response, dict):
+        raise ValueError("AI response root must be an object")
+
+    message = response.get("message")
+    if not isinstance(message, dict):
+        raise ValueError("AI response did not contain a message object")
+
+    text = message.get("content")
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError(
+            "AI response did not contain assistant text "
+            f"(done_reason={response.get('done_reason')})"
+        )
+
+    logger.info(
+        "AI Ollama text extracted text_chars=%s",
+        len(text),
+    )
+    return text
+
+
 def _resolve_base_url(config: AIProviderConfig) -> str:
     configured = (config.base_url or "").strip()
     if configured:
@@ -378,6 +505,13 @@ def _resolve_base_url(config: AIProviderConfig) -> str:
     if env_base_url:
         return env_base_url
     return DEFAULT_MINIMAX_ANTHROPIC_BASE_URL
+
+
+def _resolve_ollama_base_url(config: AIProviderConfig) -> str:
+    configured = (config.base_url or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return DEFAULT_OLLAMA_BASE_URL
 
 
 def _build_anthropic_client_kwargs(config: AIProviderConfig) -> dict[str, object]:

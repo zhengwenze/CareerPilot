@@ -12,7 +12,7 @@ from app.schemas.tailored_resume import (
     TailoredResumeGrammarResponse,
 )
 from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
-from app.services.resume_ai import EMPTY_PROVIDER_VALUES
+from app.services.resume_ai import is_ai_configured
 
 
 @dataclass(slots=True)
@@ -76,9 +76,12 @@ def build_tailored_resume_grammar_provider(
     settings: Settings,
 ) -> TailoredResumeGrammarProvider:
     provider = settings.resume_ai_provider.strip().lower()
-    if provider in EMPTY_PROVIDER_VALUES:
-        return DisabledTailoredResumeGrammarProvider()
-    if not settings.resume_ai_base_url or not settings.resume_ai_model:
+    if not is_ai_configured(
+        provider=provider,
+        base_url=settings.resume_ai_base_url,
+        model=settings.resume_ai_model,
+        api_key=settings.resume_ai_api_key,
+    ):
         return DisabledTailoredResumeGrammarProvider()
 
     return ConfiguredTailoredResumeGrammarProvider(

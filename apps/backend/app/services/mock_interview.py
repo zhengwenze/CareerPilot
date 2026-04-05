@@ -40,6 +40,7 @@ from app.schemas.mock_interview import (
     MockInterviewTurnRecord,
 )
 from app.services.ai_client import AIProviderConfig, request_text_completion
+from app.services.resume_ai import is_ai_configured
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +303,12 @@ async def _request_text(
     max_tokens: int,
     model: str | None = None,
 ) -> str:
-    if not settings.interview_ai_api_key:
+    if not is_ai_configured(
+        provider=settings.interview_ai_provider,
+        base_url=settings.interview_ai_base_url,
+        model=model or settings.interview_ai_model_planning or settings.interview_ai_model,
+        api_key=settings.interview_ai_api_key,
+    ):
         raise RuntimeError("Interview AI is not configured")
     return await request_text_completion(
         config=_get_ai_config(settings, model=model),

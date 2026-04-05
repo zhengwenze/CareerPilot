@@ -53,6 +53,57 @@ def test_settings_prefers_minimax_over_anthropic(monkeypatch: pytest.MonkeyPatch
     assert settings.match_ai_base_url == "https://api.minimaxi.com/anthropic"
 
 
+def test_settings_does_not_backfill_ollama_with_remote_provider_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "RESUME_AI_API_KEY",
+        "MATCH_AI_API_KEY",
+        "MINIMAX_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_API_KEY",
+        "RESUME_AI_BASE_URL",
+        "MATCH_AI_BASE_URL",
+        "MINIMAX_BASE_URL",
+        "ANTHROPIC_BASE_URL",
+        "INTERVIEW_AI_MODEL",
+        "MATCH_AI_MODEL",
+        "MINIMAX_MODEL_PLANNING",
+        "MINIMAX_MODEL_REALTIME",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setenv("MINIMAX_API_KEY", "minimax-key")
+    monkeypatch.setenv("MINIMAX_BASE_URL", "https://api.minimax.io/anthropic")
+
+    settings = Settings(
+        _env_file=None,
+        resume_ai_provider="ollama",
+        resume_ai_base_url="",
+        resume_ai_api_key=None,
+        resume_ai_model="qwen2.5:7b",
+        interview_ai_provider="ollama",
+        interview_ai_base_url="",
+        interview_ai_api_key=None,
+        interview_ai_model="qwen2.5:7b",
+        interview_ai_model_planning="",
+        interview_ai_model_realtime="",
+        match_ai_provider="ollama",
+        match_ai_base_url="",
+        match_ai_api_key=None,
+        match_ai_model="qwen2.5:7b",
+    )
+
+    assert settings.resume_ai_base_url == ""
+    assert settings.resume_ai_api_key is None
+    assert settings.match_ai_base_url == ""
+    assert settings.match_ai_api_key is None
+    assert settings.interview_ai_base_url == ""
+    assert settings.interview_ai_api_key is None
+    assert settings.interview_ai_model_planning == "qwen2.5:7b"
+    assert settings.interview_ai_model_realtime == "qwen2.5:7b"
+
+
 @pytest.mark.asyncio
 async def test_convert_pdf_bytes_to_markdown_returns_ai_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
     module = load_resume_pdf_to_md_module()
@@ -73,6 +124,38 @@ async def test_convert_pdf_bytes_to_markdown_returns_ai_markdown(monkeypatch: py
     assert result.ai_applied is True
     assert result.fallback_used is False
     assert result.ai_error_category is None
+
+
+@pytest.mark.asyncio
+async def test_convert_pdf_bytes_to_markdown_allows_ollama_without_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_resume_pdf_to_md_module()
+
+    monkeypatch.setattr(module, "extract_raw_markdown_from_pdf", lambda *_args, **_kwargs: "# Raw")
+
+    calls: list[object] = []
+
+    async def fake_request_text_completion(**kwargs) -> str:
+        calls.append(kwargs["config"])
+        return "# Polished by Ollama"
+
+    monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
+
+    settings = Settings(
+        _env_file=None,
+        resume_ai_provider="ollama",
+        resume_ai_base_url="http://127.0.0.1:11434",
+        resume_ai_api_key=None,
+        resume_ai_model="qwen2.5:7b",
+    )
+
+    result = await convert_pdf_bytes_to_markdown(b"%PDF", "resume.pdf", settings=settings)
+
+    assert result.markdown == "# Polished by Ollama"
+    assert result.ai_applied is True
+    assert result.fallback_used is False
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio

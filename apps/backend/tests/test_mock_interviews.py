@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
+import pytest
 from sqlalchemy import select
 
+from app.core.config import Settings
 from app.models import JobDescription, MatchReport, MockInterviewSession, Resume, ResumeOptimizationSession
 from app.schemas.ai_runtime import TaskState
 from app.schemas.resume import ResumeBasicInfo, ResumeStructuredData
@@ -84,6 +86,37 @@ async def _seed_interview_dependencies(db_session, *, user, suffix: str, tailore
     db_session.add(workflow)
     await db_session.commit()
     return job, workflow
+
+
+@pytest.mark.asyncio
+async def test_mock_interview_request_text_allows_ollama_without_api_key(monkeypatch: pytest.MonkeyPatch):
+    settings = Settings(
+        _env_file=None,
+        interview_ai_provider="ollama",
+        interview_ai_base_url="http://127.0.0.1:11434",
+        interview_ai_api_key=None,
+        interview_ai_model="qwen2.5:7b",
+        interview_ai_model_planning="qwen2.5:7b",
+    )
+
+    calls: list[object] = []
+
+    async def fake_request_text_completion(**kwargs) -> str:
+        calls.append(kwargs["config"])
+        return "OK"
+
+    monkeypatch.setattr(mock_interview_service, "request_text_completion", fake_request_text_completion)
+
+    result = await mock_interview_service._request_text(
+        settings,
+        prompt="ping",
+        max_tokens=32,
+    )
+
+    assert result == "OK"
+    assert len(calls) == 1
+    assert calls[0].provider == "ollama"
+    assert calls[0].api_key is None
 
 
 async def test_mock_interview_returns_first_question_then_prepares_followups_async(

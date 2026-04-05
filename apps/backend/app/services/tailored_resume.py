@@ -48,6 +48,7 @@ from app.schemas.tailored_resume import (
     TailoredResumeWorkflowResponse,
 )
 from app.services.ai_client import AIClientError, AIProviderConfig, request_json_completion
+from app.services.resume_ai import is_ai_configured
 from app.services.job import (
     build_job_response,
     create_job,
@@ -1031,7 +1032,12 @@ async def _generate_rewrite_projection(
     report: MatchReport,
     settings: Settings,
 ) -> tuple[ResumeStructuredData, list[str]]:
-    if not settings.resume_ai_api_key or not settings.resume_ai_base_url or not settings.resume_ai_model:
+    if not is_ai_configured(
+        provider=settings.resume_ai_provider,
+        base_url=settings.resume_ai_base_url,
+        model=settings.resume_ai_model,
+        api_key=settings.resume_ai_api_key,
+    ):
         return source_resume.model_copy(deep=True), ["未配置简历优化 AI，当前保留原始摘要/经历/项目表达。"]
 
     payload = {
