@@ -50,7 +50,7 @@ export function PageHeader({
           </div>
           {meta ? <div className="bw-meta-row mt-4 lg:mt-0">{meta}</div> : null}
         </div>
-        {children}
+        {children ? <div className="bw-page-header-actions">{children}</div> : null}
       </div>
     </header>
   )

@@ -5,24 +5,24 @@ import { Slot } from "@radix-ui/react-slot"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 border font-medium text-sm text-current transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111111] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:border-[#e5e5e5] disabled:bg-[#f5f5f5] disabled:text-[#888888] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:text-current [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default:
-          "bg-[#111111] text-white hover:bg-[#333333] border border-[#111111]",
+          "border-[#111111] bg-[#111111] text-[#fafafa] hover:border-[#333333] hover:bg-[#333333] hover:text-[#fafafa]",
         primary:
-          "bg-[#111111] text-white hover:bg-[#333333] border border-[#111111]",
+          "border-[#111111] bg-[#111111] text-[#fafafa] hover:border-[#333333] hover:bg-[#333333] hover:text-[#fafafa]",
         secondary:
-          "bg-[#fafafa] text-[#111111] hover:bg-[#e5e5e5] border border-[#e5e5e5]",
+          "border-[#e5e5e5] bg-[#fafafa] text-[#111111] hover:border-[#111111] hover:bg-[#ffffff] hover:text-[#111111]",
         ghost:
-          "bg-transparent text-[#111111] hover:bg-[#fafafa] border border-transparent",
+          "border-transparent bg-transparent text-[#111111] hover:border-[#e5e5e5] hover:bg-[#fafafa] hover:text-[#111111]",
         destructive:
-          "bg-[#111111] text-white hover:bg-[#333333] border border-[#111111]",
+          "border-[#111111] bg-[#111111] text-[#fafafa] hover:border-[#333333] hover:bg-[#333333] hover:text-[#fafafa]",
         link:
-          "bg-transparent text-[#111111] underline hover:text-[#666666] border border-transparent p-0 h-auto",
+          "h-auto border-transparent bg-transparent p-0 text-[#111111] underline hover:text-[#666666]",
         outline:
-          "bg-transparent text-[#111111] hover:bg-[#fafafa] border border-[#e5e5e5]",
+          "border-[#111111] bg-[#ffffff] text-[#111111] hover:bg-[#fafafa] hover:text-[#111111]",
       },
       size: {
         default: "h-10 px-5 py-2",

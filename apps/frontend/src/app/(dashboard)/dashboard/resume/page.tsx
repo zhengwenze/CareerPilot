@@ -230,7 +230,7 @@ function renderInlineMarkdown(text: string): ReactNode[] {
           href={match[3]}
           target="_blank"
           rel="noreferrer"
-          className="text-[#1D4ED8] underline underline-offset-2"
+          className="text-[#111111] underline underline-offset-2"
         >
           {match[2]}
         </a>,
@@ -405,18 +405,18 @@ function getWorkflowStatusLabel(status: WorkflowDisplayStatus | null | undefined
 function getWorkflowStatusTone(status: WorkflowDisplayStatus | null | undefined) {
   switch (status) {
     case "success":
-      return "border-[#12B76A]/20 bg-[#ECFDF3] text-[#067647]";
+      return "border-[#111111] bg-[#111111] text-[#fafafa]";
     case "failed":
     case "cancelled":
     case "returned":
     case "aborted":
     case "empty_result":
-      return "border-[#F04438]/20 bg-[#FEF3F2] text-[#B42318]";
+      return "border-[#111111] bg-[#f5f5f5] text-[#111111]";
     case "processing":
     case "segment_progress":
-      return "border-[#1D4ED8]/15 bg-[#EFF6FF] text-[#1D4ED8]";
+      return "border-[#111111] bg-[#fafafa] text-[#111111]";
     default:
-      return "border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]";
+      return "border-[#e5e5e5] bg-[#fafafa] text-[#111111]";
   }
 }
 
@@ -485,7 +485,7 @@ function getSegmentStatusLabel(status: ContentSegmentRecord["status"]) {
 
 function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
   return (
-    <div className="rounded-2xl border border-[#1C1C1C]/10 bg-white p-5">
+    <div className="border border-[#e5e5e5] bg-white p-5">
       <div className="flex flex-wrap items-center gap-2">
         <MetaChip>{segment.label}</MetaChip>
         <MetaChip>{getSegmentStatusLabel(segment.status)}</MetaChip>
@@ -495,7 +495,7 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/45">
             原内容
           </p>
-          <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C]/68 whitespace-pre-wrap">
+          <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-sm leading-7 text-[#1C1C1C]/68 whitespace-pre-wrap">
             {segment.original_text || "暂无"}
           </div>
         </div>
@@ -503,19 +503,19 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/45">
             优化后
           </p>
-          <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
+          <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
             {segment.suggested_text || "处理中"}
           </div>
         </div>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4">
+        <div className="border border-[#e5e5e5] bg-[#fafafa] p-4">
           <p className="text-xs font-semibold text-[#1C1C1C]/50">改了什么</p>
           <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/72">
             {segment.explanation.what || "保持原有结构，仅做保守优化。"}
           </p>
         </div>
-        <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4">
+        <div className="border border-[#e5e5e5] bg-[#fafafa] p-4">
           <p className="text-xs font-semibold text-[#1C1C1C]/50">
             为什么这样改
           </p>
@@ -523,7 +523,7 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
             {segment.explanation.why || "优先贴合岗位重点，但不新增事实。"}
           </p>
         </div>
-        <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-4">
+        <div className="border border-[#e5e5e5] bg-[#fafafa] p-4">
           <p className="text-xs font-semibold text-[#1C1C1C]/50">
             这样改的价值
           </p>
@@ -533,7 +533,7 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
         </div>
       </div>
       {segment.error_message ? (
-        <p className="mt-3 text-sm text-[#B42318]">{segment.error_message}</p>
+        <p className="mt-3 text-sm text-[#111111]">{segment.error_message}</p>
       ) : null}
     </div>
   );
@@ -1022,49 +1022,35 @@ export default function DashboardResumePage() {
   }
 
   return (
-    <PageShell className="gap-6">
+    <PageShell className="gap-8 py-4 md:py-6">
       <PageHeader
         eyebrow="Tailored Resume"
         title="专属简历"
-        description="这个页面只串你最终保留的接口：上传 PDF、直转 MD、保存简历、保存岗位 JD、生成优化简历、下载 Markdown。"
+        description="上传主简历，保存岗位，生成结果。"
         meta={
           <>
-            <MetaChip>{resume ? "已上传简历" : "未上传简历"}</MetaChip>
-            <MetaChip>{savedJob ? "已保存 JD" : "未保存 JD"}</MetaChip>
-            <MetaChip>
-              {workflow ? "已生成优化简历" : "未生成优化简历"}
-            </MetaChip>
+            <MetaChip>{resume ? "Resume Ready" : "Resume Missing"}</MetaChip>
+            <MetaChip>{savedJob ? "JD Ready" : "JD Missing"}</MetaChip>
+            <MetaChip>{workflow ? "Result Ready" : "Result Pending"}</MetaChip>
           </>
         }
-      />
+      >
+        <div className="bw-workbench-hero">
+          <div className="bw-flow-strip">
+            {[
+              { label: "Step 1", value: "上传主简历" },
+              { label: "Step 2", value: "保存岗位 JD" },
+              { label: "Step 3", value: "生成定制简历" },
+              { label: "Step 4", value: "进入模拟面试" },
+            ].map((step) => (
+              <div key={step.label} className="bw-flow-step">
+                <strong>{step.label}</strong>
+                <span>{step.value}</span>
+              </div>
+            ))}
+          </div>
 
-      {pageError ? (
-        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
-          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
-            操作失败
-          </AlertTitle>
-          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
-            {pageError}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {statusMessage ? (
-        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
-          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
-            当前状态
-          </AlertTitle>
-          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
-            {statusMessage}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <PaperSection
-        eyebrow="Resume"
-        title="上传、转 MD、保存简历"
-        rightSlot={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               ref={uploadInputRef}
               className="hidden"
@@ -1079,163 +1065,26 @@ export default function DashboardResumePage() {
               onClick={() => uploadInputRef.current?.click()}
             >
               <FileUp className="size-4" />
-              {isUploading || isConverting ? "上传并解析中" : "上传 PDF"}
+              {isUploading || isConverting ? "上传中" : "上传 PDF"}
             </Button>
             <Button
               disabled={!canSaveResume || isSavingResume}
               size="sm"
               type="button"
-              variant="secondary"
+              variant="outline"
               onClick={() => void handleSaveResume()}
             >
-              {isSavingResume ? "保存中" : "保存简历"}
+              {isSavingResume ? "保存简历中" : "保存简历"}
             </Button>
-          </div>
-        }
-      >
-        {resume ? (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <MetaChip>
-                <ResumeStatusIndicator resume={resume} />
-              </MetaChip>
-              <MetaChip>{resume.file_name}</MetaChip>
-              <MetaChip>{formatDate(resume.updated_at)}</MetaChip>
-            </div>
-            <PaperTextarea
-              value={resumeMarkdown}
-              onChange={(event) => setResumeMarkdown(event.target.value)}
-              placeholder="上传 PDF 或点击重新转 MD 后，这里会出现可编辑的 Markdown 简历。"
-              className="min-h-[320px]"
-            />
-            {normalizeMarkdown(resumeMarkdown) ? (
-              <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#FAFAF8] p-5">
-                <ResumeMarkdownPreview
-                  markdown={normalizeMarkdown(resumeMarkdown)}
-                />
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <PageEmptyState
-            title="还没有主简历"
-            description="先上传 PDF，系统会自动把 PDF 转成可编辑的 Markdown。"
-          />
-        )}
-      </PaperSection>
-
-      <PaperSection
-        eyebrow="Job"
-        title="保存或更新岗位 JD"
-        rightSlot={
-          <div className="flex items-center gap-2">
-            {savedJob ? (
-              <MetaChip>
-                <JobStatusIndicator job={savedJob} />
-              </MetaChip>
-            ) : null}
             <Button
               disabled={!canSaveJob || isSavingJob}
               size="sm"
               type="button"
+              variant="outline"
               onClick={() => void handleSaveJob()}
             >
-              {isSavingJob ? "保存中" : savedJob ? "更新 JD" : "保存 JD"}
+              {isSavingJob ? "保存 JD 中" : "保存 JD"}
             </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                岗位标题
-              </p>
-              <PaperInput
-                value={jobDraft.title}
-                onChange={(event) =>
-                  setJobDraft((current) => ({
-                    ...current,
-                    title: event.target.value,
-                  }))
-                }
-                placeholder="例如：高级前端工程师"
-              />
-            </div>
-            <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                公司名称
-              </p>
-              <PaperInput
-                value={jobDraft.company}
-                onChange={(event) =>
-                  setJobDraft((current) => ({
-                    ...current,
-                    company: event.target.value,
-                  }))
-                }
-                placeholder="例如：CareerPilot"
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                岗位地点
-              </p>
-              <PaperInput
-                value={jobDraft.job_city}
-                onChange={(event) =>
-                  setJobDraft((current) => ({
-                    ...current,
-                    job_city: event.target.value,
-                  }))
-                }
-                placeholder="例如：上海"
-              />
-            </div>
-            <div>
-              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-                来源链接
-              </p>
-              <PaperInput
-                value={jobDraft.source_url}
-                onChange={(event) =>
-                  setJobDraft((current) => ({
-                    ...current,
-                    source_url: event.target.value,
-                  }))
-                }
-                placeholder="可选"
-              />
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
-              目标岗位 JD
-            </p>
-            <PaperTextarea
-              value={jobDraft.jd_text}
-              onChange={(event) =>
-                setJobDraft((current) => ({
-                  ...current,
-                  jd_text: event.target.value,
-                }))
-              }
-              placeholder="粘贴完整岗位描述。首次点击保存会走 POST /jobs，之后更新会走 PUT /jobs/{job_id}。"
-              className="min-h-[240px]"
-            />
-          </div>
-        </div>
-      </PaperSection>
-
-      <PaperSection
-        eyebrow="Tailored"
-        title="生成并下载优化简历"
-        rightSlot={
-          <div className="flex gap-2">
             <Button
               disabled={!canGenerate || isGenerating || isWorkflowProcessing}
               size="sm"
@@ -1246,156 +1095,299 @@ export default function DashboardResumePage() {
               {(isGenerating || isWorkflowProcessing) &&
               generateStartTime !== null ? (
                 <>
-                  生成中{" "}
-                  <Timer
-                    startTime={generateStartTime}
-                    isActive={true}
-                  />
+                  生成中
+                  <Timer startTime={generateStartTime} isActive={true} />
                 </>
               ) : (
-                "生成优化简历"
+                "生成简历"
               )}
             </Button>
-            <Button
-              disabled={!canDownloadCurrentWorkflow || isDownloading}
-              size="sm"
-              type="button"
-              variant="secondary"
-              onClick={() => workflow && void handleDownload(workflow)}
-            >
-              <Download className="size-4" />
-              {isDownloading ? "下载中" : "下载当前结果"}
-            </Button>
-            {canRetryWorkflow ? (
-              <Button
-                disabled={isRetryingWorkflow}
-                size="sm"
-                type="button"
-                variant="secondary"
-                onClick={() => void handleRetryWorkflow()}
-              >
-                {isRetryingWorkflow ? "重试中" : "重试生成"}
-              </Button>
-            ) : null}
-            {latestSuccessfulWorkflow ? (
-              <Button
-                disabled={isDownloading}
-                size="sm"
-                type="button"
-                variant="secondary"
-                onClick={() => void handleDownload(latestSuccessfulWorkflow)}
-              >
-                <Download className="size-4" />
-                {isDownloading ? "下载中" : "下载上一份成功结果"}
-              </Button>
-            ) : null}
-            {canStartInterview ? (
-              <Button asChild size="sm" type="button" variant="secondary">
-                <Link
-                  href={`/dashboard/interviews?jobId=${interviewEntryWorkflow?.target_job.id}&optimizationSessionId=${interviewEntryWorkflow?.tailored_resume.session_id}`}
-                >
-                  开始模拟面试
-                  <ArrowUpRight className="size-4" />
-                </Link>
-              </Button>
-            ) : null}
           </div>
-        }
-      >
-        {!canGenerate ? (
-          <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
-            先完成 1. 上传并等待简历解析成功 / 或保存直转 Markdown 2. 保存岗位
-            JD 并等待解析成功，然后才能生成优化简历。
-          </div>
-        ) : null}
+        </div>
+      </PageHeader>
 
-        {workflow ? (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <MetaChip>{workflow.target_job.title}</MetaChip>
-              <MetaChip>
-                {getFitBandLabel(workflow.tailored_resume.fit_band)}
-              </MetaChip>
-              <MetaChip>
-                Score {workflow.tailored_resume.overall_score}
-              </MetaChip>
-              <MetaChip>{getWorkflowStatusLabel(workflowDisplayStatus)}</MetaChip>
-              <MetaChip>
-                {workflow.tailored_resume.downloadable
-                  ? "当前结果可下载"
-                  : "当前结果不可下载"}
-              </MetaChip>
-            </div>
-            <div
-              className={cn(
-                "rounded-2xl border p-4",
-                getWorkflowStatusTone(workflowDisplayStatus),
-              )}
-            >
-              <p className="text-sm font-medium">
-                {getWorkflowPrimaryMessage(workflow)}
-              </p>
-              <p className="mt-2 text-sm opacity-80">
-                {getWorkflowSecondaryMessage(workflow)}
-              </p>
-              {workflow.tailored_resume.display_status !== "success" &&
-              latestSuccessfulWorkflow ? (
-                <p className="mt-2 text-sm opacity-80">
-                  上一份成功结果仍可下载：
-                  {latestSuccessfulWorkflow.tailored_resume.downloadable_file_name ||
-                    "optimized_resume.md"}{" "}
-                  · {formatDate(latestSuccessfulWorkflow.tailored_resume.updated_at)}
-                </p>
-              ) : null}
-              {workflow.tailored_resume.display_status === "success" ? (
-                <p className="mt-2 text-sm opacity-80">
-                  当前可下载文件：
-                  {workflow.tailored_resume.downloadable_file_name ||
-                    "optimized_resume.md"}
-                </p>
-              ) : null}
-              {!workflow.tailored_resume.downloadable &&
-              workflow.tailored_resume.display_status !== "success" ? (
-                <p className="mt-2 text-sm opacity-80">
-                  当前任务未成功生成最新结果，因此不能下载当前结果。
-                </p>
-              ) : null}
-            </div>
-            {workflow.tailored_resume?.segments?.length ? (
+      {pageError ? (
+        <Alert className="border border-[#e5e5e5] bg-[#fafafa] text-[#111111]">
+          <AlertTitle>错误</AlertTitle>
+          <AlertDescription>{pageError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {statusMessage ? (
+        <Alert className="border border-[#e5e5e5] bg-[#fafafa] text-[#111111]">
+          <AlertTitle>状态</AlertTitle>
+          <AlertDescription>{statusMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        <div className="space-y-6">
+          <PaperSection
+            eyebrow="Resume"
+            title="主简历"
+            rightSlot={
+              resume ? (
+                <div className="bw-meta-row">
+                  <MetaChip>
+                    <ResumeStatusIndicator resume={resume} />
+                  </MetaChip>
+                  <MetaChip>{resume.file_name}</MetaChip>
+                  <MetaChip>{formatDate(resume.updated_at)}</MetaChip>
+                </div>
+              ) : null
+            }
+          >
+            {resume ? (
               <div className="space-y-4">
-                {workflow.tailored_resume.segments
-                  .slice()
-                  .sort((a, b) => a.sequence - b.sequence)
-                  .map((segment) => (
-                    <SegmentCard key={segment.key} segment={segment} />
-                  ))}
+                <PaperTextarea
+                  value={resumeMarkdown}
+                  onChange={(event) => setResumeMarkdown(event.target.value)}
+                  placeholder="上传 PDF 后在这里编辑 Markdown。"
+                  className="min-h-[320px]"
+                />
+                {normalizeMarkdown(resumeMarkdown) ? (
+                  <div className="border border-[#e5e5e5] bg-[#fafafa] p-5">
+                    <ResumeMarkdownPreview
+                      markdown={normalizeMarkdown(resumeMarkdown)}
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : (
-              <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
-                尚未进入分段生成，后端任务启动后会在这里持续更新每一段状态。
-              </div>
-            )}
-            {workflow.tailored_resume.document.markdown.trim() ? (
-              <PaperTextarea
-                value={workflow.tailored_resume.document.markdown}
-                readOnly
-                className="min-h-[320px]"
+              <PageEmptyState
+                title="还没有主简历"
+                description="上传 PDF 后开始编辑。"
               />
-            ) : (
-              <div className="rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] px-4 py-3 text-sm text-[#1C1C1C]/70">
-                {workflow.tailored_resume.result_is_empty
-                  ? "本次流程已结束，但没有产出可下载的优化简历内容。"
-                  : "当前还没有生成可展示的优化简历内容。"}
-              </div>
             )}
-          </div>
-        ) : (
-          <PageEmptyState
-            title="还没有优化后的简历"
-            description="保存简历和 JD 后，点击生成优化简历。"
-          />
-        )}
-      </PaperSection>
+          </PaperSection>
+
+          <PaperSection
+            eyebrow="Job"
+            title="岗位 JD"
+            rightSlot={
+              savedJob ? (
+                <MetaChip>
+                  <JobStatusIndicator job={savedJob} />
+                </MetaChip>
+              ) : null
+            }
+          >
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                    岗位标题
+                  </p>
+                  <PaperInput
+                    value={jobDraft.title}
+                    onChange={(event) =>
+                      setJobDraft((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
+                    placeholder="高级前端工程师"
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                    公司名称
+                  </p>
+                  <PaperInput
+                    value={jobDraft.company}
+                    onChange={(event) =>
+                      setJobDraft((current) => ({
+                        ...current,
+                        company: event.target.value,
+                      }))
+                    }
+                    placeholder="CareerPilot"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                    岗位地点
+                  </p>
+                  <PaperInput
+                    value={jobDraft.job_city}
+                    onChange={(event) =>
+                      setJobDraft((current) => ({
+                        ...current,
+                        job_city: event.target.value,
+                      }))
+                    }
+                    placeholder="上海"
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                    来源链接
+                  </p>
+                  <PaperInput
+                    value={jobDraft.source_url}
+                    onChange={(event) =>
+                      setJobDraft((current) => ({
+                        ...current,
+                        source_url: event.target.value,
+                      }))
+                    }
+                    placeholder="可选"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">
+                  目标岗位 JD
+                </p>
+                <PaperTextarea
+                  value={jobDraft.jd_text}
+                  onChange={(event) =>
+                    setJobDraft((current) => ({
+                      ...current,
+                      jd_text: event.target.value,
+                    }))
+                  }
+                  placeholder="粘贴岗位描述。"
+                  className="min-h-[240px]"
+                />
+              </div>
+            </div>
+          </PaperSection>
+        </div>
+
+        <div className="space-y-6">
+          <PaperSection
+            eyebrow="Tailored"
+            title="定制结果"
+            rightSlot={
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={!canDownloadCurrentWorkflow || isDownloading}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => workflow && void handleDownload(workflow)}
+                >
+                  <Download className="size-4" />
+                  {isDownloading ? "下载中" : "下载结果"}
+                </Button>
+                {canRetryWorkflow ? (
+                  <Button
+                    disabled={isRetryingWorkflow}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleRetryWorkflow()}
+                  >
+                    {isRetryingWorkflow ? "重试中" : "重试生成"}
+                  </Button>
+                ) : null}
+                {canStartInterview ? (
+                  <Button asChild size="sm" type="button" variant="outline">
+                    <Link
+                      href={`/dashboard/interviews?jobId=${interviewEntryWorkflow?.target_job.id}&optimizationSessionId=${interviewEntryWorkflow?.tailored_resume.session_id}`}
+                    >
+                      进入面试
+                      <ArrowUpRight className="size-4" />
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            }
+          >
+            {!canGenerate ? (
+              <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                先保存主简历和岗位 JD。
+              </div>
+            ) : null}
+
+            {workflow ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <MetaChip>{workflow.target_job.title}</MetaChip>
+                  <MetaChip>
+                    {getFitBandLabel(workflow.tailored_resume.fit_band)}
+                  </MetaChip>
+                  <MetaChip>
+                    Score {workflow.tailored_resume.overall_score}
+                  </MetaChip>
+                  <MetaChip>{getWorkflowStatusLabel(workflowDisplayStatus)}</MetaChip>
+                </div>
+                <div
+                  className={cn(
+                    "border p-4",
+                    getWorkflowStatusTone(workflowDisplayStatus),
+                  )}
+                >
+                  <p className="text-sm font-medium">
+                    {getWorkflowPrimaryMessage(workflow)}
+                  </p>
+                  <p className="mt-2 text-sm opacity-80">
+                    {getWorkflowSecondaryMessage(workflow)}
+                  </p>
+                  {workflow.tailored_resume.display_status !== "success" &&
+                  latestSuccessfulWorkflow ? (
+                    <p className="mt-2 text-sm opacity-80">
+                      上一份结果仍可下载：
+                      {latestSuccessfulWorkflow.tailored_resume.downloadable_file_name ||
+                        "optimized_resume.md"}{" "}
+                      · {formatDate(latestSuccessfulWorkflow.tailored_resume.updated_at)}
+                    </p>
+                  ) : null}
+                </div>
+                {latestSuccessfulWorkflow ? (
+                  <Button
+                    disabled={isDownloading}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => void handleDownload(latestSuccessfulWorkflow)}
+                  >
+                    <Download className="size-4" />
+                    {isDownloading ? "下载中" : "下载上一份结果"}
+                  </Button>
+                ) : null}
+                {workflow.tailored_resume?.segments?.length ? (
+                  <div className="space-y-4">
+                    {workflow.tailored_resume.segments
+                      .slice()
+                      .sort((a, b) => a.sequence - b.sequence)
+                      .map((segment) => (
+                        <SegmentCard key={segment.key} segment={segment} />
+                      ))}
+                  </div>
+                ) : (
+                  <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                    等待分段结果。
+                  </div>
+                )}
+                {workflow.tailored_resume.document.markdown.trim() ? (
+                  <PaperTextarea
+                    value={workflow.tailored_resume.document.markdown}
+                    readOnly
+                    className="min-h-[320px]"
+                  />
+                ) : (
+                  <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                    {workflow.tailored_resume.result_is_empty
+                      ? "本次没有可下载内容。"
+                      : "等待可展示结果。"}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <PageEmptyState
+                title="还没有定制结果"
+                description="保存简历和 JD 后开始生成。"
+              />
+            )}
+          </PaperSection>
+        </div>
+      </div>
     </PageShell>
   );
 }

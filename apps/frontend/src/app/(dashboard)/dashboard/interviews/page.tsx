@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/components/auth-provider";
 import { PaperTextarea } from "@/components/brutalist/form-controls";
 import {
+  MetaChip,
   PageHeader,
   PageShell,
   PaperSection,
@@ -398,48 +399,68 @@ export default function DashboardInterviewsPage() {
   }
 
   return (
-    <PageShell className="gap-6">
+    <PageShell className="gap-8 py-4 md:py-6">
       <PageHeader
-        description="基于当前用户自己的岗位 JD 和优化简历进入真实问答训练。"
+        description="继续当前岗位上下文，直接训练。"
         eyebrow="Mock Interviews"
         meta={
-          <Button asChild type="button" variant="secondary">
-            <Link href="/dashboard/resume">
-              返回专属简历
-              <ArrowUpRight className="ml-2 size-4" />
-            </Link>
-          </Button>
+          <>
+            <MetaChip>{sessions.length} 场训练</MetaChip>
+            <MetaChip>{selectedSession ? "会话已选中" : "等待会话"}</MetaChip>
+          </>
         }
         title="模拟面试"
-      />
+      >
+        <div className="bw-workbench-hero">
+          <div className="bw-flow-strip">
+            <div className="bw-flow-step">
+              <strong>Step 1</strong>
+              <span>选择会话</span>
+            </div>
+            <div className="bw-flow-step">
+              <strong>Step 2</strong>
+              <span>回答问题</span>
+            </div>
+            <div className="bw-flow-step">
+              <strong>Step 3</strong>
+              <span>查看复盘</span>
+            </div>
+            <div className="bw-flow-step">
+              <strong>Step 4</strong>
+              <span>继续下一轮</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button asChild type="button" variant="outline">
+              <Link href="/dashboard/resume">
+                返回专属简历
+                <ArrowUpRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </PageHeader>
 
       {pageError ? (
-        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
-          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
-            操作失败
-          </AlertTitle>
-          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
-            {pageError}
-          </AlertDescription>
+        <Alert className="border border-[#e5e5e5] bg-[#fafafa] text-[#111111]">
+          <AlertTitle>错误</AlertTitle>
+          <AlertDescription>{pageError}</AlertDescription>
         </Alert>
       ) : null}
 
       {statusMessage ? (
-        <Alert className="border border-[#1C1C1C]/10 bg-[#F9F8F6] text-[#1C1C1C]">
-          <AlertTitle className="text-base font-semibold tracking-tight text-[#1C1C1C]">
-            当前状态
-          </AlertTitle>
-          <AlertDescription className="text-sm leading-relaxed text-[#1C1C1C]/60">
-            {statusMessage}
-          </AlertDescription>
+        <Alert className="border border-[#e5e5e5] bg-[#fafafa] text-[#111111]">
+          <AlertTitle>状态</AlertTitle>
+          <AlertDescription>{statusMessage}</AlertDescription>
         </Alert>
       ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
         <PaperSection title="训练会话" eyebrow="Session History">
           {sessions.length === 0 ? (
             <PageEmptyState
-              description="先从专属简历进入，这里会保留当前用户自己的训练记录。"
+              description="先从专属简历开始。"
               title="还没有模拟面试"
             />
           ) : (
@@ -450,25 +471,25 @@ export default function DashboardInterviewsPage() {
                   <button
                     className={`block w-full border p-4 text-left transition-colors ${
                       isActive
-                        ? "border-[#1C1C1C] bg-white"
+                        ? "border-[#111111] bg-[#111111] text-[#fafafa]"
                         : "border-[#1C1C1C]/10 bg-white hover:border-[#1C1C1C]/20"
                     }`}
                     key={session.id}
                     onClick={() => void loadSelectedSession(session.id)}
                     type="button"
                   >
-                    <p className="text-sm font-semibold text-[#1C1C1C]">
+                    <p className={`text-sm font-semibold ${isActive ? "text-[#fafafa]" : "text-[#1C1C1C]"}`}>
                       模拟面试 · {getSessionStatusLabel(session.status)}
                     </p>
-                    <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
+                    <p className={`mt-2 text-sm leading-relaxed ${isActive ? "text-[#fafafa]/80" : "text-[#1C1C1C]/60"}`}>
                       简历 v{session.source_resume_version} / 岗位 v
                       {session.source_job_version}
                     </p>
-                    <p className="mt-1 text-xs text-[#1C1C1C]/45">
+                    <p className={`mt-1 text-xs ${isActive ? "text-[#fafafa]/65" : "text-[#1C1C1C]/45"}`}>
                       {formatDate(session.created_at)}
                     </p>
                     {session.current_turn ? (
-                      <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-[#1C1C1C]/60">
+                      <p className={`mt-3 line-clamp-2 text-sm leading-relaxed ${isActive ? "text-[#fafafa]/80" : "text-[#1C1C1C]/60"}`}>
                         当前题目：{session.current_turn.question_text}
                       </p>
                     ) : null}
@@ -481,7 +502,7 @@ export default function DashboardInterviewsPage() {
 
         {!selectedSession ? (
           <PageEmptyState
-            description="先从专属简历生成优化简历，再创建一场训练。"
+            description="先创建或选择一场训练。"
             title="还没有选中训练会话"
           />
         ) : (
@@ -499,17 +520,16 @@ export default function DashboardInterviewsPage() {
                       disabled={isRetryingPrep}
                       onClick={() => void handleRetryPrep()}
                       type="button"
-                      variant="secondary"
+                      variant="outline"
                     >
                       {isRetryingPrep ? "重试中..." : "重试准备"}
                     </Button>
                   ) : null}
                   <Button
-                    className="border-b border-[#1C1C1C]/20 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5"
                     disabled={isDeletingSessionId === selectedSession.id}
                     onClick={() => void handleDeleteSession(selectedSession.id)}
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                   >
                     {isDeletingSessionId === selectedSession.id
                       ? "删除中..."
@@ -546,7 +566,7 @@ export default function DashboardInterviewsPage() {
                   </p>
                 </div>
               </div>
-              <div className="mt-4 rounded-2xl border border-[#1C1C1C]/10 bg-[#F9F8F6] p-4">
+              <div className="mt-4 border border-[#e5e5e5] bg-[#fafafa] p-4">
                 <p className="text-sm font-medium text-[#1C1C1C]">
                   {selectedSession.prep_state.message || "等待准备状态。"}
                 </p>
@@ -566,11 +586,10 @@ export default function DashboardInterviewsPage() {
                 )}
                 rightSlot={
                   <Button
-                    className="border-b border-[#1C1C1C]/20 bg-white px-4 py-2 text-sm font-medium text-[#1C1C1C] transition-colors hover:bg-[#1C1C1C]/5"
                     disabled={isFinishing}
                     onClick={() => void handleFinishSession()}
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                   >
                     {isFinishing ? "结束中..." : "结束面试"}
                     <CheckCircle2 className="ml-2 size-4" />
@@ -591,7 +610,6 @@ export default function DashboardInterviewsPage() {
                   />
 
                   <Button
-                    className="border-b border-[#1C1C1C]/20 bg-[#1C1C1C] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1C1C1C]/90 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isSubmitting}
                     onClick={() => void handleSubmitAnswer()}
                     type="button"
@@ -634,7 +652,7 @@ export default function DashboardInterviewsPage() {
               selectedSession.review.next_steps.length > 0) ? (
               <PaperSection title="结构化复盘" eyebrow="Review">
                 <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border border-[#1C1C1C]/10 bg-white p-4">
+                  <div className="border border-[#1C1C1C]/10 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
                       亮点
                     </p>
@@ -648,7 +666,7 @@ export default function DashboardInterviewsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-[#1C1C1C]/10 bg-white p-4">
+                  <div className="border border-[#1C1C1C]/10 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
                       风险
                     </p>
@@ -662,7 +680,7 @@ export default function DashboardInterviewsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-[#1C1C1C]/10 bg-white p-4">
+                  <div className="border border-[#1C1C1C]/10 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
                       下一步
                     </p>

@@ -10,7 +10,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <DashboardTopNav />
 
         <main className="py-0">
-          <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-4 sm:px-6">
+          <div className="mx-auto w-full max-w-[1360px] px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             {children}
           </div>
         </main>
