@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, Settings, Sparkles } from "lucide-react";
+import { FileText, LayoutDashboard, Settings, Sparkles } from "lucide-react";
 
 export type NavMatchMode = "exact" | "prefix";
 
@@ -23,6 +23,12 @@ export const dashboardNavSections: NavSection[] = [
   {
     title: "流程",
     items: [
+      {
+        title: "工作流概览",
+        href: "/dashboard/overview",
+        icon: LayoutDashboard,
+        match: "exact",
+      },
       {
         title: "专属简历",
         href: "/dashboard/resume",
