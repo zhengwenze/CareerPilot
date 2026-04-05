@@ -7,6 +7,8 @@ description: Use this skill when the user wants to write, rewrite, validate, or 
 
 Write and validate Git commit messages using the Conventional Commits standard.
 
+For Career Pilot's repository-specific dual-remote publishing workflow, prefer `.agents/skills/dual-repo-publish/SKILL.md` after the commit message has been determined.
+
 Use this skill when the user asks to:
 
 - write a commit message
