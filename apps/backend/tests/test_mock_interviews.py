@@ -119,6 +119,39 @@ async def test_mock_interview_request_text_allows_ollama_without_api_key(monkeyp
     assert calls[0].api_key is None
 
 
+@pytest.mark.asyncio
+async def test_mock_interview_request_text_allows_codex2gpt_without_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    settings = Settings(
+        _env_file=None,
+        interview_ai_provider="codex2gpt",
+        interview_ai_base_url="http://127.0.0.1:18100/v1",
+        interview_ai_api_key=None,
+        interview_ai_model="gpt-5.4",
+        interview_ai_model_planning="gpt-5.4",
+    )
+
+    calls: list[object] = []
+
+    async def fake_request_text_completion(**kwargs) -> str:
+        calls.append(kwargs["config"])
+        return "OK"
+
+    monkeypatch.setattr(mock_interview_service, "request_text_completion", fake_request_text_completion)
+
+    result = await mock_interview_service._request_text(
+        settings,
+        prompt="ping",
+        max_tokens=32,
+    )
+
+    assert result == "OK"
+    assert len(calls) == 1
+    assert calls[0].provider == "codex2gpt"
+    assert calls[0].api_key is None
+
+
 async def test_mock_interview_returns_first_question_then_prepares_followups_async(
     app, client, db_session, monkeypatch
 ):
