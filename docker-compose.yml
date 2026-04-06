@@ -76,9 +76,12 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - career-pilot-backend-data:/app/data
       - ./apps/backend:/app
+      - career-pilot-backend-venv:/app/.venv
       - ./apps/backend/.env:/app/.env:ro
 
   frontend:
@@ -107,3 +110,4 @@ volumes:
   career-pilot-redis-data:
   career-pilot-minio-data:
   career-pilot-backend-data:
+  career-pilot-backend-venv:
