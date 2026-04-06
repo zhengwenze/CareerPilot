@@ -640,6 +640,7 @@ export default function DashboardResumePage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isRetryingWorkflow, setIsRetryingWorkflow] = useState(false);
   const [generateStartTime, setGenerateStartTime] = useState<number | null>(null);
+  const [parseStartTime, setParseStartTime] = useState<number | null>(null);
 
   const workflowDisplayStatus = workflow?.tailored_resume.display_status ?? 'idle';
   const isWorkflowProcessing =
@@ -856,12 +857,13 @@ export default function DashboardResumePage() {
     }
 
     setIsUploading(true);
+    setIsConverting(true);
+    setParseStartTime(Date.now());
     setPageError('');
 
     try {
       const uploaded = await uploadPrimaryResume(token, file);
       setResume(uploaded);
-      setIsConverting(true);
 
       const converted = await convertResumePdfToMarkdown(token, file);
       setLatestPdfConversion(converted);
@@ -1139,353 +1141,348 @@ export default function DashboardResumePage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-        <div className="space-y-6">
-          <PaperSection
-            eyebrow="Resume"
-            title="主简历"
-            rightSlot={
-              resume ? (
-                <div className="bw-meta-row">
-                  <MetaChip>
-                    <ResumeStatusIndicator resume={resume} />
-                  </MetaChip>
-                  <MetaChip>{resume.file_name}</MetaChip>
-                  <MetaChip>{formatDate(resume.updated_at)}</MetaChip>
-                </div>
-              ) : null
-            }
-          >
-            {resume ? (
-              <div className="space-y-4">
-                {isDevelopment && (hasImmediateAiDebug || hasPersistedAiDebug) ? (
-                  <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-sm text-[#1C1C1C]/72">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#1C1C1C]/50">
-                      AI Debug
-                    </p>
-                    {hasImmediateAiDebug && immediateAiDebug ? (
-                      <div className="mt-3 border border-[#e5e5e5] bg-white p-3">
-                        <p className="text-xs font-semibold text-[#1C1C1C]/50">
-                          本次上传即时转换结果 (/tailored-resumes/pdf-to-md)
-                        </p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <p>AI cleaned: {immediateAiDebug.aiUsed ? 'yes' : 'no'}</p>
-                          <p>
-                            provider/model:{' '}
-                            {[immediateAiDebug.provider, immediateAiDebug.model]
-                              .filter(Boolean)
-                              .join('/') || 'n/a'}
-                          </p>
-                          <p>fallback used: {immediateAiDebug.fallbackUsed ? 'yes' : 'no'}</p>
-                          <p>AI path: {immediateAiDebug.aiPath || 'n/a'}</p>
-                          <p>degraded used: {immediateAiDebug.degradedUsed ? 'yes' : 'no'}</p>
-                          <p>
-                            AI latency:{' '}
-                            {immediateAiDebug.latencyMs === null
-                              ? 'n/a'
-                              : `${immediateAiDebug.latencyMs} ms`}
-                          </p>
-                          <p>
-                            AI chain latency:{' '}
-                            {immediateAiDebug.chainLatencyMs === null
-                              ? 'n/a'
-                              : `${immediateAiDebug.chainLatencyMs} ms`}
-                          </p>
-                          <p>prompt version: {immediateAiDebug.promptVersion || 'n/a'}</p>
-                          <p>error message: {immediateAiDebug.error || 'none'}</p>
-                        </div>
-                        {immediateAiDebug.attempts.length > 0 ? (
-                          <div className="mt-3 space-y-1 border-t border-[#e5e5e5] pt-3 text-xs text-[#1C1C1C]/70">
-                            <p className="font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
-                              Attempts
-                            </p>
-                            {immediateAiDebug.attempts.map(attempt => (
-                              <p key={`${attempt.stage}-${attempt.provider}-${attempt.model}`}>
-                                {formatAttemptLine(
-                                  attempt.stage,
-                                  attempt.provider,
-                                  attempt.model,
-                                  attempt.status,
-                                  attempt.latency_ms,
-                                  attempt.error
-                                )}
-                              </p>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {hasPersistedAiDebug && persistedAiDebug ? (
-                      <div className="mt-3 border border-[#e5e5e5] bg-white p-3">
-                        <p className="text-xs font-semibold text-[#1C1C1C]/50">
-                          已持久化解析结果 (parse_artifacts_json)
-                        </p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <p>AI cleaned: {persistedAiDebug.aiUsed ? 'yes' : 'no'}</p>
-                          <p>
-                            provider/model:{' '}
-                            {[persistedAiDebug.provider, persistedAiDebug.model]
-                              .filter(Boolean)
-                              .join('/') || 'n/a'}
-                          </p>
-                          <p>fallback used: {persistedAiDebug.fallbackUsed ? 'yes' : 'no'}</p>
-                          <p>AI path: {persistedAiDebug.aiPath || 'n/a'}</p>
-                          <p>degraded used: {persistedAiDebug.degradedUsed ? 'yes' : 'no'}</p>
-                          <p>
-                            AI latency:{' '}
-                            {persistedAiDebug.latencyMs === null
-                              ? 'n/a'
-                              : `${persistedAiDebug.latencyMs} ms`}
-                          </p>
-                          <p>
-                            AI chain latency:{' '}
-                            {persistedAiDebug.chainLatencyMs === null
-                              ? 'n/a'
-                              : `${persistedAiDebug.chainLatencyMs} ms`}
-                          </p>
-                          <p>prompt version: {persistedAiDebug.promptVersion || 'n/a'}</p>
-                          <p>error message: {persistedAiDebug.error || 'none'}</p>
-                        </div>
-                        {persistedAiDebug.attempts.length > 0 ? (
-                          <div className="mt-3 space-y-1 border-t border-[#e5e5e5] pt-3 text-xs text-[#1C1C1C]/70">
-                            <p className="font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
-                              Attempts
-                            </p>
-                            {persistedAiDebug.attempts.map(attempt => (
-                              <p key={`${attempt.stage}-${attempt.provider}-${attempt.model}`}>
-                                {formatAttemptLine(
-                                  attempt.stage,
-                                  attempt.provider,
-                                  attempt.model,
-                                  attempt.status,
-                                  attempt.latency_ms,
-                                  attempt.error
-                                )}
-                              </p>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                <PaperTextarea
-                  value={resumeMarkdown}
-                  onChange={event => setResumeMarkdown(event.target.value)}
-                  placeholder="上传 PDF 后在这里编辑 Markdown。"
-                  className="min-h-[320px]"
-                />
-                {normalizeMarkdown(resumeMarkdown) ? (
-                  <div className="border border-[#e5e5e5] bg-[#fafafa] p-5">
-                    <ResumeMarkdownPreview markdown={normalizeMarkdown(resumeMarkdown)} />
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <PageEmptyState title="还没有主简历" description="上传 PDF 后开始编辑。" />
-            )}
-          </PaperSection>
-
-          <PaperSection
-            eyebrow="Job"
-            title="岗位 JD"
-            rightSlot={
-              savedJob ? (
+      <div className="space-y-6">
+        <PaperSection
+          eyebrow="Resume"
+          title="主简历"
+          rightSlot={
+            resume ? (
+              <div className="bw-meta-row">
                 <MetaChip>
-                  <JobStatusIndicator job={savedJob} />
+                  <ResumeStatusIndicator resume={resume} processingStartTime={parseStartTime} isProcessingOverride={isConverting} />
                 </MetaChip>
-              ) : null
-            }
-          >
+                <MetaChip>{resume.file_name}</MetaChip>
+                <MetaChip>{formatDate(resume.updated_at)}</MetaChip>
+              </div>
+            ) : null
+          }
+        >
+          {resume ? (
             <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位标题</p>
-                  <PaperInput
-                    value={jobDraft.title}
-                    onChange={event =>
-                      setJobDraft(current => ({
-                        ...current,
-                        title: event.target.value,
-                      }))
-                    }
-                    placeholder="高级前端工程师"
-                  />
+              {isDevelopment && (hasImmediateAiDebug || hasPersistedAiDebug) ? (
+                <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-sm text-[#1C1C1C]/72">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#1C1C1C]/50">
+                    AI Debug
+                  </p>
+                  {hasImmediateAiDebug && immediateAiDebug ? (
+                    <div className="mt-3 border border-[#e5e5e5] bg-white p-3">
+                      <p className="text-xs font-semibold text-[#1C1C1C]/50">
+                        本次上传即时转换结果 (/tailored-resumes/pdf-to-md)
+                      </p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <p>AI cleaned: {immediateAiDebug.aiUsed ? 'yes' : 'no'}</p>
+                        <p>
+                          provider/model:{' '}
+                          {[immediateAiDebug.provider, immediateAiDebug.model]
+                            .filter(Boolean)
+                            .join('/') || 'n/a'}
+                        </p>
+                        <p>fallback used: {immediateAiDebug.fallbackUsed ? 'yes' : 'no'}</p>
+                        <p>AI path: {immediateAiDebug.aiPath || 'n/a'}</p>
+                        <p>degraded used: {immediateAiDebug.degradedUsed ? 'yes' : 'no'}</p>
+                        <p>
+                          AI latency:{' '}
+                          {immediateAiDebug.latencyMs === null
+                            ? 'n/a'
+                            : `${immediateAiDebug.latencyMs} ms`}
+                        </p>
+                        <p>
+                          AI chain latency:{' '}
+                          {immediateAiDebug.chainLatencyMs === null
+                            ? 'n/a'
+                            : `${immediateAiDebug.chainLatencyMs} ms`}
+                        </p>
+                        <p>prompt version: {immediateAiDebug.promptVersion || 'n/a'}</p>
+                        <p>error message: {immediateAiDebug.error || 'none'}</p>
+                      </div>
+                      {immediateAiDebug.attempts.length > 0 ? (
+                        <div className="mt-3 space-y-1 border-t border-[#e5e5e5] pt-3 text-xs text-[#1C1C1C]/70">
+                          <p className="font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
+                            Attempts
+                          </p>
+                          {immediateAiDebug.attempts.map(attempt => (
+                            <p key={`${attempt.stage}-${attempt.provider}-${attempt.model}`}>
+                              {formatAttemptLine(
+                                attempt.stage,
+                                attempt.provider,
+                                attempt.model,
+                                attempt.status,
+                                attempt.latency_ms,
+                                attempt.error
+                              )}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {hasPersistedAiDebug && persistedAiDebug ? (
+                    <div className="mt-3 border border-[#e5e5e5] bg-white p-3">
+                      <p className="text-xs font-semibold text-[#1C1C1C]/50">
+                        已持久化解析结果 (parse_artifacts_json)
+                      </p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <p>AI cleaned: {persistedAiDebug.aiUsed ? 'yes' : 'no'}</p>
+                        <p>
+                          provider/model:{' '}
+                          {[persistedAiDebug.provider, persistedAiDebug.model]
+                            .filter(Boolean)
+                            .join('/') || 'n/a'}
+                        </p>
+                        <p>fallback used: {persistedAiDebug.fallbackUsed ? 'yes' : 'no'}</p>
+                        <p>AI path: {persistedAiDebug.aiPath || 'n/a'}</p>
+                        <p>degraded used: {persistedAiDebug.degradedUsed ? 'yes' : 'no'}</p>
+                        <p>
+                          AI latency:{' '}
+                          {persistedAiDebug.latencyMs === null
+                            ? 'n/a'
+                            : `${persistedAiDebug.latencyMs} ms`}
+                        </p>
+                        <p>
+                          AI chain latency:{' '}
+                          {persistedAiDebug.chainLatencyMs === null
+                            ? 'n/a'
+                            : `${persistedAiDebug.chainLatencyMs} ms`}
+                        </p>
+                        <p>prompt version: {persistedAiDebug.promptVersion || 'n/a'}</p>
+                        <p>error message: {persistedAiDebug.error || 'none'}</p>
+                      </div>
+                      {persistedAiDebug.attempts.length > 0 ? (
+                        <div className="mt-3 space-y-1 border-t border-[#e5e5e5] pt-3 text-xs text-[#1C1C1C]/70">
+                          <p className="font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
+                            Attempts
+                          </p>
+                          {persistedAiDebug.attempts.map(attempt => (
+                            <p key={`${attempt.stage}-${attempt.provider}-${attempt.model}`}>
+                              {formatAttemptLine(
+                                attempt.stage,
+                                attempt.provider,
+                                attempt.model,
+                                attempt.status,
+                                attempt.latency_ms,
+                                attempt.error
+                              )}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-                <div>
-                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">公司名称</p>
-                  <PaperInput
-                    value={jobDraft.company}
-                    onChange={event =>
-                      setJobDraft(current => ({
-                        ...current,
-                        company: event.target.value,
-                      }))
-                    }
-                    placeholder="CareerPilot"
-                  />
+              ) : null}
+              <PaperTextarea
+                value={resumeMarkdown}
+                onChange={event => setResumeMarkdown(event.target.value)}
+                placeholder="上传 PDF 后在这里编辑 Markdown。"
+                className="min-h-[320px]"
+              />
+              {normalizeMarkdown(resumeMarkdown) ? (
+                <div className="border border-[#e5e5e5] bg-[#fafafa] p-5">
+                  <ResumeMarkdownPreview markdown={normalizeMarkdown(resumeMarkdown)} />
                 </div>
-              </div>
+              ) : null}
+            </div>
+          ) : (
+            <PageEmptyState title="还没有主简历" description="上传 PDF 后开始编辑。" />
+          )}
+        </PaperSection>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位地点</p>
-                  <PaperInput
-                    value={jobDraft.job_city}
-                    onChange={event =>
-                      setJobDraft(current => ({
-                        ...current,
-                        job_city: event.target.value,
-                      }))
-                    }
-                    placeholder="上海"
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-sm font-medium text-[#1C1C1C]">来源链接</p>
-                  <PaperInput
-                    value={jobDraft.source_url}
-                    onChange={event =>
-                      setJobDraft(current => ({
-                        ...current,
-                        source_url: event.target.value,
-                      }))
-                    }
-                    placeholder="可选"
-                  />
-                </div>
-              </div>
-
+        <PaperSection
+          eyebrow="Job"
+          title="岗位 JD"
+          rightSlot={
+            savedJob ? (
+              <MetaChip>
+                <JobStatusIndicator job={savedJob} />
+              </MetaChip>
+            ) : null
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">目标岗位 JD</p>
-                <PaperTextarea
-                  value={jobDraft.jd_text}
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位标题</p>
+                <PaperInput
+                  value={jobDraft.title}
                   onChange={event =>
                     setJobDraft(current => ({
                       ...current,
-                      jd_text: event.target.value,
+                      title: event.target.value,
                     }))
                   }
-                  placeholder="粘贴岗位描述。"
-                  className="min-h-[240px]"
+                  placeholder="高级前端工程师"
+                />
+              </div>
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">公司名称</p>
+                <PaperInput
+                  value={jobDraft.company}
+                  onChange={event =>
+                    setJobDraft(current => ({
+                      ...current,
+                      company: event.target.value,
+                    }))
+                  }
+                  placeholder="CareerPilot"
                 />
               </div>
             </div>
-          </PaperSection>
-        </div>
 
-        <div className="space-y-6">
-          <PaperSection
-            eyebrow="Tailored"
-            title="定制结果"
-            rightSlot={
-              <div className="flex flex-wrap gap-2">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">岗位地点</p>
+                <PaperInput
+                  value={jobDraft.job_city}
+                  onChange={event =>
+                    setJobDraft(current => ({
+                      ...current,
+                      job_city: event.target.value,
+                    }))
+                  }
+                  placeholder="上海"
+                />
+              </div>
+              <div>
+                <p className="mb-2 text-sm font-medium text-[#1C1C1C]">来源链接</p>
+                <PaperInput
+                  value={jobDraft.source_url}
+                  onChange={event =>
+                    setJobDraft(current => ({
+                      ...current,
+                      source_url: event.target.value,
+                    }))
+                  }
+                  placeholder="可选"
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-medium text-[#1C1C1C]">目标岗位 JD</p>
+              <PaperTextarea
+                value={jobDraft.jd_text}
+                onChange={event =>
+                  setJobDraft(current => ({
+                    ...current,
+                    jd_text: event.target.value,
+                  }))
+                }
+                placeholder="粘贴岗位描述。"
+                className="min-h-[240px]"
+              />
+            </div>
+          </div>
+        </PaperSection>
+        <PaperSection
+          eyebrow="Tailored"
+          title="定制结果"
+          rightSlot={
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={!canDownloadCurrentWorkflow || isDownloading}
+                size="sm"
+                type="button"
+                variant="outline"
+                onClick={() => workflow && void handleDownload(workflow)}
+              >
+                <Download className="size-4" />
+                {isDownloading ? '下载中' : '下载结果'}
+              </Button>
+              {canRetryWorkflow ? (
                 <Button
-                  disabled={!canDownloadCurrentWorkflow || isDownloading}
+                  disabled={isRetryingWorkflow}
                   size="sm"
                   type="button"
                   variant="outline"
-                  onClick={() => workflow && void handleDownload(workflow)}
+                  onClick={() => void handleRetryWorkflow()}
+                >
+                  {isRetryingWorkflow ? '重试中' : '重试生成'}
+                </Button>
+              ) : null}
+              {canStartInterview ? (
+                <Button asChild size="sm" type="button" variant="outline">
+                  <Link
+                    href={`/dashboard/interviews?jobId=${interviewEntryWorkflow?.target_job.id}&optimizationSessionId=${interviewEntryWorkflow?.tailored_resume.session_id}`}
+                  >
+                    进入面试
+                    <ArrowUpRight className="size-4" />
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          }
+        >
+          {!canGenerate ? (
+            <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+              先保存主简历和岗位 JD。
+            </div>
+          ) : null}
+
+          {workflow ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <MetaChip>{workflow.target_job.title}</MetaChip>
+                <MetaChip>{getFitBandLabel(workflow.tailored_resume.fit_band)}</MetaChip>
+                <MetaChip>Score {workflow.tailored_resume.overall_score}</MetaChip>
+                <MetaChip>{getWorkflowStatusLabel(workflowDisplayStatus)}</MetaChip>
+              </div>
+              <div className={cn('border p-4', getWorkflowStatusTone(workflowDisplayStatus))}>
+                <p className="text-sm font-medium">{getWorkflowPrimaryMessage(workflow)}</p>
+                <p className="mt-2 text-sm opacity-80">{getWorkflowSecondaryMessage(workflow)}</p>
+                {workflow.tailored_resume.display_status !== 'success' &&
+                latestSuccessfulWorkflow ? (
+                  <p className="mt-2 text-sm opacity-80">
+                    上一份结果仍可下载：
+                    {latestSuccessfulWorkflow.tailored_resume.downloadable_file_name ||
+                      'optimized_resume.md'}{' '}
+                    · {formatDate(latestSuccessfulWorkflow.tailored_resume.updated_at)}
+                  </p>
+                ) : null}
+              </div>
+              {latestSuccessfulWorkflow ? (
+                <Button
+                  disabled={isDownloading}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void handleDownload(latestSuccessfulWorkflow)}
                 >
                   <Download className="size-4" />
-                  {isDownloading ? '下载中' : '下载结果'}
+                  {isDownloading ? '下载中' : '下载上一份结果'}
                 </Button>
-                {canRetryWorkflow ? (
-                  <Button
-                    disabled={isRetryingWorkflow}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleRetryWorkflow()}
-                  >
-                    {isRetryingWorkflow ? '重试中' : '重试生成'}
-                  </Button>
-                ) : null}
-                {canStartInterview ? (
-                  <Button asChild size="sm" type="button" variant="outline">
-                    <Link
-                      href={`/dashboard/interviews?jobId=${interviewEntryWorkflow?.target_job.id}&optimizationSessionId=${interviewEntryWorkflow?.tailored_resume.session_id}`}
-                    >
-                      进入面试
-                      <ArrowUpRight className="size-4" />
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
-            }
-          >
-            {!canGenerate ? (
-              <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
-                先保存主简历和岗位 JD。
-              </div>
-            ) : null}
-
-            {workflow ? (
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  <MetaChip>{workflow.target_job.title}</MetaChip>
-                  <MetaChip>{getFitBandLabel(workflow.tailored_resume.fit_band)}</MetaChip>
-                  <MetaChip>Score {workflow.tailored_resume.overall_score}</MetaChip>
-                  <MetaChip>{getWorkflowStatusLabel(workflowDisplayStatus)}</MetaChip>
+              ) : null}
+              {workflow.tailored_resume?.segments?.length ? (
+                <div className="space-y-4">
+                  {workflow.tailored_resume.segments
+                    .slice()
+                    .sort((a, b) => a.sequence - b.sequence)
+                    .map(segment => (
+                      <SegmentCard key={segment.key} segment={segment} />
+                    ))}
                 </div>
-                <div className={cn('border p-4', getWorkflowStatusTone(workflowDisplayStatus))}>
-                  <p className="text-sm font-medium">{getWorkflowPrimaryMessage(workflow)}</p>
-                  <p className="mt-2 text-sm opacity-80">{getWorkflowSecondaryMessage(workflow)}</p>
-                  {workflow.tailored_resume.display_status !== 'success' &&
-                  latestSuccessfulWorkflow ? (
-                    <p className="mt-2 text-sm opacity-80">
-                      上一份结果仍可下载：
-                      {latestSuccessfulWorkflow.tailored_resume.downloadable_file_name ||
-                        'optimized_resume.md'}{' '}
-                      · {formatDate(latestSuccessfulWorkflow.tailored_resume.updated_at)}
-                    </p>
-                  ) : null}
+              ) : (
+                <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                  等待分段结果。
                 </div>
-                {latestSuccessfulWorkflow ? (
-                  <Button
-                    disabled={isDownloading}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                    onClick={() => void handleDownload(latestSuccessfulWorkflow)}
-                  >
-                    <Download className="size-4" />
-                    {isDownloading ? '下载中' : '下载上一份结果'}
-                  </Button>
-                ) : null}
-                {workflow.tailored_resume?.segments?.length ? (
-                  <div className="space-y-4">
-                    {workflow.tailored_resume.segments
-                      .slice()
-                      .sort((a, b) => a.sequence - b.sequence)
-                      .map(segment => (
-                        <SegmentCard key={segment.key} segment={segment} />
-                      ))}
-                  </div>
-                ) : (
-                  <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
-                    等待分段结果。
-                  </div>
-                )}
-                {workflow.tailored_resume.document.markdown.trim() ? (
-                  <PaperTextarea
-                    value={workflow.tailored_resume.document.markdown}
-                    readOnly
-                    className="min-h-[320px]"
-                  />
-                ) : (
-                  <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
-                    {workflow.tailored_resume.result_is_empty
-                      ? '本次没有可下载内容。'
-                      : '等待可展示结果。'}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <PageEmptyState title="还没有定制结果" description="保存简历和 JD 后开始生成。" />
-            )}
-          </PaperSection>
-        </div>
+              )}
+              {workflow.tailored_resume.document.markdown.trim() ? (
+                <PaperTextarea
+                  value={workflow.tailored_resume.document.markdown}
+                  readOnly
+                  className="min-h-[320px]"
+                />
+              ) : (
+                <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                  {workflow.tailored_resume.result_is_empty
+                    ? '本次没有可下载内容。'
+                    : '等待可展示结果。'}
+                </div>
+              )}
+            </div>
+          ) : (
+            <PageEmptyState title="还没有定制结果" description="保存简历和 JD 后开始生成。" />
+          )}
+        </PaperSection>
       </div>
     </PageShell>
   );

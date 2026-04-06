@@ -109,7 +109,9 @@ class TailoredResumeAudit(BaseModel):
 
 
 class TailoredResumeDocument(BaseModel):
-    matchSummary: TailoredResumeMatchSummary = Field(default_factory=TailoredResumeMatchSummary)
+    matchSummary: TailoredResumeMatchSummary = Field(
+        default_factory=TailoredResumeMatchSummary
+    )
     basic: TailoredResumeBasic = Field(default_factory=TailoredResumeBasic)
     summary: str = ""
     education: list[TailoredResumeEducationItem] = Field(default_factory=list)
