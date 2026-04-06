@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata } from 'next';
 
-import { AuthPage } from "@/components/auth-page";
+import { AuthPage } from '@/components/auth-page';
 
 export const metadata: Metadata = {
-  title: "登录 | CareerPilot",
+  title: '登录 | CareerPilot',
 };
 
 export default function LoginPage() {

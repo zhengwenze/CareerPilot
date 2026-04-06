@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
-import { ProtectedRoute } from "@/components/guards/protected-route";
-import { DashboardTopNav } from "@/components/layout/dashboard-top-nav";
+import { ProtectedRoute } from '@/components/guards/protected-route';
+import { DashboardTopNav } from '@/components/layout/dashboard-top-nav';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (

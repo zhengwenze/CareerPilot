@@ -102,15 +102,71 @@ export type ResumeParseJob = {
 };
 
 export type ResumeParseArtifacts = {
+  raw_resume_md: string;
   canonical_resume_md: string;
+  ai_used: boolean;
+  ai_provider: string;
+  ai_model: string;
+  ai_error: string | null;
+  fallback_used: boolean;
+  prompt_version: string;
+  ai_latency_ms: number | null;
+  ai_path: "primary" | "secondary" | "rules" | "";
+  ai_attempts: ResumeAIAttemptRecord[];
+  ai_chain_latency_ms: number | null;
+  degraded_used: boolean;
   meta: {
     source_type?: string;
     parser_version?: string;
     ai_correction_applied?: boolean;
+    ai_used?: boolean;
+    ai_provider?: string;
+    ai_model?: string;
+    ai_error?: string | null;
     ai_fallback_used?: boolean;
+    fallback_used?: boolean;
     ai_error_category?: string | null;
     ai_error_message?: string | null;
+    prompt_version?: string;
+    ai_latency_ms?: number | null;
+    ai_path?: string;
+    ai_chain_latency_ms?: number | null;
+    degraded_used?: boolean;
   };
+};
+
+export type ResumeAIAttemptRecord = {
+  provider: string;
+  model: string;
+  stage: "primary" | "secondary";
+  status:
+    | "success"
+    | "timeout"
+    | "connection_error"
+    | "http_error"
+    | "invalid_output"
+    | "quality_guard_failed"
+    | "skipped";
+  latency_ms: number | null;
+  error: string | null;
+};
+
+export type PdfToMarkdownConversionResult = {
+  file_name: string;
+  raw_markdown: string;
+  cleaned_markdown: string;
+  markdown: string;
+  ai_used: boolean;
+  ai_provider: string;
+  ai_model: string;
+  ai_error: string | null;
+  fallback_used: boolean;
+  prompt_version: string;
+  ai_latency_ms: number | null;
+  ai_path: "primary" | "secondary" | "rules";
+  ai_attempts: ResumeAIAttemptRecord[];
+  ai_chain_latency_ms: number | null;
+  degraded_used: boolean;
 };
 
 /**
@@ -341,11 +397,11 @@ export async function uploadPrimaryResume(
 export async function convertResumePdfToMarkdown(
   token: string,
   file: File
-): Promise<{ file_name: string; markdown: string }> {
+): Promise<PdfToMarkdownConversionResult> {
   const formData = new FormData();
   formData.append("file", file);
 
-  return apiRequest<{ file_name: string; markdown: string }>(
+  return apiRequest<PdfToMarkdownConversionResult>(
     "/tailored-resumes/pdf-to-md",
     {
       method: "POST",
