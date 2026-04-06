@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -257,12 +257,41 @@ class ResumeParseQualityInfo(BaseModel):
     parser_confidence: float = 0.0
 
 
+class ResumeAIAttempt(BaseModel):
+    provider: str = ""
+    model: str = ""
+    stage: Literal["primary", "secondary"] = "primary"
+    status: Literal[
+        "success",
+        "timeout",
+        "connection_error",
+        "http_error",
+        "invalid_output",
+        "quality_guard_failed",
+        "skipped",
+    ] = "skipped"
+    latency_ms: int | None = None
+    error: str | None = None
+
+
 class ResumeParseArtifactsData(BaseModel):
     pipeline: ResumeParsePipeline = Field(default_factory=ResumeParsePipeline)
     document_blocks: list[ResumeParseDocumentBlock] = Field(default_factory=list)
     ocr: ResumeParseOCRInfo = Field(default_factory=ResumeParseOCRInfo)
     quality: ResumeParseQualityInfo = Field(default_factory=ResumeParseQualityInfo)
+    raw_resume_md: str = ""
     canonical_resume_md: str = ""
+    ai_used: bool = False
+    ai_provider: str = ""
+    ai_model: str = ""
+    ai_error: str | None = None
+    fallback_used: bool = False
+    prompt_version: str = ""
+    ai_latency_ms: int | None = None
+    ai_path: str = ""
+    ai_attempts: list[ResumeAIAttempt] = Field(default_factory=list)
+    ai_chain_latency_ms: int | None = None
+    degraded_used: bool = False
     meta: dict[str, Any] = Field(default_factory=dict)
 
 

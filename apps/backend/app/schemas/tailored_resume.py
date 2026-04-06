@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.ai_runtime import ContentChangeItem, ContentSegment, TaskState
 from app.schemas.job import JobResponse
-from app.schemas.resume import ResumeResponse
+from app.schemas.resume import ResumeAIAttempt, ResumeResponse
 
 TailoredResumeDisplayStatus = Literal[
     "idle",
@@ -153,7 +153,20 @@ class TailoredResumeWorkflowResponse(BaseModel):
 
 class TailoredResumePdfToMarkdownResponse(BaseModel):
     file_name: str
+    raw_markdown: str = ""
+    cleaned_markdown: str = Field(min_length=1)
     markdown: str = Field(min_length=1)
+    ai_used: bool = False
+    ai_provider: str = ""
+    ai_model: str = ""
+    ai_error: str | None = None
+    fallback_used: bool = False
+    prompt_version: str = ""
+    ai_latency_ms: int | None = None
+    ai_path: Literal["primary", "secondary", "rules"]
+    ai_attempts: list[ResumeAIAttempt] = Field(default_factory=list)
+    ai_chain_latency_ms: int | None = None
+    degraded_used: bool = False
 
 
 class TailoredResumeGrammarRequest(BaseModel):
