@@ -23,7 +23,11 @@ from app.schemas.tailored_resume import (
     TailoredResumePdfToMarkdownResponse,
     TailoredResumeWorkflowResponse,
 )
-from app.services.resume import convert_pdf_bytes_to_markdown, validate_resume_upload
+from app.services.resume import (
+    convert_pdf_bytes_to_markdown,
+    log_resume_pdf_to_markdown_result,
+    validate_resume_upload,
+)
 from app.services.resume_optimizer import get_resume_optimization_markdown_download
 from app.services.tailored_resume import (
     generate_tailored_resume_for_saved_job,
@@ -94,11 +98,39 @@ async def convert_resume_pdf_to_markdown(
             code=ErrorCode.BAD_REQUEST,
             message="PDF 转 Markdown 失败，未生成可用内容",
         )
+    log_resume_pdf_to_markdown_result(
+        resume_id=None,
+        parse_job_id=None,
+        pdf_to_md_result=result,
+    )
     return success_response(
         request,
         TailoredResumePdfToMarkdownResponse(
             file_name=file_name,
             markdown=result.markdown,
+            raw_markdown=result.raw_markdown,
+            cleaned_markdown=result.cleaned_markdown,
+            ai_used=result.ai_used,
+            ai_provider=result.ai_provider,
+            ai_model=result.ai_model,
+            ai_error=result.ai_error,
+            fallback_used=result.fallback_used,
+            prompt_version=result.prompt_version,
+            ai_latency_ms=result.ai_latency_ms,
+            ai_path=result.ai_path,
+            ai_attempts=[
+                {
+                    "provider": getattr(attempt, "provider", ""),
+                    "model": getattr(attempt, "model", ""),
+                    "stage": getattr(attempt, "stage", ""),
+                    "status": getattr(attempt, "status", ""),
+                    "latency_ms": getattr(attempt, "latency_ms", None),
+                    "error": getattr(attempt, "error", None),
+                }
+                for attempt in (result.ai_attempts or [])
+            ],
+            ai_chain_latency_ms=result.ai_chain_latency_ms,
+            degraded_used=result.degraded_used,
         ),
     )
 

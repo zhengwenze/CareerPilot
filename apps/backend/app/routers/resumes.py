@@ -19,8 +19,10 @@ from app.routers.deps import (
 from app.schemas.common import ApiSuccessResponse
 from app.schemas.resume import ResumeResponse, ResumeStructuredUpdateRequest
 from app.services.resume import (
+    create_resume_parse_job,
     get_resume_detail,
     list_resumes,
+    serialize_resume,
     update_resume_structured_data,
     upload_resume,
 )
@@ -100,3 +102,25 @@ async def save_resume_structured_data(
         payload=payload,
     )
     return success_response(request, resume)
+
+
+@router.post("/{resume_id}/parse", response_model=ApiSuccessResponse[ResumeResponse])
+async def retry_resume_parse(
+    request: Request,
+    resume_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    storage: Annotated[ObjectStorage, Depends(get_object_storage)],
+) -> ApiSuccessResponse[ResumeResponse]:
+    resume, parse_job = await create_resume_parse_job(
+        session,
+        current_user=current_user,
+        resume_id=resume_id,
+    )
+    schedule_resume_parse_job(
+        request.app,
+        resume_id=resume.id,
+        parse_job_id=parse_job.id,
+        storage=storage,
+    )
+    return success_response(request, serialize_resume(resume, parse_job=parse_job))
