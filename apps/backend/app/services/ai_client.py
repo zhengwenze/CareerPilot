@@ -6,6 +6,7 @@ import logging
 import os
 from dataclasses import asdict, dataclass, is_dataclass
 from json import JSONDecodeError
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import anthropic
 import httpx
@@ -16,6 +17,9 @@ MAX_AI_REQUEST_RETRIES = 1
 AI_RETRY_BACKOFF_SECONDS = 0.8
 DEFAULT_MINIMAX_ANTHROPIC_BASE_URL = "https://api.minimaxi.com/anthropic"
 DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+DEFAULT_CODEX2GPT_BASE_URL = "http://127.0.0.1:18100/v1"
+DEFAULT_CODEX2GPT_CLIENT_ID = "career-pilot-backend"
+DEFAULT_CODEX2GPT_BUSINESS_KEY = "career-pilot"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,9 +44,10 @@ async def request_text_completion(
     instructions: str,
     payload: object,
     max_tokens: int = 4000,
+    retry_count_override: int | None = None,
 ) -> str:
     try:
-        total_attempts = 1 + MAX_AI_REQUEST_RETRIES
+        total_attempts = _resolve_total_attempts(retry_count_override)
         logger.info(
             "AI text completion started provider=%s model=%s "
             "base_url=%s timeout_seconds=%s payload_chars=%s attempts=%s",
@@ -115,9 +120,10 @@ async def request_json_completion(
     instructions: str,
     payload: object,
     max_tokens: int = 4000,
+    retry_count_override: int | None = None,
 ) -> dict[str, object]:
     try:
-        total_attempts = 1 + MAX_AI_REQUEST_RETRIES
+        total_attempts = _resolve_total_attempts(retry_count_override)
         logger.info(
             "AI JSON completion started provider=%s model=%s "
             "base_url=%s timeout_seconds=%s payload_chars=%s attempts=%s",
@@ -222,6 +228,13 @@ async def _request_provider_text(
     provider = (config.provider or "").strip().lower()
     if provider == "ollama":
         return await _request_ollama_text(
+            config=config,
+            instructions=instructions,
+            payload=payload,
+            max_tokens=max_tokens,
+        )
+    if provider == "codex2gpt":
+        return await _request_codex2gpt_text(
             config=config,
             instructions=instructions,
             payload=payload,
@@ -333,6 +346,7 @@ async def _request_ollama_text(
     request_body = {
         "model": config.model,
         "stream": False,
+        "keep_alive": "10m",
         "messages": [
             {"role": "system", "content": instructions},
             {"role": "user", "content": serialized_payload},
@@ -402,10 +416,109 @@ async def _request_ollama_text(
     return _ollama_response_text(response_json)
 
 
+async def _request_codex2gpt_text(
+    *,
+    config: AIProviderConfig,
+    instructions: str,
+    payload: object,
+    max_tokens: int,
+) -> str:
+    serialized_payload = _serialize_payload(payload)
+    base_url = _resolve_codex2gpt_base_url(config)
+    request_body = {
+        "model": config.model,
+        "stream": False,
+        "client_id": DEFAULT_CODEX2GPT_CLIENT_ID,
+        "business_key": DEFAULT_CODEX2GPT_BUSINESS_KEY,
+        "messages": [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": serialized_payload},
+        ],
+        "max_tokens": max_tokens,
+    }
+    headers = {"Content-Type": "application/json"}
+    if (config.api_key or "").strip():
+        headers["Authorization"] = f"Bearer {config.api_key.strip()}"
+
+    logger.info(
+        "AI codex2gpt request building provider=%s model=%s "
+        "base_url=%s timeout_seconds=%s max_tokens=%s client_id=%s business_key=%s has_api_key=%s",
+        config.provider,
+        config.model,
+        base_url,
+        config.timeout_seconds,
+        max_tokens,
+        DEFAULT_CODEX2GPT_CLIENT_ID,
+        DEFAULT_CODEX2GPT_BUSINESS_KEY,
+        bool((config.api_key or "").strip()),
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
+            logger.info(
+                "AI codex2gpt request sending provider=%s model=%s",
+                config.provider,
+                config.model,
+            )
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                json=request_body,
+                headers=headers,
+            )
+            response.raise_for_status()
+            response_json = response.json()
+            logger.info(
+                "AI codex2gpt response received provider=%s model=%s choices=%s",
+                config.provider,
+                config.model,
+                len(response_json.get("choices", []))
+                if isinstance(response_json, dict)
+                else None,
+            )
+    except httpx.TimeoutException as exc:
+        raise AIClientError(
+            category="timeout",
+            detail=f"AI request timed out: {exc}",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        detail = exc.response.text.strip() or str(exc)
+        if status_code == 401:
+            category = "auth_error"
+        elif status_code == 403:
+            category = "permission_error"
+        else:
+            category = f"http_{status_code}"
+        raise AIClientError(
+            category=category,
+            detail=f"AI request failed with HTTP {status_code}: {detail}",
+        ) from exc
+    except httpx.RequestError as exc:
+        raise AIClientError(
+            category="connection_error",
+            detail=f"AI connection failed: {exc}",
+        ) from exc
+    except ValueError as exc:
+        raise AIClientError(
+            category="invalid_response_format",
+            detail=f"AI response JSON decoding failed: {exc}",
+        ) from exc
+
+    return _codex2gpt_response_text(response_json)
+
+
 def _serialize_payload(payload: object) -> str:
     if is_dataclass(payload):
         payload = asdict(payload)
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _resolve_total_attempts(retry_count_override: int | None) -> int:
+    if retry_count_override is None:
+        retry_count = MAX_AI_REQUEST_RETRIES
+    else:
+        retry_count = max(0, int(retry_count_override))
+    return 1 + retry_count
 
 
 def _extract_json_object(content: str) -> str:
@@ -509,9 +622,102 @@ def _resolve_base_url(config: AIProviderConfig) -> str:
 
 def _resolve_ollama_base_url(config: AIProviderConfig) -> str:
     configured = (config.base_url or "").strip()
-    if configured:
-        return configured.rstrip("/")
-    return DEFAULT_OLLAMA_BASE_URL
+    resolved = configured or DEFAULT_OLLAMA_BASE_URL
+    rewritten = _rewrite_local_url_for_container(resolved)
+    if rewritten != resolved.rstrip("/"):
+        logger.info(
+            "AI Ollama base URL rewritten for container access from=%s to=%s",
+            resolved.rstrip("/"),
+            rewritten,
+        )
+    return rewritten
+
+
+def _resolve_codex2gpt_base_url(config: AIProviderConfig) -> str:
+    configured = (config.base_url or "").strip()
+    resolved = configured or DEFAULT_CODEX2GPT_BASE_URL
+    rewritten = _rewrite_local_url_for_container(resolved)
+    if rewritten != resolved.rstrip("/"):
+        logger.info(
+            "AI codex2gpt base URL rewritten for container access from=%s to=%s",
+            resolved.rstrip("/"),
+            rewritten,
+        )
+    return rewritten
+
+
+def _rewrite_local_url_for_container(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if not _is_running_in_docker():
+        return normalized
+
+    parsed = urlsplit(normalized)
+    hostname = parsed.hostname or ""
+    if hostname not in {"127.0.0.1", "localhost"}:
+        return normalized
+
+    host = "host.docker.internal"
+    netloc = host
+    if parsed.port is not None:
+        netloc = f"{host}:{parsed.port}"
+    if parsed.username:
+        auth = parsed.username
+        if parsed.password:
+            auth = f"{auth}:{parsed.password}"
+        netloc = f"{auth}@{netloc}"
+
+    return urlunsplit(
+        SplitResult(
+            scheme=parsed.scheme,
+            netloc=netloc,
+            path=parsed.path,
+            query=parsed.query,
+            fragment=parsed.fragment,
+        )
+    ).rstrip("/")
+
+
+def _is_running_in_docker() -> bool:
+    return os.path.exists("/.dockerenv")
+
+
+def _codex2gpt_response_text(response: object) -> str:
+    if not isinstance(response, dict):
+        raise ValueError("AI response root must be an object")
+
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("AI response did not contain choices")
+
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    if not isinstance(message, dict):
+        raise ValueError("AI response did not contain a message object")
+
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        logger.info(
+            "AI codex2gpt text extracted text_chars=%s",
+            len(content),
+        )
+        return content
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "text" and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+        normalized = "".join(parts).strip()
+        if normalized:
+            logger.info(
+                "AI codex2gpt text extracted content_parts=%s text_chars=%s",
+                len(parts),
+                len(normalized),
+            )
+            return normalized
+
+    raise ValueError("AI response did not contain assistant text")
 
 
 def _build_anthropic_client_kwargs(config: AIProviderConfig) -> dict[str, object]:

@@ -63,7 +63,19 @@ def build_text_preview(value: str | None, *, limit: int = 160) -> str:
 def build_initial_resume_parse_artifacts(*, file_name: str) -> dict[str, object]:
     return {
         "file_name": file_name,
+        "raw_resume_md": "",
         "canonical_resume_md": "",
+        "ai_used": False,
+        "ai_provider": "",
+        "ai_model": "",
+        "ai_error": None,
+        "fallback_used": False,
+        "prompt_version": "",
+        "ai_latency_ms": None,
+        "ai_path": "",
+        "ai_attempts": [],
+        "ai_chain_latency_ms": None,
+        "degraded_used": False,
         "raw_text": "",
         "parse_status": "pending",
         "parse_error": None,
@@ -82,7 +94,19 @@ def build_resume_parse_artifacts(
     *,
     file_name: str,
     raw_text: str | None,
+    raw_resume_md: str | None,
     canonical_resume_md: str | None,
+    ai_used: bool,
+    ai_provider: str | None,
+    ai_model: str | None,
+    ai_error: str | None,
+    fallback_used: bool,
+    prompt_version: str | None,
+    ai_latency_ms: int | None,
+    ai_path: str | None,
+    ai_attempts: list[object] | None,
+    ai_chain_latency_ms: int | None,
+    degraded_used: bool,
     ai_status: str | None,
     ai_correction_applied: bool,
     ai_error_category: str | None,
@@ -95,7 +119,29 @@ def build_resume_parse_artifacts(
 ) -> dict[str, object]:
     return {
         "file_name": file_name,
+        "raw_resume_md": str(raw_resume_md or "").strip(),
         "canonical_resume_md": str(canonical_resume_md or "").strip(),
+        "ai_used": ai_used,
+        "ai_provider": str(ai_provider or "").strip(),
+        "ai_model": str(ai_model or "").strip(),
+        "ai_error": ai_error,
+        "fallback_used": fallback_used,
+        "prompt_version": str(prompt_version or "").strip(),
+        "ai_latency_ms": ai_latency_ms,
+        "ai_path": str(ai_path or "").strip(),
+        "ai_attempts": [
+            {
+                "provider": str(getattr(attempt, "provider", "") or ""),
+                "model": str(getattr(attempt, "model", "") or ""),
+                "stage": str(getattr(attempt, "stage", "") or ""),
+                "status": str(getattr(attempt, "status", "") or ""),
+                "latency_ms": getattr(attempt, "latency_ms", None),
+                "error": getattr(attempt, "error", None),
+            }
+            for attempt in (ai_attempts or [])
+        ],
+        "ai_chain_latency_ms": ai_chain_latency_ms,
+        "degraded_used": degraded_used,
         "raw_text": str(raw_text or "").strip(),
         "parse_status": parse_status,
         "parse_error": parse_error,
@@ -104,14 +150,70 @@ def build_resume_parse_artifacts(
             "source_type": source_type,
             "parser_version": "demo-pdf-to-md",
             "ai_correction_applied": ai_correction_applied,
+            "ai_used": ai_used,
+            "ai_provider": str(ai_provider or "").strip(),
+            "ai_model": str(ai_model or "").strip(),
             "ai_status": ai_status,
-            "ai_fallback_used": ai_status == AI_STATUS_FALLBACK,
+            "ai_fallback_used": fallback_used,
+            "fallback_used": fallback_used,
+            "ai_error": ai_error,
             "ai_error_category": ai_error_category,
             "ai_error_message": ai_error_message,
+            "prompt_version": str(prompt_version or "").strip(),
+            "ai_latency_ms": ai_latency_ms,
+            "ai_path": str(ai_path or "").strip(),
+            "ai_chain_latency_ms": ai_chain_latency_ms,
+            "degraded_used": degraded_used,
             "ocr_used": ocr_used,
             "ocr_engine": ocr_engine,
         },
     }
+
+
+def log_resume_pdf_to_markdown_result(
+    *,
+    resume_id: UUID | None,
+    parse_job_id: UUID | None,
+    pdf_to_md_result: object,
+) -> None:
+    attempts = list(getattr(pdf_to_md_result, "ai_attempts", []) or [])
+    primary_latency_ms = next(
+        (
+            getattr(attempt, "latency_ms", None)
+            for attempt in attempts
+            if getattr(attempt, "stage", "") == "primary"
+        ),
+        None,
+    )
+    secondary_latency_ms = next(
+        (
+            getattr(attempt, "latency_ms", None)
+            for attempt in attempts
+            if getattr(attempt, "stage", "") == "secondary"
+        ),
+        None,
+    )
+    logger.info(
+        "resume_pdf_to_markdown.completed resume_id=%s parse_job_id=%s ai_used=%s ai_error=%s "
+        "markdown_length_before=%s markdown_length_after=%s fallback_used=%s prompt_version=%s ai_latency_ms=%s "
+        "ai_path=%s degraded_used=%s ai_chain_latency_ms=%s ai_attempts_count=%s "
+        "primary_latency_ms=%s secondary_latency_ms=%s",
+        resume_id,
+        parse_job_id,
+        getattr(pdf_to_md_result, "ai_used", False),
+        getattr(pdf_to_md_result, "ai_error", None),
+        len(getattr(pdf_to_md_result, "raw_markdown", "") or ""),
+        len(getattr(pdf_to_md_result, "cleaned_markdown", "") or ""),
+        getattr(pdf_to_md_result, "fallback_used", False),
+        getattr(pdf_to_md_result, "prompt_version", ""),
+        getattr(pdf_to_md_result, "ai_latency_ms", None),
+        getattr(pdf_to_md_result, "ai_path", ""),
+        getattr(pdf_to_md_result, "degraded_used", False),
+        getattr(pdf_to_md_result, "ai_chain_latency_ms", None),
+        len(attempts),
+        primary_latency_ms,
+        secondary_latency_ms,
+    )
 
 
 def log_renderer_snapshot(*, structured: ResumeStructuredData, markdown: str) -> None:
@@ -147,16 +249,24 @@ def load_resume_pdf_to_md_module() -> ModuleType:
     return module
 
 
-def build_resume_ai_config(settings: Settings) -> "AIProviderConfig":
+def build_resume_pdf_ai_configs(settings: Settings) -> list["AIProviderConfig"]:
     from app.services.ai_client import AIProviderConfig
 
-    return AIProviderConfig(
-        provider=(settings.resume_ai_provider or "minimax").strip() or "minimax",
+    primary_config = AIProviderConfig(
+        provider=(settings.resume_ai_provider or "codex2gpt").strip() or "codex2gpt",
         base_url=(settings.resume_ai_base_url or "").strip(),
         api_key=(settings.resume_ai_api_key or "").strip() or None,
-        model=(settings.resume_ai_model or "MiniMax-M2.7").strip(),
-        timeout_seconds=settings.resume_ai_timeout_seconds,
+        model=(settings.resume_ai_model or "gpt-5.4").strip(),
+        timeout_seconds=settings.resume_pdf_ai_primary_timeout_seconds,
     )
+    secondary_config = AIProviderConfig(
+        provider=(settings.resume_pdf_ai_secondary_provider or "ollama").strip() or "ollama",
+        base_url=(settings.resume_pdf_ai_secondary_base_url or "").strip(),
+        api_key=(settings.resume_pdf_ai_secondary_api_key or "").strip() or None,
+        model=(settings.resume_pdf_ai_secondary_model or "qwen2.5:7b").strip(),
+        timeout_seconds=settings.resume_pdf_ai_secondary_timeout_seconds,
+    )
+    return [primary_config, secondary_config]
 
 
 async def convert_pdf_bytes_to_markdown(
@@ -173,7 +283,8 @@ async def convert_pdf_bytes_to_markdown(
     return await pdf_to_markdown(
         pdf_bytes,
         file_name,
-        ai_config=build_resume_ai_config(settings),
+        ai_configs=build_resume_pdf_ai_configs(settings),
+        retry_count_override=settings.resume_pdf_ai_retry_count,
     )
 
 
@@ -441,6 +552,7 @@ async def process_resume_parse_job(
         owner_user_id = resume.user_id
 
     raw_text: str | None = None
+    raw_resume_md: str | None = None
     canonical_resume_md: str | None = None
     extraction_source_type = "pdf_to_md"
     extraction_ocr_used = False
@@ -451,8 +563,20 @@ async def process_resume_parse_job(
     parse_job_error_message: str | None = "Unexpected parse failure"
     ai_status: str | None = None
     ai_message: str | None = None
+    ai_used = False
+    ai_provider: str | None = None
+    ai_model: str | None = None
+    ai_error: str | None = None
+    fallback_used = False
+    prompt_version: str | None = None
+    ai_latency_ms: int | None = None
+    ai_path: str | None = None
+    ai_attempts: list[object] = []
+    ai_chain_latency_ms: int | None = None
+    degraded_used = False
     ai_error_category: str | None = None
     ai_error_message: str | None = None
+    pdf_to_md_result = None
 
     try:
         async with asyncio.timeout(RESUME_PARSE_TIMEOUT_SECONDS):
@@ -478,19 +602,35 @@ async def process_resume_parse_job(
                 resume.file_name,
                 settings=config,
             )
-            canonical_resume_md = pdf_to_md_result.markdown
+            raw_resume_md = pdf_to_md_result.raw_markdown
+            canonical_resume_md = pdf_to_md_result.cleaned_markdown
+            raw_text = raw_resume_md or canonical_resume_md
+            ai_used = pdf_to_md_result.ai_used
+            ai_provider = pdf_to_md_result.ai_provider
+            ai_model = pdf_to_md_result.ai_model
+            ai_error = pdf_to_md_result.ai_error
+            fallback_used = pdf_to_md_result.fallback_used
+            prompt_version = pdf_to_md_result.prompt_version
+            ai_latency_ms = pdf_to_md_result.ai_latency_ms
+            ai_path = pdf_to_md_result.ai_path
+            ai_attempts = list(pdf_to_md_result.ai_attempts or [])
+            ai_chain_latency_ms = pdf_to_md_result.ai_chain_latency_ms
+            degraded_used = pdf_to_md_result.degraded_used
+            ai_error_category = pdf_to_md_result.ai_error_category
+            ai_error_message = pdf_to_md_result.ai_error_message
             if not canonical_resume_md:
                 raise ApiException(
                     status_code=422,
                     code=ErrorCode.BAD_REQUEST,
                     message="PDF 转 Markdown 失败，未生成可用内容",
                 )
-            raw_text = pdf_to_md_result.raw_markdown or canonical_resume_md
-            ai_error_category = pdf_to_md_result.ai_error_category
-            ai_error_message = pdf_to_md_result.ai_error_message
-            if pdf_to_md_result.ai_applied:
+            if pdf_to_md_result.ai_used:
                 ai_status = AI_STATUS_APPLIED
-                ai_message = "已通过 AI 整理生成最终 Markdown"
+                ai_message = (
+                    "主模型失败，已降级次模型整理生成最终 Markdown"
+                    if pdf_to_md_result.ai_path == "secondary"
+                    else "已通过 AI 整理生成最终 Markdown"
+                )
             elif pdf_to_md_result.fallback_used:
                 ai_status = AI_STATUS_FALLBACK
                 ai_message = (
@@ -509,6 +649,7 @@ async def process_resume_parse_job(
     except TimeoutError:
         ai_status = None
         ai_message = None
+        ai_error = "Resume parse timed out"
         resume_parse_error = "Resume parse timed out"
         parse_job_error_message = "简历解析超时（E_PARSE_TIMEOUT）"
         ai_error_category = "timeout"
@@ -516,6 +657,7 @@ async def process_resume_parse_job(
     except ApiException as exc:
         ai_status = None
         ai_message = None
+        ai_error = exc.message
         resume_parse_error = exc.message
         parse_job_error_message = f"{exc.message}（E_PARSE_API）"
         ai_error_category = "parse_failure"
@@ -523,6 +665,7 @@ async def process_resume_parse_job(
     except Exception as exc:
         ai_status = None
         ai_message = None
+        ai_error = build_unexpected_parse_error_message(exc)
         resume_parse_error = "Unexpected parse failure"
         parse_job_error_message = (
             f"{build_unexpected_parse_error_message(exc)}（E_PARSE_UNEXPECTED）"
@@ -560,7 +703,19 @@ async def process_resume_parse_job(
             resume.parse_artifacts_json = build_resume_parse_artifacts(
                 file_name=resume.file_name,
                 raw_text=raw_text,
+                raw_resume_md=raw_resume_md,
                 canonical_resume_md=canonical_resume_md,
+                ai_used=ai_used,
+                ai_provider=ai_provider,
+                ai_model=ai_model,
+                ai_error=ai_error,
+                fallback_used=fallback_used,
+                prompt_version=prompt_version,
+                ai_latency_ms=ai_latency_ms,
+                ai_path=ai_path,
+                ai_attempts=ai_attempts,
+                ai_chain_latency_ms=ai_chain_latency_ms,
+                degraded_used=degraded_used,
                 ai_status=ai_status,
                 ai_correction_applied=ai_status == AI_STATUS_APPLIED,
                 ai_error_category=ai_error_category,
@@ -592,6 +747,13 @@ async def process_resume_parse_job(
         session.add(resume)
         session.add(parse_job)
         await session.commit()
+
+    if pdf_to_md_result is not None:
+        log_resume_pdf_to_markdown_result(
+            resume_id=resume_id,
+            parse_job_id=parse_job_id,
+            pdf_to_md_result=pdf_to_md_result,
+        )
 
 
 async def list_resumes(

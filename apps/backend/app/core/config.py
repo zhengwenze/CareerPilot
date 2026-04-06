@@ -50,6 +50,12 @@ def _normalize_ai_base_url(value: str | None) -> str | None:
     return normalized.replace("api.minimax.io", "api.minimaxi.com")
 
 
+DEFAULT_CODEX2GPT_BASE_URL = "http://127.0.0.1:18100/v1"
+DEFAULT_CODEX2GPT_MODEL = "gpt-5.4"
+DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
+
+
 def _first_non_empty_env(*names: str) -> str | None:
     for name in names:
         value = os.getenv(name, "").strip()
@@ -89,20 +95,27 @@ class Settings(BaseSettings):
             "http://127.0.0.1:3001",
         ]
     )
-    match_ai_provider: str = "minimax"
-    match_ai_base_url: str | None = "https://api.minimaxi.com/anthropic"
+    match_ai_provider: str = "codex2gpt"
+    match_ai_base_url: str | None = DEFAULT_CODEX2GPT_BASE_URL
     match_ai_api_key: str | None = None
-    match_ai_model: str | None = "MiniMax-M2.7"
+    match_ai_model: str | None = DEFAULT_CODEX2GPT_MODEL
     match_ai_timeout_seconds: int = 90
-    resume_ai_provider: str = "minimax"
-    resume_ai_base_url: str = "https://api.minimaxi.com/anthropic"
+    resume_ai_provider: str = "codex2gpt"
+    resume_ai_base_url: str = DEFAULT_CODEX2GPT_BASE_URL
     resume_ai_api_key: str | None = None
-    resume_ai_model: str = "MiniMax-M2.7"
+    resume_ai_model: str = DEFAULT_CODEX2GPT_MODEL
     resume_ai_timeout_seconds: int = 30
-    interview_ai_provider: str = "minimax"
-    interview_ai_base_url: str = "https://api.minimaxi.com/anthropic"
+    resume_pdf_ai_primary_timeout_seconds: int = 30
+    resume_pdf_ai_retry_count: int = 0
+    resume_pdf_ai_secondary_provider: str = "ollama"
+    resume_pdf_ai_secondary_base_url: str = DEFAULT_OLLAMA_BASE_URL
+    resume_pdf_ai_secondary_api_key: str | None = None
+    resume_pdf_ai_secondary_model: str = DEFAULT_OLLAMA_MODEL
+    resume_pdf_ai_secondary_timeout_seconds: int = 20
+    interview_ai_provider: str = "codex2gpt"
+    interview_ai_base_url: str = DEFAULT_CODEX2GPT_BASE_URL
     interview_ai_api_key: str | None = None
-    interview_ai_model: str = "MiniMax-M2.7"
+    interview_ai_model: str = DEFAULT_CODEX2GPT_MODEL
     interview_ai_model_planning: str | None = None
     interview_ai_model_realtime: str | None = None
     interview_ai_timeout_seconds: int = 60
@@ -134,6 +147,7 @@ class Settings(BaseSettings):
     @field_validator(
         "match_ai_base_url",
         "resume_ai_base_url",
+        "resume_pdf_ai_secondary_base_url",
         "interview_ai_base_url",
         mode="before",
     )
@@ -144,6 +158,8 @@ class Settings(BaseSettings):
         if value is None or not str(value).strip():
             if provider == "ollama":
                 return value
+            if provider == "codex2gpt":
+                return DEFAULT_CODEX2GPT_BASE_URL
             value = _first_non_empty_env("MINIMAX_BASE_URL", "ANTHROPIC_BASE_URL")
         return _normalize_ai_base_url(value)
 
@@ -166,6 +182,21 @@ class Settings(BaseSettings):
         if value is not None and value.strip():
             return value
         if not provider_requires_api_key(info.data.get("resume_ai_provider")):
+            return value
+        return _first_non_empty_env(
+            "MINIMAX_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+        )
+
+    @field_validator("resume_pdf_ai_secondary_api_key", mode="before")
+    @classmethod
+    def resolve_resume_pdf_ai_secondary_api_key(
+        cls, value: str | None, info: ValidationInfo
+    ) -> str | None:
+        if value is not None and value.strip():
+            return value
+        if not provider_requires_api_key(info.data.get("resume_pdf_ai_secondary_provider")):
             return value
         return _first_non_empty_env(
             "MINIMAX_API_KEY",
@@ -206,10 +237,12 @@ class Settings(BaseSettings):
         match_provider = normalize_ai_provider(self.match_ai_provider)
         interview_provider = normalize_ai_provider(self.interview_ai_provider)
         if match_provider == "":
-            self.match_ai_provider = (self.resume_ai_provider or "minimax").strip()
+            self.match_ai_provider = (self.resume_ai_provider or "codex2gpt").strip()
             match_provider = normalize_ai_provider(self.match_ai_provider)
 
-        if match_provider != "ollama" and not (self.match_ai_base_url or "").strip():
+        if match_provider == "codex2gpt" and not (self.match_ai_base_url or "").strip():
+            self.match_ai_base_url = DEFAULT_CODEX2GPT_BASE_URL
+        elif match_provider != "ollama" and not (self.match_ai_base_url or "").strip():
             self.match_ai_base_url = self.resume_ai_base_url
 
         if not (self.match_ai_model or "").strip():
@@ -226,7 +259,9 @@ class Settings(BaseSettings):
             )
             self.match_ai_api_key = fallback_key or None
 
-        if interview_provider != "ollama" and not (self.interview_ai_base_url or "").strip():
+        if interview_provider == "codex2gpt" and not (self.interview_ai_base_url or "").strip():
+            self.interview_ai_base_url = DEFAULT_CODEX2GPT_BASE_URL
+        elif interview_provider != "ollama" and not (self.interview_ai_base_url or "").strip():
             fallback_base_url = (self.match_ai_base_url or "").strip() or (
                 _first_non_empty_env("MINIMAX_BASE_URL", "ANTHROPIC_BASE_URL") or ""
             )
