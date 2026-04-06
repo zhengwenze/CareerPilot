@@ -1,242 +1,173 @@
 # Career Pilot
 
-Career Pilot 是一个面向求职场景的 AI 工作台，当前围绕两条主链路展开：
+Career Pilot 是一个强调连续操作的求职工作流产品，核心链路如下：
 
-- 把 PDF 简历整理成可编辑、可保存、可定制的 Markdown 简历
-- 基于目标岗位生成优化后的专属简历，并直接进入对应的模拟面试训练
+| 步骤 | 操作                                    |
+| ---- | --------------------------------------- |
+| 1    | 上传 PDF 简历，自动转化为 Markdown      |
+| 2    | 保存目标岗位 JD                         |
+| 3    | 基于 JD + Markdown 简历生成专属优化简历 |
+| 4    | 直接进入对应的模拟面试训练              |
 
-这个项目不是“信息展示型官网”，而是一个强调连续操作的求职工作流产品。用户从上传简历开始，到保存岗位、生成专属版本、进入模拟面试，主要动作都在同一个工作台内完成。
-
-## 项目定位
-
-Career Pilot 解决的是求职过程中最常见的三个断点：
-
-- 简历内容散乱，PDF 难改，岗位定制成本高
-- 岗位 JD 和个人经历之间缺少一条可执行的优化链路
-- 简历改完之后，用户不知道如何继续训练面试表达
-
-因此，当前版本重点不是堆很多模块，而是把下面这条链路打通：
-
-1. 上传主简历
-2. 转成 Markdown 并保存
-3. 保存目标岗位 JD
-4. 生成专属优化简历
-5. 下载结果或直接进入模拟面试
-
-## 当前功能
+## 功能模块（我的最终目标）
 
 ### 1. 账号与基础工作台
 
-- 支持注册、登录、登出和当前用户状态识别
-- 支持维护个人资料，包括昵称、求职方向、目标城市、期望岗位
-- 登录后进入统一 Dashboard，按模块继续后续操作
+- 注册、登录、登出及当前用户状态识别
+- 生成个人画像（由AI根据简历和JD自动生成）
+- 登录后进入统一 Dashboard
 
 ### 2. 主简历上传与 Markdown 化
 
-- 支持上传 PDF 简历
-- 系统会先抽取 PDF 文本，再转换成可编辑的 Markdown 简历
-- 转换结果会自动保存到当前账户，刷新页面后仍可继续编辑
-- 页面同时提供 Markdown 编辑区与实时预览区，方便边改边看
+- 上传 PDF 简历，系统抽取文本并转换为可编辑 Markdown
+- 转换结果自动保存到数据库，用户可以直接在网页进行编辑
+- Markdown 编辑区与实时预览区同步显示
+- 目标是将简历内容沉淀为可维护的 Markdown 版本，而非简单存档。
 
-这一部分的目标不是做“原样存档”，而是把用户后续真正会反复修改的简历内容沉淀成可维护的 Markdown 版本。
+### 3. 目标岗位 JD 保存
 
-### 3. 简历保存与结构化沉淀
-
-- 用户可以直接在页面上修改 Markdown 简历并保存
-- 保存时，系统会把 Markdown 转成结构化数据，供后续匹配、优化、模拟面试复用
-- 保存后的简历会保留版本号，用于后续工作流追踪
-
-这意味着 Career Pilot 的“主简历”不是一份静态文件，而是后续所有动作的事实来源。
-
-### 4. 目标岗位 JD 保存
-
-- 支持录入并保存目标岗位描述
-- 保存后会触发岗位解析，提取岗位标题、关键信息和后续工作流所需上下文
-- 简历页内可以直接维护当前岗位，不需要跳到独立后台系统
-
-当前产品把主简历和目标岗位放在同一页管理，减少用户在不同页面之间来回切换。
+- 用户输入并保存目标岗位描述
+- 保存后触发岗位解析，提取JD关键信息
+- 简历页内直接维护当前岗位，无需跳转独立后台
+- 简历和目标岗位必须在同一页进行操作，减少页面切换。
 
 ### 5. 专属简历生成
 
-- 基于“已保存主简历 + 已保存岗位 JD”生成岗位定制版简历
-- 生成过程有明确状态反馈，支持轮询查看进度
-- 成功后可直接下载 Markdown 成品
-- 如果当前结果失败或为空，支持重试生成
-
-这里的核心不是给一堆泛泛建议，而是产出一份可以继续使用、继续投递、继续训练面试的专属简历结果。
+- 基于"主简历 + 岗位 JD"生成定制版简历
+- 生成过程有状态反馈，支持轮询查看进度
+- 对于有优化的部分必须说明优化原因
+- 成功后可下载 Markdown 结果；失败或为空时支持重试
 
 ### 6. 从优化结果直接进入模拟面试
 
-- 专属简历生成成功后，页面会提供“开始模拟面试”入口
-- 进入面试时，会自动带上当前岗位和对应的优化结果上下文
-- 用户不需要重新整理背景信息，也不需要重复创建练习材料
+- 专属简历生成成功后，页面提供"开始模拟面试"入口
+- 进入面试时，自动带上岗位和优化结果上下文
+- 无需重新整理背景信息或重复创建练习材料
 
-这一步把“改简历”和“练面试”真正接起来了，而不是两个互相独立的功能页。
+> 打通"改简历"和"练面试"两个环节，而非独立功能页。
 
 ### 7. 模拟面试
 
-- 支持基于目标岗位和优化简历创建模拟面试会话
-- 系统会先准备第一题，再在后台继续准备后续问题
-- 用户可以逐题作答，系统会返回追问或继续下一题
-- 面试结束后会生成复盘信息，包括优势、风险和下一步建议
-- 已创建的模拟面试会话支持查看、继续、结束、删除和重试准备
-
-当前模拟面试不是单次问答弹窗，而是带会话状态和历史记录的持续训练流程。
-
-## 典型使用流程
-
-### 流程一：制作专属简历
-
-1. 注册并登录
-2. 进入“专属简历”
-3. 上传 PDF 简历
-4. 检查并编辑 Markdown 简历
-5. 保存目标岗位 JD
-6. 点击生成优化简历
-7. 下载岗位定制版 Markdown 简历
-
-### 流程二：从专属简历进入模拟面试
-
-1. 完成一份优化简历生成
-2. 点击“开始模拟面试”
-3. 等待系统准备第一题
-4. 逐题回答并接收追问
-5. 在结束后查看复盘结论
-
-## 当前模块状态
-
-### 已可使用
-
-- 账号注册与登录
-- 个人资料维护
-- PDF 简历上传
-- PDF 转 Markdown
-- Markdown 简历保存
-- 岗位 JD 保存与解析
-- 专属简历生成、重试与下载
-- 从优化结果进入模拟面试
-- 模拟面试会话创建、作答、结束、删除、重试
-
-### 已有页面骨架，但仍在开发中
-
-- 设置页
-- 投递追踪页
-
-README 下面的说明基于仓库当前页面、导航和 API 入口整理，不把“预留页面”写成已交付功能。
-
-## 技术栈
-
-### 前端
-
-- Next.js 16
-- React 19
-- TypeScript
-- Tailwind CSS 4
-
-### 后端
-
-- FastAPI
-- SQLAlchemy
-- Alembic
-- PostgreSQL
-- Redis
-- MinIO
-
-### AI 与文档处理
-
-- PyMuPDF / pymupdf4llm 用于 PDF 内容抽取与 Markdown 化
-- OpenAI-compatible / Anthropic 风格模型接入用于简历整理、专属简历生成与模拟面试
+- 基于目标岗位和优化简历创建模拟面试会话
+- 系统先准备第一题，后台继续准备后续问题
+- 用户逐题作答，系统返回追问或继续下一题
+- 每一题在用户回答之后，系统必须对于用户的回答做出评判（全靠弹窗显示），说出回答好的地方以及不足之处和改进建议
+- 模拟面试是带会话状态和历史记录的持续训练流程
 
 ## 目录结构
 
-```text
+````text
 career-pilot/
 ├── AGENTS.md                      # 根级代理规则
 ├── .agents/
-│   ├── skills/                    # repo-local Codex workflows
-│   └── plans/                     # 复杂任务计划文档
+│   ├── plans/                     # 复杂任务计划文档
+│   └── skills/                    # repo-local Codex workflows
 ├── apps/
 │   ├── frontend/                  # Next.js 前端工作台
 │   │   ├── AGENTS.md
-│   │   └── src/
+│   │   ├── src/
+│   │   │   ├── app/               # Next.js App Router 页面
+│   │   │   │   ├── (dashboard)/  # 受保护仪表盘路由组
+│   │   │   │   ├── login/
+│   │   │   │   ├── register/
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── globals.css
+│   │   │   └── components/        # React 组件
+│   │   │       ├── ui/           # shadcn/ui 基础组件
+│   │   │       ├── layout/       # 布局组件
+│   │   │       ├── guards/       # 路由守卫
+│   │   │       └── ...
+│   │   ├── package.json
+│   │   ├── next.config.ts
+│   │   └── Dockerfile
 │   ├── backend/                   # FastAPI 后端
 │   │   ├── AGENTS.md
 │   │   ├── app/
-│   │   ├── alembic/
-│   │   └── tests/
-│   └── miniprogram/               # 微信小程序
+│   │   │   ├── core/              # 核心配置、错误、安全
+│   │   │   ├── db/                # 数据库连接与会话
+│   │   │   ├── models/            # SQLAlchemy 模型
+│   │   │   ├── prompts/           # AI 提示词模板
+│   │   │   ├── routers/           # API 路由
+│   │   │   ├── schemas/           # Pydantic 请求/响应模型
+│   │   │   ├── services/          # 业务逻辑服务
+│   │   │   └── main.py
+│   │   ├── alembic/               # 数据库迁移
+│   │   │   └── versions/
+│   │   ├── tests/                 # pytest 测试
+│   │   ├── pyproject.toml
+│   │   └── Dockerfile
+│   └── miniprogram/               # 微信小程序（占位）
 ├── packages/                      # 共享契约、API 客户端与配置
+│   ├── api-client/               # 前后端通信客户端
+│   ├── configs/                   # ESLint、TypeScript 共享配置
+│   └── contracts/                 # 跨应用数据契约文档
 ├── docs/                          # 仓库地图、业务知识与运行说明
+│   ├── architecture/
+│   ├── domain/
+│   ├── product/
+│   └── index.md
 ├── references/                    # 参考资产，不是产品源码
+│   ├── codex2gpt-demo/
+│   ├── monochrome-design/
+│   └── ollama-demo/
 ├── docker/                        # 部署与启动脚本
+│   ├── deploy.sh
+│   └── start.sh
 ├── docker-compose.yml             # 中间件编排
 └── README.md
-```
-
-目录整理原则：
-
-- 业务代码尽量只放在 `apps/`
-- 共享契约与工程配置尽量只放在 `packages/`
-- agent 规则、skills、plans 明确放在根目录的 `AGENTS.md` 与 `.agents/`
-- `docs/` 放长期有效的项目文档与业务知识入口
-- `references/` 放参考资产，但不作为产品行为事实来源
 
 ## 快速启动
-
-### 1. 克隆仓库
 
 ```bash
 git clone https://gitee.com/zwz050418/career-pilot.git
 cd career-pilot
-```
-
-### 2. 启动依赖服务
-
-```bash
-docker compose -f docker-compose.yml up -d postgres redis minio
-```
-
-### 3. 启动后端
-
-```bash
-cd apps/backend
-cp .env.example .env
-uv sync
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --port 8000
-```
-
-### 4. 启动前端
-
-```bash
-cd ../frontend
-npm install
-npm run dev
+docker compose up -d
 ```
 
 访问 **http://localhost:3000** 即可。
 
 ### 配置 AI 提供商
 
-编辑 `apps/backend/.env`，选择以下方案之一：
+编辑 `apps/backend/.env`，推荐使用 `codex2gpt` 作为本地主力 AI provider。
 
-**MiniMax（推荐）**
-
-```env
-RESUME_AI_PROVIDER=minimax
-RESUME_AI_BASE_URL=https://api.minimaxi.com/anthropid
-RESUME_AI_API_KEY=your_key
-RESUME_AI_MODEL=MiniMax-M2.5
-```
-
-**本地免费模型**
+> 将本地登录好的 Codex 转为 OpenAI 风格 API，业务流程与提示词不变，仅替换底层模型。
 
 ```env
-RESUME_AI_PROVIDER=openai-compatible
-RESUME_AI_BASE_URL=http://localhost:8001/v1
+RESUME_AI_PROVIDER=codex2gpt
+RESUME_AI_BASE_URL=http://127.0.0.1:18100/v1
+RESUME_AI_API_KEY=
+RESUME_AI_MODEL=gpt-5.4
 ```
 
-如果你本地有 OpenAI-compatible 代理或模型网关，只需把 `RESUME_AI_BASE_URL` 指向对应地址即可。
+> 若 `codex2gpt` 开启了本地鉴权，需填写 `RESUME_AI_API_KEY`。
+
+#### 其他 Provider
+
+**Ollama**
+
+```env
+RESUME_AI_PROVIDER=ollama
+RESUME_AI_BASE_URL=http://127.0.0.1:11434
+RESUME_AI_API_KEY=
+RESUME_AI_MODEL=qwen2.5:7b
+```
+
+> 若本地有其他 OpenAI-compatible 代理或模型网关，可新增 provider 适配层接入，无需改动业务 prompt 和工作流。
+
+#### PDF 简历清洗降级配置
+
+```env
+RESUME_PDF_AI_PRIMARY_TIMEOUT_SECONDS=30
+RESUME_PDF_AI_RETRY_COUNT=0
+RESUME_PDF_AI_SECONDARY_PROVIDER=ollama
+RESUME_PDF_AI_SECONDARY_BASE_URL=http://127.0.0.1:11434
+RESUME_PDF_AI_SECONDARY_API_KEY=
+RESUME_PDF_AI_SECONDARY_MODEL=qwen2.5:7b
+RESUME_PDF_AI_SECONDARY_TIMEOUT_SECONDS=20
+```
+
+> 默认按"主模型 → 次模型 → rules"顺序降级。目标是解决失败长尾，使主备降级链路可观测。
 
 ## 访问地址
 
@@ -246,19 +177,4 @@ RESUME_AI_BASE_URL=http://localhost:8001/v1
 | http://localhost:8000 | 后端 API       |
 | http://localhost:9001 | MinIO 控制台   |
 | https://codeclaw.top  | 服务器部署地址 |
-
-## 适合谁使用
-
-Career Pilot 当前更适合以下用户：
-
-- 需要频繁为不同岗位调整简历的求职者
-- 想把 PDF 简历转成可持续维护 Markdown 的用户
-- 希望把“岗位定制简历”和“模拟面试训练”串成一条流程的用户
-- 希望在一个工作台内持续维护简历、岗位与训练记录的用户
-
-## 相关文档
-
-- 更细的代码入口与代理约束见 [AGENTS.md](/Users/zhengwenze/Desktop/codex/career-pilot/AGENTS.md)
-- 文档总入口见 [docs/index.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/index.md)
-- 仓库如何按 Codex 友好方式组织见 [docs/codex-workspace.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/codex-workspace.md)
-- 外部工具与 MCP 接入约定见 [docs/mcp-setup.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/mcp-setup.md)
+````
