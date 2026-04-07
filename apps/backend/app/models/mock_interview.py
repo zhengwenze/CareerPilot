@@ -109,6 +109,12 @@ class MockInterviewTurn(TimestampMixin, UserAuditMixin, Base):
         default="main",
         server_default="main",
     )
+    review_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="project_experience",
+        server_default="project_experience",
+    )
     question_topic: Mapped[str] = mapped_column(String(120), nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     question_intent: Mapped[str | None] = mapped_column(Text, nullable=True)

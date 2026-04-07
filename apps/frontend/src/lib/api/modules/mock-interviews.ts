@@ -7,6 +7,30 @@ export type MockInterviewReviewRecord = {
   next_steps: string[];
 };
 
+export type MockInterviewReviewType =
+  | "technical_analysis"
+  | "project_experience"
+  | "knowledge_fundamental";
+
+export type MockInterviewDeepReviewRecord = {
+  status?: "pending" | "ready" | "failed";
+  error?: string | null;
+  score?: number;
+  level_judgment?:
+    | "incorrect_or_insufficient"
+    | "directionally_correct_but_not_systematic"
+    | "basically_good_but_not_strong_enough"
+    | "strong_and_structured"
+    | "excellent_and_owner_like";
+  overall_comment?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  missing_framework?: string[];
+  stronger_answer_outline?: string[];
+  interviewer_concern?: string;
+  display_comment?: string;
+};
+
 export type MockInterviewSessionRecord = {
   id: string;
   user_id: string;
@@ -37,8 +61,10 @@ export type MockInterviewTurnRecord = {
   question_text: string;
   question_type: "main" | "followup";
   main_question_id: string;
+  review_type: MockInterviewReviewType;
   answer_text: string | null;
   comment_text: string | null;
+  evaluation_json: MockInterviewDeepReviewRecord | Record<string, never>;
   decision_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;

@@ -35,7 +35,9 @@ import {
   recordMockInterviewEvent,
   retryMockInterviewPrep,
   submitMockInterviewAnswer,
+  type MockInterviewDeepReviewRecord,
   type MockInterviewSessionRecord,
+  type MockInterviewTurnRecord,
 } from "@/lib/api/modules/mock-interviews";
 
 function getErrorMessage(error: unknown) {
@@ -68,6 +70,171 @@ function getSessionStatusLabel(value: string) {
 
 function getQuestionTypeLabel(value: string) {
   return value === "followup" ? "追问" : "主问题";
+}
+
+function getReviewTypeLabel(value: string) {
+  const labels: Record<string, string> = {
+    technical_analysis: "技术分析",
+    project_experience: "项目经历",
+    knowledge_fundamental: "基础原理",
+  };
+  return labels[value] ?? value;
+}
+
+function getDeepReviewPayload(
+  payload: MockInterviewTurnRecord["evaluation_json"]
+): MockInterviewDeepReviewRecord | null {
+  if (!payload || Array.isArray(payload)) {
+    return null;
+  }
+  const candidate = payload as MockInterviewDeepReviewRecord;
+  if (
+    !candidate.status &&
+    !candidate.display_comment &&
+    !candidate.overall_comment &&
+    !candidate.interviewer_concern &&
+    !candidate.strengths?.length &&
+    !candidate.weaknesses?.length &&
+    !candidate.stronger_answer_outline?.length
+  ) {
+    return null;
+  }
+  return candidate;
+}
+
+function DeepReviewSection({
+  title,
+  items,
+}: {
+  title: string;
+  items: string[];
+}) {
+  if (!items.length) {
+    return null;
+  }
+
+  return (
+    <div className="border border-[#1C1C1C]/10 bg-[#fafafa] p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+        {title}
+      </p>
+      <div className="mt-3 space-y-2 text-sm leading-6 text-[#1C1C1C]/72">
+        {items.map((item, index) => (
+          <p key={`${title}-${index}`}>- {item}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DeepReviewCard({ turn }: { turn: MockInterviewTurnRecord }) {
+  if (!turn.answer_text) {
+    return null;
+  }
+
+  const review = getDeepReviewPayload(turn.evaluation_json);
+  if (!review) {
+    return (
+      <div className="mt-4 border border-dashed border-[#1C1C1C]/15 bg-[#fafafa] p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+          深度点评 · {getReviewTypeLabel(turn.review_type)}
+        </p>
+        <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/60">
+          深度点评生成中。
+        </p>
+      </div>
+    );
+  }
+
+  if (review.status === "failed") {
+    return (
+      <div className="mt-4 border border-[#1C1C1C]/12 bg-[#fafafa] p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+          深度点评 · {getReviewTypeLabel(turn.review_type)}
+        </p>
+        <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/68">
+          {review.display_comment || "深度点评暂时不可用。"}
+        </p>
+      </div>
+    );
+  }
+
+  if (review.status !== "ready") {
+    return (
+      <div className="mt-4 border border-dashed border-[#1C1C1C]/15 bg-[#fafafa] p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+          深度点评 · {getReviewTypeLabel(turn.review_type)}
+        </p>
+        <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/60">
+          深度点评生成中。
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 border border-[#1C1C1C]/12 bg-[#fafafa] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+            深度点评 · {getReviewTypeLabel(turn.review_type)}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-[#1C1C1C]">
+            {review.display_comment}
+          </p>
+        </div>
+        <div className="border border-[#1C1C1C]/10 bg-white px-3 py-2 text-right">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/50">
+            本题评分
+          </p>
+          <p className="mt-1 text-lg font-semibold text-[#1C1C1C]">
+            {typeof review.score === "number" ? review.score.toFixed(1) : "--"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="border border-[#1C1C1C]/10 bg-white p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+            面试官判断
+          </p>
+          <p className="mt-3 text-sm leading-6 text-[#1C1C1C]/72">
+            {review.overall_comment}
+          </p>
+        </div>
+        <div className="border border-[#1C1C1C]/10 bg-white p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
+            为什么这会影响面试评价
+          </p>
+          <p className="mt-3 text-sm leading-6 text-[#1C1C1C]/72">
+            {review.interviewer_concern}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <DeepReviewSection title="你答对了的部分" items={review.strengths ?? []} />
+        <DeepReviewSection title="主要问题" items={review.weaknesses ?? []} />
+      </div>
+
+      {turn.review_type === "technical_analysis" &&
+      (review.missing_framework?.length ?? 0) > 0 ? (
+        <div className="mt-4">
+          <DeepReviewSection
+            title="缺失框架"
+            items={review.missing_framework ?? []}
+          />
+        </div>
+      ) : null}
+
+      <div className="mt-4">
+        <DeepReviewSection
+          title="更强回答方向"
+          items={review.stronger_answer_outline ?? []}
+        />
+      </div>
+    </div>
+  );
 }
 
 function getNextActionMessage(value: unknown) {
@@ -642,6 +809,7 @@ export default function DashboardInterviewsPage() {
                         点评：{turn.comment_text}
                       </p>
                     ) : null}
+                    <DeepReviewCard turn={turn} />
                   </div>
                 ))}
               </div>

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.schemas.interview_review import MockInterviewReviewType
+
 PROMPT_DIR = Path(__file__).resolve().parent
 
 
@@ -31,3 +33,20 @@ def get_mock_interview_dynamic_question_prompt() -> str:
 
 def get_mock_interview_recap_prompt() -> str:
     return (PROMPT_DIR / "recap.txt").read_text(encoding="utf-8").strip()
+
+
+def get_mock_interview_deep_review_system_prompt() -> str:
+    return (PROMPT_DIR / "deep_review_system.txt").read_text(encoding="utf-8").strip()
+
+
+def get_mock_interview_deep_review_user_prompt() -> str:
+    return (PROMPT_DIR / "deep_review_user.txt").read_text(encoding="utf-8").strip()
+
+
+def get_mock_interview_deep_review_rubric(review_type: MockInterviewReviewType) -> str:
+    file_map = {
+        MockInterviewReviewType.TECHNICAL_ANALYSIS: "deep_review_rubric_technical_analysis.txt",
+        MockInterviewReviewType.PROJECT_EXPERIENCE: "deep_review_rubric_project_experience.txt",
+        MockInterviewReviewType.KNOWLEDGE_FUNDAMENTAL: "deep_review_rubric_knowledge_fundamental.txt",
+    }
+    return (PROMPT_DIR / file_map[review_type]).read_text(encoding="utf-8").strip()

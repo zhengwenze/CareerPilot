@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.ai_runtime import TaskState
+from app.schemas.interview_review import DeepReviewResult, MockInterviewReviewType
 
 
 class MockInterviewSessionCreateRequest(BaseModel):
@@ -49,8 +50,10 @@ class MockInterviewTurnRecord(BaseModel):
     question_text: str
     question_type: Literal["main", "followup"]
     main_question_id: str
+    review_type: MockInterviewReviewType
     answer_text: str | None = None
     comment_text: str | None = None
+    evaluation_json: DeepReviewResult | dict[str, Any] = Field(default_factory=dict)
     decision_json: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime

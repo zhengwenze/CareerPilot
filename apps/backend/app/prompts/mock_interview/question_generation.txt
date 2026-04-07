@@ -18,6 +18,7 @@
 6. 每题附带：
    - question_id
    - category
+   - review_type（只能是 technical_analysis / project_experience / knowledge_fundamental）
    - text
    - intent
    - followup_hints（给出1~3个可能追问方向）

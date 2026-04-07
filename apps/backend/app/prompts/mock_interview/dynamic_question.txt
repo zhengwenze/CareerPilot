@@ -8,5 +8,11 @@
 要求：
 1. 新问题不能与已问过的问题重复。
 2. 问题要贴合岗位和候选人经历。
-3. 只输出 1 个主问题。
+3. 输出时必须附带：
+   - question_id
+   - category
+   - review_type（只能是 technical_analysis / project_experience / knowledge_fundamental）
+   - text
+   - intent
+   - followup_hints
 4. 输出 JSON 对象。

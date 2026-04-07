@@ -28,7 +28,7 @@ export function ResumeStatusIndicator({ resume, processingStartTime, isProcessin
       label={label}
       timer={
         isProcessing && processingStartTime !== null ? (
-          <ProcessingTimer startTime={processingStartTime} isActive={isProcessing} />
+          <ProcessingTimer startTime={processingStartTime ?? null} isActive={isProcessing} />
         ) : null
       }
     />

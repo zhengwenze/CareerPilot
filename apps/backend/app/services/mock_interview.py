@@ -31,6 +31,11 @@ from app.prompts.mock_interview import (
     get_mock_interview_system_prompt,
 )
 from app.schemas.ai_runtime import TaskState
+from app.schemas.interview_review import (
+    DeepReviewResult,
+    MockInterviewReviewType,
+    coerce_mock_interview_review_type,
+)
 from app.schemas.mock_interview import (
     MockInterviewAnswerSubmitResponse,
     MockInterviewReviewSummary,
@@ -40,19 +45,44 @@ from app.schemas.mock_interview import (
     MockInterviewTurnRecord,
 )
 from app.services.ai_client import AIProviderConfig, request_text_completion
+from app.services.interview_review import review_interview_answer
 from app.services.resume_ai import is_ai_configured
 
 logger = logging.getLogger(__name__)
 
 FALLBACK_QUESTIONS = [
-    "先请你做一个简短的自我介绍，并重点讲和这个岗位最相关的经历。",
-    "你简历里最能体现你能力的一个项目是什么？请详细说说。",
-    "在那个项目中，你承担的核心职责是什么？",
-    "你在过往经历里遇到过最棘手的问题是什么？你是怎么解决的？",
-    "如果让你来胜任这个岗位，你觉得自己最突出的优势是什么？",
-    "你觉得自己和这个岗位之间还有哪些能力差距？",
-    "你在团队协作中通常承担什么角色？",
-    "如果项目进度紧张但需求还在变化，你会怎么处理？",
+    (
+        "先请你做一个简短的自我介绍，并重点讲和这个岗位最相关的经历。",
+        MockInterviewReviewType.PROJECT_EXPERIENCE,
+    ),
+    (
+        "你简历里最能体现你能力的一个项目是什么？请详细说说。",
+        MockInterviewReviewType.PROJECT_EXPERIENCE,
+    ),
+    (
+        "在那个项目中，你承担的核心职责是什么？",
+        MockInterviewReviewType.PROJECT_EXPERIENCE,
+    ),
+    (
+        "你在过往经历里遇到过最棘手的问题是什么？你是怎么解决的？",
+        MockInterviewReviewType.TECHNICAL_ANALYSIS,
+    ),
+    (
+        "如果让你来胜任这个岗位，你觉得自己最突出的优势是什么？",
+        MockInterviewReviewType.PROJECT_EXPERIENCE,
+    ),
+    (
+        "你觉得自己和这个岗位之间还有哪些能力差距？",
+        MockInterviewReviewType.PROJECT_EXPERIENCE,
+    ),
+    (
+        "你在团队协作中通常承担什么角色？",
+        MockInterviewReviewType.PROJECT_EXPERIENCE,
+    ),
+    (
+        "如果项目进度紧张但需求还在变化，你会怎么处理？",
+        MockInterviewReviewType.TECHNICAL_ANALYSIS,
+    ),
 ]
 
 DEFAULT_ENDING_TEXT = "本次模拟面试到这里结束，感谢你的参与。整体交流比较顺畅，建议你继续加强细节表达和案例量化。"
@@ -62,6 +92,7 @@ DEFAULT_ENDING_TEXT = "本次模拟面试到这里结束，感谢你的参与。
 class MainQuestionPlan:
     question_id: str
     category: str
+    review_type: MockInterviewReviewType
     text: str
     intent: str
     followup_hints: list[str] = field(default_factory=list)
@@ -186,10 +217,44 @@ def _build_first_question(job: JobDescription, workflow: ResumeOptimizationSessi
     return MainQuestionPlan(
         question_id="opening-1",
         category="开场",
+        review_type=MockInterviewReviewType.PROJECT_EXPERIENCE,
         text=text,
         intent=f"快速判断候选人与岗位 {candidate_title} 的直接相关性",
         followup_hints=["与岗位最相关的经历", "岗位动机"],
     )
+
+
+def _build_question_rubric(review_type: MockInterviewReviewType) -> list[str]:
+    rubric_map = {
+        MockInterviewReviewType.TECHNICAL_ANALYSIS: [
+            "是否先定义问题现象与指标",
+            "是否有分层排查框架",
+            "是否避免过快归因",
+            "是否体现验证与回归意识",
+        ],
+        MockInterviewReviewType.PROJECT_EXPERIENCE: [
+            "是否讲清背景、职责和动作",
+            "是否体现难点与取舍",
+            "是否量化结果",
+            "是否有 owner 感",
+        ],
+        MockInterviewReviewType.KNOWLEDGE_FUNDAMENTAL: [
+            "概念是否准确",
+            "是否解释清楚原理与因果",
+            "是否能联系实践场景",
+            "是否不是停留在术语层面",
+        ],
+    }
+    return rubric_map[review_type]
+
+
+def _deserialize_deep_review(payload: dict[str, Any] | None) -> DeepReviewResult | dict[str, Any]:
+    if not payload:
+        return {}
+    try:
+        return DeepReviewResult.model_validate(payload)
+    except Exception:
+        return payload
 
 
 def _build_review_summary(turns: list[MockInterviewTurn]) -> MockInterviewReviewSummary:
@@ -224,8 +289,10 @@ def _serialize_turns(turns: list[MockInterviewTurn]) -> list[MockInterviewTurnRe
                 question_text=turn.question_text,
                 question_type="followup" if turn.question_source == "follow_up" else "main",
                 main_question_id=turn.question_topic,
+                review_type=coerce_mock_interview_review_type(turn.review_type),
                 answer_text=turn.answer_text,
                 comment_text=str(decision_json.get("comment_text") or "").strip() or None,
+                evaluation_json=_deserialize_deep_review(turn.evaluation_json or {}),
                 decision_json=decision_json,
                 created_at=turn.created_at,
                 updated_at=turn.updated_at,
@@ -324,11 +391,20 @@ def _coerce_main_question(item: Any, index: int) -> MainQuestionPlan:
     followup_hints = item.get("followup_hints", [])
     if not isinstance(followup_hints, list):
         followup_hints = []
+    category = str(item.get("category", "未分类")).strip() or "未分类"
+    text = str(item.get("text", "")).strip()
+    intent = str(item.get("intent", "")).strip()
     return MainQuestionPlan(
         question_id=str(item.get("question_id", f"q{index}")).strip() or f"q{index}",
-        category=str(item.get("category", "未分类")).strip() or "未分类",
-        text=str(item.get("text", "")).strip(),
-        intent=str(item.get("intent", "")).strip(),
+        category=category,
+        review_type=coerce_mock_interview_review_type(
+            str(item.get("review_type", "")).strip(),
+            category=category,
+            intent=intent,
+            text=text,
+        ),
+        text=text,
+        intent=intent,
         followup_hints=[str(hint).strip() for hint in followup_hints if str(hint).strip()],
     )
 
@@ -386,11 +462,12 @@ async def generate_main_questions(
         MainQuestionPlan(
             question_id=f"fallback-q{index + 1}",
             category="通用",
+            review_type=review_type,
             text=text,
             intent="fallback",
             followup_hints=[],
         )
-        for index, text in enumerate(FALLBACK_QUESTIONS)
+        for index, (text, review_type) in enumerate(FALLBACK_QUESTIONS)
     ]
 
 
@@ -494,10 +571,11 @@ async def generate_dynamic_main_question(
             raise ValueError("Dynamic main question must be a JSON object")
         return _coerce_main_question(parsed, len(asked_questions) + 1)
     except Exception:
-        fallback_text = FALLBACK_QUESTIONS[len(asked_questions) % len(FALLBACK_QUESTIONS)]
+        fallback_text, fallback_review_type = FALLBACK_QUESTIONS[len(asked_questions) % len(FALLBACK_QUESTIONS)]
         return MainQuestionPlan(
             question_id=f"fallback-extra-{len(asked_questions) + 1}",
             category="通用",
+            review_type=fallback_review_type,
             text=fallback_text,
             intent="fallback",
             followup_hints=[],
@@ -531,6 +609,29 @@ def _find_main_question(plan_json: dict[str, Any], *, question_id: str | None) -
     return None
 
 
+def _resolve_turn_review_type(
+    plan_json: dict[str, Any],
+    *,
+    question_type: str,
+    main_question_id: str | None,
+    fallback_review_type: MockInterviewReviewType = MockInterviewReviewType.PROJECT_EXPERIENCE,
+) -> MockInterviewReviewType:
+    question = _find_main_question(plan_json, question_id=main_question_id) or {}
+    if question_type == "followup" and not question and plan_json.get("current_main_question_id"):
+        question = _find_main_question(plan_json, question_id=str(plan_json.get("current_main_question_id"))) or {}
+    if question:
+        return coerce_mock_interview_review_type(
+            str(question.get("review_type", "")).strip(),
+            category=str(question.get("category", "")).strip(),
+            intent=str(question.get("intent", "")).strip(),
+            text=str(question.get("text", "")).strip(),
+        )
+    current_review_type = str(plan_json.get("current_review_type", "")).strip()
+    if current_review_type:
+        return coerce_mock_interview_review_type(current_review_type)
+    return fallback_review_type
+
+
 def _get_or_build_next_question(plan_json: dict[str, Any]) -> tuple[str, str, str | None]:
     queued_followup = _normalize_text(str(plan_json.get("queued_followup_question") or ""))
     if queued_followup:
@@ -557,10 +658,12 @@ def _assign_current_question(
     question_text: str,
     question_type: str,
     main_question_id: str | None,
+    review_type: MockInterviewReviewType,
 ) -> None:
     plan_json["current_question"] = question_text
     plan_json["current_question_type"] = question_type
     plan_json["current_main_question_id"] = main_question_id
+    plan_json["current_review_type"] = review_type.value
     if question_type == "main":
         plan_json["followup_count_for_current_main"] = 0
 
@@ -780,6 +883,7 @@ async def process_mock_interview_prep(
                 if not existing_question:
                     existing_question = main_questions[0].text
                     existing_question_id = main_questions[0].question_id
+                    plan_json["current_review_type"] = main_questions[0].review_type.value
                 remaining_questions = [asdict(item) for item in main_questions if item.question_id != existing_question_id]
             else:
                 remaining_questions = []
@@ -880,8 +984,18 @@ async def process_mock_interview_turn(
                 candidate_answer=str(turn.answer_text or ""),
             )
 
+            deep_review = await review_interview_answer(
+                settings,
+                review_type=coerce_mock_interview_review_type(turn.review_type),
+                role_summary=str(plan_json.get("role_summary") or ""),
+                candidate_profile=str(plan_json.get("candidate_profile") or ""),
+                question=turn.question_text,
+                answer=str(turn.answer_text or ""),
+                company_or_style="",
+            )
+
             turn.decision_json = decision.model_dump()
-            turn.evaluation_json = {"summary": decision.comment_text if decision.need_comment else ""}
+            turn.evaluation_json = deep_review.model_dump(mode="json")
             turn.updated_at = utc_now_naive()
             session.add(turn)
 
@@ -916,11 +1030,18 @@ async def process_mock_interview_turn(
                     plan_json["main_questions"] = main_questions
                     question_text, question_type, main_question_id = _get_or_build_next_question(plan_json)
 
+                next_review_type = _resolve_turn_review_type(
+                    plan_json,
+                    question_type=question_type,
+                    main_question_id=main_question_id,
+                )
+
                 _assign_current_question(
                     plan_json,
                     question_text=question_text,
                     question_type=question_type,
                     main_question_id=main_question_id,
+                    review_type=next_review_type,
                 )
                 session_record.current_follow_up_count = int(
                     plan_json.get("followup_count_for_current_main", session_record.current_follow_up_count) or 0
@@ -931,10 +1052,11 @@ async def process_mock_interview_turn(
                     turn_index=session_record.current_question_index,
                     question_group_index=int(plan_json.get("main_question_index", 0) or 0) + 1,
                     question_source="follow_up" if question_type == "followup" else "main",
+                    review_type=next_review_type.value,
                     question_topic=str(main_question_id or ""),
                     question_text=question_text,
                     question_intent=decision.reason if question_type == "followup" else "",
-                    question_rubric_json=[],
+                    question_rubric_json=_build_question_rubric(next_review_type),
                     status="asked",
                     evaluation_json={},
                     decision_json={},
@@ -1048,6 +1170,7 @@ async def create_mock_interview_session(
             "current_question": first_question.text,
             "current_question_type": "main",
             "current_main_question_id": first_question.question_id,
+            "current_review_type": first_question.review_type.value,
             "queued_followup_question": None,
             "ending_text": None,
             "prep_state": prep_state.model_dump(mode="json"),
@@ -1065,10 +1188,11 @@ async def create_mock_interview_session(
         turn_index=1,
         question_group_index=1,
         question_source="main",
+        review_type=first_question.review_type.value,
         question_topic=first_question.question_id,
         question_text=first_question.text,
         question_intent=first_question.intent,
-        question_rubric_json=[],
+        question_rubric_json=_build_question_rubric(first_question.review_type),
         status="asked",
         evaluation_json={},
         decision_json={},
@@ -1124,6 +1248,7 @@ async def submit_mock_interview_answer(
 
     turn.answer_text = normalized_answer
     turn.status = "answered"
+    turn.evaluation_json = DeepReviewResult.pending().model_dump(mode="json")
     turn.answered_at = now
     turn.evaluated_at = now
     turn.updated_by = current_user.id

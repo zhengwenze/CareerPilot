@@ -1,0 +1,23 @@
+题型：{review_type}
+
+目标岗位：{role_summary}
+公司或面试风格：{company_or_style}
+候选人画像：{candidate_profile}
+
+题型评分要求：
+{rubric}
+
+面试题：
+{question}
+
+候选人回答：
+{answer}
+
+请你基于题型评分要求进行点评，并严格输出 JSON。
+
+补充要求：
+1. `strengths` 只写真正答对的点，控制在 2~5 条。
+2. `weaknesses` 要具体，控制在 2~6 条。
+3. `stronger_answer_outline` 写成更强回答骨架，控制在 3~7 条。
+4. `display_comment` 要像面试官开头点评，简洁但有判断。
+5. `technical_analysis` 题型下，`missing_framework` 必须列出缺失的排查框架。

@@ -8,6 +8,12 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.models import JobDescription, MatchReport, MockInterviewSession, Resume, ResumeOptimizationSession
 from app.schemas.ai_runtime import TaskState
+from app.schemas.interview_review import (
+    DeepReviewResult,
+    InterviewLevelJudgment,
+    MockInterviewReviewType,
+    coerce_mock_interview_review_type,
+)
 from app.schemas.resume import ResumeBasicInfo, ResumeStructuredData
 from app.services import mock_interview as mock_interview_service
 
@@ -210,6 +216,7 @@ async def test_mock_interview_returns_first_question_then_prepares_followups_asy
             mock_interview_service.MainQuestionPlan(
                 question_id="main-1",
                 category="项目经历",
+                review_type=MockInterviewReviewType.PROJECT_EXPERIENCE,
                 text="请讲一个你主导前端架构升级的项目。",
                 intent="评估候选人是否有真实主导经验",
                 followup_hints=["推进方式", "影响结果"],
@@ -244,11 +251,37 @@ async def test_mock_interview_returns_first_question_then_prepares_followups_asy
         calls.append(("generate_ending_text", f"{candidate_profile} || {recent_turns}"))
         return "今天先到这里，感谢你的回答。整体思路清楚，后续继续强化案例细节。"
 
+    async def fake_review_interview_answer(
+        settings,
+        *,
+        review_type: MockInterviewReviewType,
+        role_summary: str,
+        candidate_profile: str,
+        question: str,
+        answer: str,
+        company_or_style: str = "",
+    ) -> DeepReviewResult:
+        del settings, role_summary, candidate_profile, company_or_style
+        calls.append(("review_interview_answer", f"{review_type.value} || {question} || {answer}"))
+        return DeepReviewResult(
+            status="ready",
+            score=6.5,
+            level_judgment=InterviewLevelJudgment.DIRECTIONALLY_CORRECT_BUT_NOT_SYSTEMATIC,
+            overall_comment="方向是对的，但回答还不够成体系。",
+            strengths=["方向正确", "有结构意识"],
+            weaknesses=["排查维度不完整", "过快归因"],
+            missing_framework=["数据输入", "通信与 overlap"] if review_type == MockInterviewReviewType.TECHNICAL_ANALYSIS else [],
+            stronger_answer_outline=["先定义问题现象", "再做对照实验", "最后验证优化收益"],
+            interviewer_concern="像能参与排查，但还不足以独立主导。",
+            display_comment="这一题我会给你 6.5/10。方向是对的，但还不够成体系。",
+        )
+
     monkeypatch.setattr(mock_interview_service, "summarize_role_desc", fake_summarize_role_desc)
     monkeypatch.setattr(mock_interview_service, "summarize_resume", fake_summarize_resume)
     monkeypatch.setattr(mock_interview_service, "generate_main_questions", fake_generate_main_questions)
     monkeypatch.setattr(mock_interview_service, "decide_next_turn", fake_decide_next_turn)
     monkeypatch.setattr(mock_interview_service, "generate_ending_text", fake_generate_ending_text)
+    monkeypatch.setattr(mock_interview_service, "review_interview_answer", fake_review_interview_answer)
 
     response = await client.post(
         "/mock-interviews",
@@ -309,6 +342,10 @@ async def test_mock_interview_returns_first_question_then_prepares_followups_asy
     main_session = response.json()["data"]
     assert main_session["current_turn"]["question_type"] == "main"
     assert main_session["current_turn"]["question_text"] == "请讲一个你主导前端架构升级的项目。"
+    answered_opening = next(turn for turn in main_session["turns"] if turn["turn_index"] == 1)
+    assert answered_opening["review_type"] == "project_experience"
+    assert answered_opening["evaluation_json"]["status"] == "ready"
+    assert answered_opening["evaluation_json"]["display_comment"].startswith("这一题我会给你 6.5/10")
 
     response = await client.post(
         f"/mock-interviews/{created_session['id']}/turns/{main_session['current_turn']['id']}/answer",
@@ -357,6 +394,7 @@ async def test_mock_interview_returns_first_question_then_prepares_followups_asy
     assert completed_session["status"] == "completed"
     assert completed_session["ending_text"].startswith("今天先到这里")
     assert any(call[0] == "generate_ending_text" for call in calls)
+    assert any(call[0] == "review_interview_answer" for call in calls)
 
 
 async def test_mock_interview_list_and_finish_return_structured_runtime_state(
@@ -501,3 +539,116 @@ async def test_mock_interview_rejects_cross_user_supports_retry_and_events(
         headers={"Authorization": f"Bearer {token_b}"},
     )
     assert response.status_code == 404
+
+
+def test_mock_interview_review_type_coercion_uses_explicit_or_safe_fallbacks():
+    assert (
+        coerce_mock_interview_review_type("technical_analysis")
+        == MockInterviewReviewType.TECHNICAL_ANALYSIS
+    )
+    assert (
+        coerce_mock_interview_review_type("", category="系统设计", text="你会怎么排查线上性能瓶颈？")
+        == MockInterviewReviewType.TECHNICAL_ANALYSIS
+    )
+    assert (
+        coerce_mock_interview_review_type("", category="基础原理", text="讲一下虚拟内存的原理")
+        == MockInterviewReviewType.KNOWLEDGE_FUNDAMENTAL
+    )
+    assert (
+        coerce_mock_interview_review_type("", category="项目经历", text="讲一个你主导的项目")
+        == MockInterviewReviewType.PROJECT_EXPERIENCE
+    )
+
+
+@pytest.mark.asyncio
+async def test_mock_interview_turn_deep_review_failure_does_not_block_next_turn(
+    app, client, db_session, monkeypatch
+):
+    monkeypatch.setattr("app.routers.mock_interviews.schedule_mock_interview_prep", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.routers.mock_interviews.schedule_mock_interview_turn", lambda *args, **kwargs: None)
+
+    user, token = await create_test_user(db_session, email="interview-deep-review-fail@example.com")
+    job, workflow = await _seed_interview_dependencies(db_session, user=user, suffix="deep-review-fail")
+
+    async def fake_summarize_role_desc(settings, target_role_desc: str) -> str:
+        del settings, target_role_desc
+        return "岗位需要候选人具备排查复杂问题的能力"
+
+    async def fake_summarize_resume(settings, resume_md: str) -> str:
+        del settings, resume_md
+        return "候选人做过复杂系统排查与性能优化"
+
+    async def fake_generate_main_questions(settings, *, role_summary: str, candidate_profile: str):
+        del settings, role_summary, candidate_profile
+        return [
+            mock_interview_service.MainQuestionPlan(
+                question_id="ta-1",
+                category="技术分析",
+                review_type=MockInterviewReviewType.TECHNICAL_ANALYSIS,
+                text="如果线上吞吐突然下降，你会怎么排查？",
+                intent="评估系统化排查能力",
+                followup_hints=["指标", "验证"],
+            )
+        ]
+
+    async def fake_decide_next_turn(settings, **kwargs):
+        del settings, kwargs
+        return mock_interview_service.MockInterviewTurnDecision(
+            need_comment=True,
+            comment_text="先继续往下回答。",
+            next_action="next_main",
+            next_question="",
+            reason="move on",
+        )
+
+    async def fake_review_interview_answer(settings, **kwargs):
+        del settings, kwargs
+        return DeepReviewResult.failed()
+
+    monkeypatch.setattr(mock_interview_service, "summarize_role_desc", fake_summarize_role_desc)
+    monkeypatch.setattr(mock_interview_service, "summarize_resume", fake_summarize_resume)
+    monkeypatch.setattr(mock_interview_service, "generate_main_questions", fake_generate_main_questions)
+    monkeypatch.setattr(mock_interview_service, "decide_next_turn", fake_decide_next_turn)
+    monkeypatch.setattr(mock_interview_service, "review_interview_answer", fake_review_interview_answer)
+
+    response = await client.post(
+        "/mock-interviews",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "job_id": str(job.id),
+            "resume_optimization_session_id": str(workflow.id),
+        },
+    )
+    assert response.status_code == 201
+    created_session = response.json()["data"]
+
+    await mock_interview_service.process_mock_interview_prep(
+        session_id=UUID(created_session["id"]),
+        session_factory=app.state.session_factory,
+        settings=app.state.settings,
+    )
+
+    response = await client.post(
+        f"/mock-interviews/{created_session['id']}/turns/{created_session['current_turn']['id']}/answer",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"answer_text": "我会先看监控和 profiling，再拆分数据、计算、通信路径。"},
+    )
+    assert response.status_code == 200
+
+    await mock_interview_service.process_mock_interview_turn(
+        session_id=UUID(created_session["id"]),
+        turn_id=UUID(created_session["current_turn"]["id"]),
+        session_factory=app.state.session_factory,
+        settings=app.state.settings,
+    )
+
+    response = await client.get(
+        f"/mock-interviews/{created_session['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    session_payload = response.json()["data"]
+    answered_turn = next(turn for turn in session_payload["turns"] if turn["turn_index"] == 1)
+    assert answered_turn["evaluation_json"]["status"] == "failed"
+    assert answered_turn["evaluation_json"]["display_comment"] == "本次深度点评暂时不可用"
+    assert session_payload["current_turn"] is not None
