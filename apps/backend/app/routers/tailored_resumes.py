@@ -131,6 +131,12 @@ async def convert_resume_pdf_to_markdown(
             ],
             ai_chain_latency_ms=result.ai_chain_latency_ms,
             degraded_used=result.degraded_used,
+            configured_primary_provider=result.configured_primary_provider,
+            configured_primary_model=result.configured_primary_model,
+            configured_secondary_provider=result.configured_secondary_provider,
+            configured_secondary_model=result.configured_secondary_model,
+            last_attempt_status=result.last_attempt_status,
+            ai_error_category=result.ai_error_category,
         ),
     )
 

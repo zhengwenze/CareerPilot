@@ -42,6 +42,7 @@ AI_STATUS_FALLBACK = "fallback"
 PARSE_PROGRESS_PREPARING = "排队完成，准备解析"
 PARSE_PROGRESS_READING_FILE = "读取文件中"
 PARSE_PROGRESS_PDF_TO_MARKDOWN = "PDF 转 Markdown 中"
+RESUME_PDF_TO_MD_PRIMARY_TIMEOUT_SECONDS = 60
 
 logger = logging.getLogger(__name__)
 _RESUME_PDF_TO_MD_MODULE: ModuleType | None = None
@@ -76,6 +77,12 @@ def build_initial_resume_parse_artifacts(*, file_name: str) -> dict[str, object]
         "ai_attempts": [],
         "ai_chain_latency_ms": None,
         "degraded_used": False,
+        "configured_primary_provider": "",
+        "configured_primary_model": "",
+        "configured_secondary_provider": "",
+        "configured_secondary_model": "",
+        "last_attempt_status": "",
+        "ai_error_category": None,
         "raw_text": "",
         "parse_status": "pending",
         "parse_error": None,
@@ -107,6 +114,11 @@ def build_resume_parse_artifacts(
     ai_attempts: list[object] | None,
     ai_chain_latency_ms: int | None,
     degraded_used: bool,
+    configured_primary_provider: str | None,
+    configured_primary_model: str | None,
+    configured_secondary_provider: str | None,
+    configured_secondary_model: str | None,
+    last_attempt_status: str | None,
     ai_status: str | None,
     ai_correction_applied: bool,
     ai_error_category: str | None,
@@ -142,6 +154,12 @@ def build_resume_parse_artifacts(
         ],
         "ai_chain_latency_ms": ai_chain_latency_ms,
         "degraded_used": degraded_used,
+        "configured_primary_provider": str(configured_primary_provider or "").strip(),
+        "configured_primary_model": str(configured_primary_model or "").strip(),
+        "configured_secondary_provider": str(configured_secondary_provider or "").strip(),
+        "configured_secondary_model": str(configured_secondary_model or "").strip(),
+        "last_attempt_status": str(last_attempt_status or "").strip(),
+        "ai_error_category": ai_error_category,
         "raw_text": str(raw_text or "").strip(),
         "parse_status": parse_status,
         "parse_error": parse_error,
@@ -164,6 +182,11 @@ def build_resume_parse_artifacts(
             "ai_path": str(ai_path or "").strip(),
             "ai_chain_latency_ms": ai_chain_latency_ms,
             "degraded_used": degraded_used,
+            "configured_primary_provider": str(configured_primary_provider or "").strip(),
+            "configured_primary_model": str(configured_primary_model or "").strip(),
+            "configured_secondary_provider": str(configured_secondary_provider or "").strip(),
+            "configured_secondary_model": str(configured_secondary_model or "").strip(),
+            "last_attempt_status": str(last_attempt_status or "").strip(),
             "ocr_used": ocr_used,
             "ocr_engine": ocr_engine,
         },
@@ -197,7 +220,8 @@ def log_resume_pdf_to_markdown_result(
         "resume_pdf_to_markdown.completed resume_id=%s parse_job_id=%s ai_used=%s ai_error=%s "
         "markdown_length_before=%s markdown_length_after=%s fallback_used=%s prompt_version=%s ai_latency_ms=%s "
         "ai_path=%s degraded_used=%s ai_chain_latency_ms=%s ai_attempts_count=%s "
-        "primary_latency_ms=%s secondary_latency_ms=%s",
+        "primary_latency_ms=%s secondary_latency_ms=%s configured_primary=%s/%s "
+        "configured_secondary=%s/%s last_attempt_status=%s",
         resume_id,
         parse_job_id,
         getattr(pdf_to_md_result, "ai_used", False),
@@ -213,6 +237,11 @@ def log_resume_pdf_to_markdown_result(
         len(attempts),
         primary_latency_ms,
         secondary_latency_ms,
+        getattr(pdf_to_md_result, "configured_primary_provider", ""),
+        getattr(pdf_to_md_result, "configured_primary_model", ""),
+        getattr(pdf_to_md_result, "configured_secondary_provider", ""),
+        getattr(pdf_to_md_result, "configured_secondary_model", ""),
+        getattr(pdf_to_md_result, "last_attempt_status", ""),
     )
 
 
@@ -257,16 +286,9 @@ def build_resume_pdf_ai_configs(settings: Settings) -> list["AIProviderConfig"]:
         base_url=(settings.resume_ai_base_url or "").strip(),
         api_key=(settings.resume_ai_api_key or "").strip() or None,
         model=(settings.resume_ai_model or "gpt-5.4").strip(),
-        timeout_seconds=settings.resume_pdf_ai_primary_timeout_seconds,
+        timeout_seconds=RESUME_PDF_TO_MD_PRIMARY_TIMEOUT_SECONDS,
     )
-    secondary_config = AIProviderConfig(
-        provider=(settings.resume_pdf_ai_secondary_provider or "ollama").strip() or "ollama",
-        base_url=(settings.resume_pdf_ai_secondary_base_url or "").strip(),
-        api_key=(settings.resume_pdf_ai_secondary_api_key or "").strip() or None,
-        model=(settings.resume_pdf_ai_secondary_model or "qwen2.5:7b").strip(),
-        timeout_seconds=settings.resume_pdf_ai_secondary_timeout_seconds,
-    )
-    return [primary_config, secondary_config]
+    return [primary_config]
 
 
 async def convert_pdf_bytes_to_markdown(
@@ -284,7 +306,8 @@ async def convert_pdf_bytes_to_markdown(
         pdf_bytes,
         file_name,
         ai_configs=build_resume_pdf_ai_configs(settings),
-        retry_count_override=settings.resume_pdf_ai_retry_count,
+        retry_count_override=min(max(0, settings.resume_pdf_ai_retry_count), 1),
+        total_timeout_budget_seconds=RESUME_PDF_TO_MD_PRIMARY_TIMEOUT_SECONDS,
     )
 
 
@@ -574,6 +597,11 @@ async def process_resume_parse_job(
     ai_attempts: list[object] = []
     ai_chain_latency_ms: int | None = None
     degraded_used = False
+    configured_primary_provider: str | None = None
+    configured_primary_model: str | None = None
+    configured_secondary_provider: str | None = None
+    configured_secondary_model: str | None = None
+    last_attempt_status: str | None = None
     ai_error_category: str | None = None
     ai_error_message: str | None = None
     pdf_to_md_result = None
@@ -616,6 +644,11 @@ async def process_resume_parse_job(
             ai_attempts = list(pdf_to_md_result.ai_attempts or [])
             ai_chain_latency_ms = pdf_to_md_result.ai_chain_latency_ms
             degraded_used = pdf_to_md_result.degraded_used
+            configured_primary_provider = pdf_to_md_result.configured_primary_provider
+            configured_primary_model = pdf_to_md_result.configured_primary_model
+            configured_secondary_provider = pdf_to_md_result.configured_secondary_provider
+            configured_secondary_model = pdf_to_md_result.configured_secondary_model
+            last_attempt_status = pdf_to_md_result.last_attempt_status
             ai_error_category = pdf_to_md_result.ai_error_category
             ai_error_message = pdf_to_md_result.ai_error_message
             if not canonical_resume_md:
@@ -716,6 +749,11 @@ async def process_resume_parse_job(
                 ai_attempts=ai_attempts,
                 ai_chain_latency_ms=ai_chain_latency_ms,
                 degraded_used=degraded_used,
+                configured_primary_provider=configured_primary_provider,
+                configured_primary_model=configured_primary_model,
+                configured_secondary_provider=configured_secondary_provider,
+                configured_secondary_model=configured_secondary_model,
+                last_attempt_status=last_attempt_status,
                 ai_status=ai_status,
                 ai_correction_applied=ai_status == AI_STATUS_APPLIED,
                 ai_error_category=ai_error_category,

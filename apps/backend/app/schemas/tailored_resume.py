@@ -169,6 +169,12 @@ class TailoredResumePdfToMarkdownResponse(BaseModel):
     ai_attempts: list[ResumeAIAttempt] = Field(default_factory=list)
     ai_chain_latency_ms: int | None = None
     degraded_used: bool = False
+    configured_primary_provider: str = ""
+    configured_primary_model: str = ""
+    configured_secondary_provider: str = ""
+    configured_secondary_model: str = ""
+    last_attempt_status: str = ""
+    ai_error_category: str | None = None
 
 
 class TailoredResumeGrammarRequest(BaseModel):

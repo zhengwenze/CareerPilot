@@ -57,6 +57,11 @@ class PdfToMarkdownResult:
     ai_attempts: list[PdfToMarkdownAttempt]
     ai_chain_latency_ms: int | None
     degraded_used: bool
+    configured_primary_provider: str = ""
+    configured_primary_model: str = ""
+    configured_secondary_provider: str = ""
+    configured_secondary_model: str = ""
+    last_attempt_status: str = ""
     ai_error_category: str | None = None
 
     @property
@@ -235,11 +240,15 @@ def _attempt_status_from_category(category: str | None) -> str:
     normalized = (category or "").strip().lower()
     if normalized == "timeout":
         return "timeout"
+    if normalized == "http_502_upstream_disconnect":
+        return "upstream_disconnect"
     if normalized == "connection_error":
         return "connection_error"
     if normalized == "quality_guard_failed":
         return "quality_guard_failed"
-    if normalized in {"invalid_response_format", "json_decode_error"}:
+    if normalized == "invalid_response_format":
+        return "invalid_response_format"
+    if normalized == "json_decode_error":
         return "invalid_output"
     if normalized.startswith("http_") or normalized in {
         "auth_error",
@@ -258,6 +267,7 @@ async def _run_ai_attempt(
     raw_markdown: str,
     ai_config: AIProviderConfig | None,
     retry_count_override: int,
+    total_timeout_budget_seconds: float | None = None,
 ) -> tuple[PdfToMarkdownAttempt, str | None, str | None]:
     provider, model = _provider_parts(ai_config)
     if ai_config is None or not is_ai_configured(
@@ -296,6 +306,7 @@ async def _run_ai_attempt(
             },
             max_tokens=4000,
             retry_count_override=retry_count_override,
+            total_timeout_budget_seconds=total_timeout_budget_seconds,
         )
         latency_ms = max(0, int((perf_counter() - request_started) * 1000))
         normalized_markdown = normalize_markdown(markdown)
@@ -391,27 +402,20 @@ async def _run_ai_attempt(
         )
 
 
-def _resolve_final_provider(
-    attempts: list[PdfToMarkdownAttempt], primary_config: AIProviderConfig | None
-) -> tuple[str, str]:
-    for attempt in reversed(attempts):
-        if attempt.provider or attempt.model:
-            return attempt.provider, attempt.model
-    return _provider_parts(primary_config)
-
-
 async def pdf_to_markdown(
     pdf_bytes: bytes,
     file_name: str,
     *,
     ai_configs: list[AIProviderConfig] | None,
     retry_count_override: int = 0,
+    total_timeout_budget_seconds: float | None = None,
 ) -> PdfToMarkdownResult:
     raw_markdown = extract_raw_markdown_from_pdf(pdf_bytes, file_name)
     ai_config_chain = list(ai_configs or [])
     primary_config = ai_config_chain[0] if ai_config_chain else None
     secondary_config = ai_config_chain[1] if len(ai_config_chain) > 1 else None
     primary_provider, primary_model = _provider_parts(primary_config)
+    secondary_provider, secondary_model = _provider_parts(secondary_config)
 
     if not raw_markdown:
         return PdfToMarkdownResult(
@@ -419,8 +423,8 @@ async def pdf_to_markdown(
             raw_markdown="",
             cleaned_markdown="",
             ai_used=False,
-            ai_provider=primary_provider,
-            ai_model=primary_model,
+            ai_provider="",
+            ai_model="",
             ai_error="PDF 原始 Markdown 提取失败或为空",
             fallback_used=False,
             prompt_version=PROMPT_VERSION,
@@ -429,6 +433,11 @@ async def pdf_to_markdown(
             ai_attempts=[],
             ai_chain_latency_ms=None,
             degraded_used=True,
+            configured_primary_provider=primary_provider,
+            configured_primary_model=primary_model,
+            configured_secondary_provider=secondary_provider,
+            configured_secondary_model=secondary_model,
+            last_attempt_status="",
             ai_error_category="parse_failure",
         )
 
@@ -443,6 +452,7 @@ async def pdf_to_markdown(
         raw_markdown=raw_markdown,
         ai_config=primary_config,
         retry_count_override=retry_count_override,
+        total_timeout_budget_seconds=total_timeout_budget_seconds,
     )
     attempts.append(primary_attempt)
     if primary_attempt.status == "success" and primary_markdown is not None:
@@ -469,6 +479,11 @@ async def pdf_to_markdown(
             ai_attempts=attempts,
             ai_chain_latency_ms=max(0, int((perf_counter() - chain_started) * 1000)),
             degraded_used=False,
+            configured_primary_provider=primary_provider,
+            configured_primary_model=primary_model,
+            configured_secondary_provider=secondary_provider,
+            configured_secondary_model=secondary_model,
+            last_attempt_status=primary_attempt.status,
             ai_error_category=None,
         )
 
@@ -500,23 +515,33 @@ async def pdf_to_markdown(
                 ai_attempts=attempts,
                 ai_chain_latency_ms=max(0, int((perf_counter() - chain_started) * 1000)),
                 degraded_used=True,
+                configured_primary_provider=primary_provider,
+                configured_primary_model=primary_model,
+                configured_secondary_provider=secondary_provider,
+                configured_secondary_model=secondary_model,
+                last_attempt_status=secondary_attempt.status,
                 ai_error_category=None,
             )
-        last_error = secondary_attempt.error or last_error
-        last_error_category = secondary_error_category or last_error_category
+        if secondary_attempt.status != "skipped":
+            last_error = secondary_attempt.error or last_error
+            last_error_category = secondary_error_category or last_error_category
 
-    final_provider, final_model = _resolve_final_provider(attempts, primary_config)
-    final_latency_ms = None
-    if attempts:
-        final_latency_ms = attempts[-1].latency_ms
+    final_latency_ms = next(
+        (
+            getattr(attempt, "latency_ms", None)
+            for attempt in reversed(attempts)
+            if getattr(attempt, "latency_ms", None) is not None
+        ),
+        None,
+    )
 
     return PdfToMarkdownResult(
         markdown=raw_markdown,
         raw_markdown=raw_markdown,
         cleaned_markdown=raw_markdown,
         ai_used=False,
-        ai_provider=final_provider,
-        ai_model=final_model,
+        ai_provider="",
+        ai_model="",
         ai_error=last_error or "AI normalization failed, used raw Markdown",
         fallback_used=True,
         prompt_version=PROMPT_VERSION,
@@ -525,6 +550,11 @@ async def pdf_to_markdown(
         ai_attempts=attempts,
         ai_chain_latency_ms=max(0, int((perf_counter() - chain_started) * 1000)),
         degraded_used=True,
+        configured_primary_provider=primary_provider,
+        configured_primary_model=primary_model,
+        configured_secondary_provider=secondary_provider,
+        configured_secondary_model=secondary_model,
+        last_attempt_status=str(getattr(attempts[-1], "status", "") or "") if attempts else "",
         ai_error_category=last_error_category or "provider_error",
     )
 

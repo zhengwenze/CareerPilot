@@ -77,9 +77,9 @@ def test_settings_defaults_to_codex2gpt_without_api_key(monkeypatch: pytest.Monk
     assert settings.resume_ai_base_url == "http://127.0.0.1:18100/v1"
     assert settings.resume_ai_api_key is None
     assert settings.resume_ai_model == "gpt-5.4"
-    assert settings.resume_pdf_ai_primary_timeout_seconds == 30
-    assert settings.resume_pdf_ai_retry_count == 0
-    assert settings.resume_pdf_ai_secondary_provider == "ollama"
+    assert settings.resume_pdf_ai_primary_timeout_seconds == 60
+    assert settings.resume_pdf_ai_retry_count == 1
+    assert settings.resume_pdf_ai_secondary_provider == ""
     assert settings.resume_pdf_ai_secondary_base_url == "http://127.0.0.1:11434"
     assert settings.resume_pdf_ai_secondary_api_key is None
     assert settings.resume_pdf_ai_secondary_model == "qwen2.5:7b"
@@ -154,8 +154,10 @@ async def test_convert_pdf_bytes_to_markdown_returns_primary_ai_markdown(
     monkeypatch.setattr(module, "extract_raw_markdown_from_pdf", lambda *_args, **_kwargs: "# Raw")
 
     async def fake_request_text_completion(**kwargs) -> str:
-        assert kwargs["retry_count_override"] == 0
+        assert kwargs["retry_count_override"] == 1
+        assert kwargs["total_timeout_budget_seconds"] == 60
         assert kwargs["config"].provider == "codex2gpt"
+        assert kwargs["config"].timeout_seconds == 60
         return "# Polished"
 
     monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
@@ -178,16 +180,19 @@ async def test_convert_pdf_bytes_to_markdown_returns_primary_ai_markdown(
     assert result.ai_path == "primary"
     assert result.degraded_used is False
     assert result.ai_chain_latency_ms is not None
-    assert len(result.ai_attempts) == 2
+    assert len(result.ai_attempts) == 1
     assert result.ai_attempts[0].stage == "primary"
     assert result.ai_attempts[0].status == "success"
-    assert result.ai_attempts[1].stage == "secondary"
-    assert result.ai_attempts[1].status == "skipped"
+    assert result.configured_primary_provider == "codex2gpt"
+    assert result.configured_primary_model == "gpt-5.4"
+    assert result.configured_secondary_provider == ""
+    assert result.configured_secondary_model == ""
+    assert result.last_attempt_status == "success"
     assert result.ai_error_category is None
 
 
 @pytest.mark.asyncio
-async def test_convert_pdf_bytes_to_markdown_uses_secondary_after_primary_timeout(
+async def test_convert_pdf_bytes_to_markdown_falls_back_after_primary_timeout_without_secondary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = load_resume_pdf_to_md_module()
@@ -198,37 +203,40 @@ async def test_convert_pdf_bytes_to_markdown_uses_secondary_after_primary_timeou
 
     async def fake_request_text_completion(**kwargs) -> str:
         calls.append(kwargs["config"].provider)
-        assert kwargs["retry_count_override"] == 0
-        if kwargs["config"].provider == "codex2gpt":
-            raise AIClientError(category="timeout", detail="primary timeout")
-        return "# Polished by Ollama"
+        assert kwargs["retry_count_override"] == 1
+        assert kwargs["total_timeout_budget_seconds"] == 60
+        raise AIClientError(category="timeout", detail="primary timeout")
 
     monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
 
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None, resume_pdf_ai_secondary_provider="ollama")
 
     result = await convert_pdf_bytes_to_markdown(b"%PDF", "resume.pdf", settings=settings)
 
-    assert result.markdown == "# Polished by Ollama"
-    assert result.cleaned_markdown == "# Polished by Ollama"
-    assert result.ai_used is True
-    assert result.ai_provider == "ollama"
-    assert result.ai_model == "qwen2.5:7b"
-    assert result.ai_applied is True
-    assert result.fallback_used is False
-    assert result.ai_path == "secondary"
+    assert result.markdown == "# Raw"
+    assert result.cleaned_markdown == "# Raw"
+    assert result.ai_used is False
+    assert result.ai_provider == ""
+    assert result.ai_model == ""
+    assert result.ai_applied is False
+    assert result.fallback_used is True
+    assert result.ai_path == "rules"
     assert result.degraded_used is True
     assert result.prompt_version == "resume_pdf_to_md_v2"
     assert result.ai_latency_ms is not None
     assert result.ai_chain_latency_ms is not None
-    assert len(result.ai_attempts) == 2
+    assert len(result.ai_attempts) == 1
     assert result.ai_attempts[0].status == "timeout"
-    assert result.ai_attempts[1].status == "success"
-    assert calls == ["codex2gpt", "ollama"]
+    assert result.configured_secondary_provider == ""
+    assert result.configured_secondary_model == ""
+    assert result.last_attempt_status == "timeout"
+    assert result.ai_error_category == "timeout"
+    assert result.ai_error_message == "primary timeout"
+    assert calls == ["codex2gpt"]
 
 
 @pytest.mark.asyncio
-async def test_convert_pdf_bytes_to_markdown_falls_back_on_dual_ai_error(
+async def test_convert_pdf_bytes_to_markdown_falls_back_on_primary_error_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = load_resume_pdf_to_md_module()
@@ -236,13 +244,11 @@ async def test_convert_pdf_bytes_to_markdown_falls_back_on_dual_ai_error(
     monkeypatch.setattr(module, "extract_raw_markdown_from_pdf", lambda *_args, **_kwargs: "# Raw")
 
     async def fake_request_text_completion(**kwargs) -> str:
-        if kwargs["config"].provider == "codex2gpt":
-            raise AIClientError(category="connection_error", detail="primary down")
-        raise AIClientError(category="timeout", detail="secondary timeout")
+        raise AIClientError(category="connection_error", detail="primary down")
 
     monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
 
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None, resume_pdf_ai_secondary_provider="ollama")
 
     result = await convert_pdf_bytes_to_markdown(b"%PDF", "resume.pdf", settings=settings)
 
@@ -251,22 +257,27 @@ async def test_convert_pdf_bytes_to_markdown_falls_back_on_dual_ai_error(
     assert result.cleaned_markdown == "# Raw"
     assert result.ai_used is False
     assert result.ai_applied is False
-    assert result.ai_error == "secondary timeout"
+    assert result.ai_provider == ""
+    assert result.ai_model == ""
+    assert result.ai_error == "primary down"
     assert result.fallback_used is True
     assert result.ai_path == "rules"
     assert result.degraded_used is True
     assert result.prompt_version == "resume_pdf_to_md_v2"
     assert result.ai_latency_ms is not None
     assert result.ai_chain_latency_ms is not None
-    assert len(result.ai_attempts) == 2
+    assert len(result.ai_attempts) == 1
     assert result.ai_attempts[0].status == "connection_error"
-    assert result.ai_attempts[1].status == "timeout"
-    assert result.ai_error_category == "timeout"
-    assert result.ai_error_message == "secondary timeout"
+    assert result.configured_primary_provider == "codex2gpt"
+    assert result.configured_secondary_provider == ""
+    assert result.configured_secondary_model == ""
+    assert result.last_attempt_status == "connection_error"
+    assert result.ai_error_category == "connection_error"
+    assert result.ai_error_message == "primary down"
 
 
 @pytest.mark.asyncio
-async def test_convert_pdf_bytes_to_markdown_uses_secondary_when_primary_fails_quality_guard(
+async def test_convert_pdf_bytes_to_markdown_falls_back_when_primary_fails_quality_guard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = load_resume_pdf_to_md_module()
@@ -278,22 +289,20 @@ async def test_convert_pdf_bytes_to_markdown_uses_secondary_when_primary_fails_q
     )
 
     async def fake_request_text_completion(**kwargs) -> str:
-        if kwargs["config"].provider == "codex2gpt":
-            return "# 张三\n\n## 教育经历\n- Example University\n"
-        return "# 张三\n\n- 邮箱：foo@example.com\n\n## 教育经历\n- Example University\n"
+        return "# 张三\n\n## 教育经历\n- Example University\n"
 
     monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
 
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None, resume_pdf_ai_secondary_provider="ollama")
     result = await convert_pdf_bytes_to_markdown(b"%PDF", "resume.pdf", settings=settings)
 
-    assert result.ai_used is True
-    assert result.ai_path == "secondary"
+    assert result.ai_used is False
+    assert result.ai_path == "rules"
     assert result.degraded_used is True
-    assert result.fallback_used is False
-    assert len(result.ai_attempts) == 2
+    assert result.fallback_used is True
+    assert len(result.ai_attempts) == 1
     assert result.ai_attempts[0].status == "quality_guard_failed"
-    assert result.ai_attempts[1].status == "success"
+    assert result.last_attempt_status == "quality_guard_failed"
 
 
 @pytest.mark.asyncio
@@ -328,8 +337,8 @@ async def test_pdf_to_md_endpoint_returns_raw_markdown_when_ai_fails(
     assert payload["raw_markdown"] == "# Raw"
     assert payload["cleaned_markdown"] == "# Raw"
     assert payload["ai_used"] is False
-    assert payload["ai_provider"] == "ollama"
-    assert payload["ai_model"] == "qwen2.5:7b"
+    assert payload["ai_provider"] == ""
+    assert payload["ai_model"] == ""
     assert payload["ai_error"] == "network down"
     assert payload["fallback_used"] is True
     assert payload["prompt_version"] == "resume_pdf_to_md_v2"
@@ -337,9 +346,13 @@ async def test_pdf_to_md_endpoint_returns_raw_markdown_when_ai_fails(
     assert payload["ai_path"] == "rules"
     assert payload["degraded_used"] is True
     assert payload["ai_chain_latency_ms"] is not None
-    assert len(payload["ai_attempts"]) == 2
+    assert len(payload["ai_attempts"]) == 1
     assert payload["ai_attempts"][0]["stage"] == "primary"
-    assert payload["ai_attempts"][1]["stage"] == "secondary"
+    assert payload["configured_primary_provider"] == "codex2gpt"
+    assert payload["configured_primary_model"] == "gpt-5.4"
+    assert payload["configured_secondary_provider"] == ""
+    assert payload["configured_secondary_model"] == ""
+    assert payload["last_attempt_status"] == "connection_error"
     assert "resume_id=None parse_job_id=None ai_used=False ai_error=network down" in caplog.text
     assert "fallback_used=True prompt_version=resume_pdf_to_md_v2" in caplog.text
     assert "ai_path=rules degraded_used=True" in caplog.text
@@ -398,8 +411,8 @@ async def test_resume_parse_job_succeeds_with_raw_markdown_fallback(
     assert payload["parse_artifacts_json"]["raw_resume_md"] == "# Raw"
     assert payload["parse_artifacts_json"]["canonical_resume_md"] == "# Raw"
     assert payload["parse_artifacts_json"]["ai_used"] is False
-    assert payload["parse_artifacts_json"]["ai_provider"] == "ollama"
-    assert payload["parse_artifacts_json"]["ai_model"] == "qwen2.5:7b"
+    assert payload["parse_artifacts_json"]["ai_provider"] == ""
+    assert payload["parse_artifacts_json"]["ai_model"] == ""
     assert payload["parse_artifacts_json"]["ai_error"] == "network down"
     assert payload["parse_artifacts_json"]["fallback_used"] is True
     assert payload["parse_artifacts_json"]["prompt_version"] == "resume_pdf_to_md_v2"
@@ -407,7 +420,12 @@ async def test_resume_parse_job_succeeds_with_raw_markdown_fallback(
     assert payload["parse_artifacts_json"]["ai_path"] == "rules"
     assert payload["parse_artifacts_json"]["degraded_used"] is True
     assert payload["parse_artifacts_json"]["ai_chain_latency_ms"] is not None
-    assert len(payload["parse_artifacts_json"]["ai_attempts"]) == 2
+    assert len(payload["parse_artifacts_json"]["ai_attempts"]) == 1
+    assert payload["parse_artifacts_json"]["configured_primary_provider"] == "codex2gpt"
+    assert payload["parse_artifacts_json"]["configured_primary_model"] == "gpt-5.4"
+    assert payload["parse_artifacts_json"]["configured_secondary_provider"] == ""
+    assert payload["parse_artifacts_json"]["configured_secondary_model"] == ""
+    assert payload["parse_artifacts_json"]["last_attempt_status"] == "connection_error"
     assert payload["parse_artifacts_json"]["meta"]["ai_correction_applied"] is False
     assert payload["parse_artifacts_json"]["meta"]["ai_fallback_used"] is True
     assert payload["parse_artifacts_json"]["meta"]["ai_error_category"] == "connection_error"
@@ -477,7 +495,12 @@ async def test_resume_parse_job_persists_ai_cleanup_metadata_on_success(
     assert payload["parse_artifacts_json"]["ai_path"] == "primary"
     assert payload["parse_artifacts_json"]["degraded_used"] is False
     assert payload["parse_artifacts_json"]["ai_chain_latency_ms"] is not None
-    assert len(payload["parse_artifacts_json"]["ai_attempts"]) == 2
+    assert len(payload["parse_artifacts_json"]["ai_attempts"]) == 1
+    assert payload["parse_artifacts_json"]["configured_primary_provider"] == "codex2gpt"
+    assert payload["parse_artifacts_json"]["configured_primary_model"] == "gpt-5.4"
+    assert payload["parse_artifacts_json"]["configured_secondary_provider"] == ""
+    assert payload["parse_artifacts_json"]["configured_secondary_model"] == ""
+    assert payload["parse_artifacts_json"]["last_attempt_status"] == "success"
     assert payload["latest_parse_job"]["ai_status"] == "applied"
     assert f"resume_id={resume_id} parse_job_id={parse_job_id} ai_used=True ai_error=None" in caplog.text
     assert "markdown_length_before=5 markdown_length_after=9 fallback_used=False" in caplog.text

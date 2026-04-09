@@ -38,7 +38,6 @@ import {
   type ContentSegmentRecord,
   type PdfToMarkdownConversionResult,
   type ResumeRecord,
-  type ResumeStructuredData,
   type TailoredResumeArtifactRecord,
   type TailoredResumeWorkflowRecord,
 } from '@/lib/api/modules/resume';
@@ -105,6 +104,8 @@ function getResumeAiDebug(
     provider: source.ai_provider,
     model: source.ai_model,
     error: source.ai_error,
+    aiErrorCategory:
+      source.ai_error_category ?? ('meta' in source ? source.meta?.ai_error_category : null) ?? null,
     fallbackUsed: source.fallback_used,
     promptVersion: source.prompt_version,
     latencyMs: source.ai_latency_ms,
@@ -112,6 +113,24 @@ function getResumeAiDebug(
     attempts: source.ai_attempts ?? [],
     chainLatencyMs: source.ai_chain_latency_ms,
     degradedUsed: source.degraded_used,
+    configuredPrimaryProvider:
+      source.configured_primary_provider ??
+      ('meta' in source ? source.meta?.configured_primary_provider : '') ??
+      '',
+    configuredPrimaryModel:
+      source.configured_primary_model ??
+      ('meta' in source ? source.meta?.configured_primary_model : '') ??
+      '',
+    configuredSecondaryProvider:
+      source.configured_secondary_provider ??
+      ('meta' in source ? source.meta?.configured_secondary_provider : '') ??
+      '',
+    configuredSecondaryModel:
+      source.configured_secondary_model ??
+      ('meta' in source ? source.meta?.configured_secondary_model : '') ??
+      '',
+    lastAttemptStatus:
+      source.last_attempt_status ?? ('meta' in source ? source.meta?.last_attempt_status : '') ?? '',
   };
 }
 
@@ -131,9 +150,18 @@ function hasResumeAiDebug(
     source.ai_latency_ms !== null ||
     source.ai_chain_latency_ms !== null ||
     source.degraded_used ||
+    source.configured_primary_provider ||
+    source.configured_primary_model ||
+    source.configured_secondary_provider ||
+    source.configured_secondary_model ||
+    source.last_attempt_status ||
     Boolean(source.ai_path) ||
     (source.ai_attempts?.length ?? 0) > 0
   );
+}
+
+function formatProviderModel(provider: string, model: string) {
+  return [provider, model].filter(Boolean).join('/') || 'n/a';
 }
 
 function formatAttemptLine(
@@ -144,7 +172,7 @@ function formatAttemptLine(
   latencyMs: number | null,
   error: string | null
 ) {
-  const providerModel = [provider, model].filter(Boolean).join('/') || 'n/a';
+  const providerModel = formatProviderModel(provider, model);
   const latency = latencyMs === null ? 'n/a' : `${latencyMs} ms`;
   const suffix = error ? ` | error: ${error}` : '';
   return `${stage}: ${providerModel} | status: ${status} | latency: ${latency}${suffix}`;
@@ -152,6 +180,115 @@ function formatAttemptLine(
 
 function normalizeMarkdown(md: string) {
   return md.replace(/\r\n/g, '\n').trim();
+}
+
+function getLastMeaningfulAttempt(debug: NonNullable<ReturnType<typeof getResumeAiDebug>>) {
+  return (
+    [...debug.attempts]
+      .reverse()
+      .find(attempt => attempt.status !== 'skipped' && (attempt.provider || attempt.model || attempt.error)) ??
+    null
+  );
+}
+
+function normalizeAiErrorMessage(error: string | null | undefined) {
+  const normalized = (error ?? '').trim();
+  if (!normalized) {
+    return 'none';
+  }
+  return normalized.replace(/^AI [^:]+:\s*/, '');
+}
+
+function formatResumeFailureCategory(
+  category: string | null | undefined,
+  lastAttemptStatus: string | null | undefined
+) {
+  const normalized = (category ?? lastAttemptStatus ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return 'none';
+  }
+  if (normalized === 'http_502_upstream_disconnect' || normalized === 'upstream_disconnect') {
+    return 'upstream_disconnect (502)';
+  }
+  if (normalized === 'timeout') {
+    return 'timeout';
+  }
+  if (normalized === 'invalid_response_format' || normalized === 'invalid_output') {
+    return 'invalid_response_format';
+  }
+  return normalized;
+}
+
+function getResumeParseDetailModel(debug: NonNullable<ReturnType<typeof getResumeAiDebug>>) {
+  const resultProviderModel = formatProviderModel(debug.provider, debug.model);
+  if (resultProviderModel !== 'n/a') {
+    return resultProviderModel;
+  }
+
+  const lastAttempt = getLastMeaningfulAttempt(debug);
+  if (lastAttempt) {
+    return formatProviderModel(lastAttempt.provider, lastAttempt.model);
+  }
+
+  const configuredSecondary = formatProviderModel(
+    debug.configuredSecondaryProvider,
+    debug.configuredSecondaryModel
+  );
+  if (configuredSecondary !== 'n/a') {
+    return configuredSecondary;
+  }
+
+  return formatProviderModel(debug.configuredPrimaryProvider, debug.configuredPrimaryModel);
+}
+
+function getResumeParseDetailError(
+  debug: ReturnType<typeof getResumeAiDebug>,
+  fallbackError?: string | null
+) {
+  if (debug) {
+    const lastAttempt = getLastMeaningfulAttempt(debug);
+    if (lastAttempt?.error) {
+      return normalizeAiErrorMessage(lastAttempt.error);
+    }
+    if (debug.error) {
+      return normalizeAiErrorMessage(debug.error);
+    }
+  }
+  return normalizeAiErrorMessage(fallbackError);
+}
+
+function getResumeParseFailureCategory(debug: ReturnType<typeof getResumeAiDebug>) {
+  if (!debug) {
+    return 'none';
+  }
+  return formatResumeFailureCategory(debug.aiErrorCategory, debug.lastAttemptStatus);
+}
+
+function normalizeJobDraftForCompare(draft: JobDraft) {
+  return {
+    title: draft.title.trim(),
+    company: draft.company.trim(),
+    job_city: draft.job_city.trim(),
+    employment_type: draft.employment_type.trim(),
+    source_name: draft.source_name.trim(),
+    source_url: draft.source_url.trim(),
+    priority: draft.priority,
+    jd_text: normalizeMarkdown(draft.jd_text),
+  };
+}
+
+function hasAnyJobDraftContent(draft: JobDraft) {
+  const normalized = normalizeJobDraftForCompare(draft);
+  return Object.entries(normalized).some(([key, value]) => {
+    if (key === 'priority') {
+      return false;
+    }
+    return Boolean(value);
+  });
+}
+
+function isSameJobDraft(left: JobDraft, right: JobDraft) {
+  return JSON.stringify(normalizeJobDraftForCompare(left)) === JSON.stringify(normalizeJobDraftForCompare(right));
 }
 
 const AUTO_SAVE_SECTION_TITLES = new Set([
@@ -208,93 +345,6 @@ function isLikelyAutoSaveSafe(markdown: string) {
   });
 
   return hasNameSignal && hasSectionSignal;
-}
-
-function pickSection(markdown: string, names: string[]) {
-  const lines = normalizeMarkdown(markdown).split('\n');
-  const sections = new Map<string, string[]>();
-  let current = '__root__';
-  sections.set(current, []);
-
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-    const headingMatch = line.match(/^##\s+(.+)$/);
-    if (headingMatch) {
-      current = headingMatch[1].trim().toLowerCase();
-      sections.set(current, []);
-      continue;
-    }
-    sections.get(current)?.push(line);
-  }
-
-  for (const name of names) {
-    const value = sections.get(name.toLowerCase());
-    if (value) {
-      return value;
-    }
-  }
-  return [];
-}
-
-function cleanList(lines: string[]) {
-  return lines
-    .map(line => line.trim())
-    .filter(Boolean)
-    .map(line => line.replace(/^[-*]\s*/, '').trim())
-    .filter(Boolean);
-}
-
-function markdownToStructuredResume(markdown: string): ResumeStructuredData {
-  const normalized = normalizeMarkdown(markdown);
-  const lines = normalized.split('\n');
-  const name =
-    lines
-      .find(line => line.trim().startsWith('# '))
-      ?.replace(/^#\s+/, '')
-      .trim() ?? '';
-  const introLines: string[] = [];
-  for (const line of lines.slice(1)) {
-    if (line.trim().startsWith('## ')) {
-      break;
-    }
-    introLines.push(line.trim());
-  }
-
-  const infoMap = new Map<string, string>();
-  for (const line of introLines) {
-    const bullet = line.replace(/^[-*]\s*/, '').trim();
-    const [label, ...rest] = bullet.split('：');
-    if (rest.length > 0) {
-      infoMap.set(label.trim(), rest.join('：').trim());
-    }
-  }
-
-  const skills = cleanList(
-    pickSection(normalized, ['专业技能', '技能', 'skills']).flatMap(line => line.split(/[,，]/))
-  );
-  const education = cleanList(pickSection(normalized, ['教育经历', 'education']));
-  const workExperience = cleanList(pickSection(normalized, ['工作经验', 'work experience']));
-  const projects = cleanList(pickSection(normalized, ['项目经历', 'projects']));
-  const certifications = cleanList(pickSection(normalized, ['证书', 'certificates']));
-
-  return {
-    basic_info: {
-      name,
-      email: infoMap.get('邮箱') ?? '',
-      phone: infoMap.get('电话') ?? '',
-      location: infoMap.get('所在地') ?? '',
-      summary: infoMap.get('求职方向') ?? '',
-    },
-    education,
-    work_experience: workExperience,
-    projects,
-    skills: {
-      technical: skills,
-      tools: [],
-      languages: [],
-    },
-    certifications,
-  };
 }
 
 function renderInlineMarkdown(text: string): ReactNode[] {
@@ -672,8 +722,8 @@ export default function DashboardResumePage() {
   const isDevelopment = process.env.NODE_ENV === 'development';
   const immediateAiDebug = getResumeAiDebug(latestPdfConversion);
   const persistedAiDebug = getResumeAiDebug(resume?.parse_artifacts_json);
-  const hasImmediateAiDebug = hasResumeAiDebug(latestPdfConversion);
-  const hasPersistedAiDebug = hasResumeAiDebug(resume?.parse_artifacts_json);
+  const activeResumeAiDebug = immediateAiDebug ?? persistedAiDebug;
+  const hasActiveResumeAiDebug = hasResumeAiDebug(latestPdfConversion ?? resume?.parse_artifacts_json);
 
   useEffect(() => {
     if (!token) {
@@ -828,6 +878,9 @@ export default function DashboardResumePage() {
   ]);
 
   const canSaveResume = Boolean(token && resume?.id && normalizeMarkdown(resumeMarkdown));
+  const isJobDirty = savedJob
+    ? !isSameJobDraft(jobDraft, toJobDraft(savedJob))
+    : hasAnyJobDraftContent(jobDraft);
   const canRetryResume = Boolean(
     token &&
     resume?.id &&
@@ -836,13 +889,19 @@ export default function DashboardResumePage() {
     !isRetryingResumeParse &&
     !['pending', 'processing'].includes(resume?.parse_status ?? '')
   );
-  const canSaveJob = Boolean(token && jobDraft.title.trim() && jobDraft.jd_text.trim());
+  const canSaveJob = Boolean(
+    token &&
+    isJobDirty &&
+    jobDraft.title.trim() &&
+    jobDraft.jd_text.trim()
+  );
   const canGenerate = Boolean(
     token &&
     resume?.id &&
     resume.parse_status === 'success' &&
     savedJob?.id &&
-    savedJob.parse_status === 'success'
+    savedJob.parse_status === 'success' &&
+    !isJobDirty
   );
 
   if (!token) {
@@ -948,6 +1007,7 @@ export default function DashboardResumePage() {
         ? await updateJob(token, savedJob.id, jobDraft)
         : await createJob(token, jobDraft);
       setSavedJob(nextJob);
+      setJobDraft(toJobDraft(nextJob));
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -956,6 +1016,11 @@ export default function DashboardResumePage() {
   }
 
   async function handleGenerateTailoredResume() {
+    if (isJobDirty) {
+      setPageError('岗位 JD 有未保存改动，请先保存到数据库。');
+      return;
+    }
+
     if (!token || !resume?.id || !savedJob?.id) {
       setPageError('请先完成简历保存和岗位 JD 保存。');
       return;
@@ -1050,7 +1115,7 @@ export default function DashboardResumePage() {
         meta={
           <>
             <MetaChip>{resume ? 'Resume Ready' : 'Resume Missing'}</MetaChip>
-            <MetaChip>{savedJob ? 'JD Ready' : 'JD Missing'}</MetaChip>
+            <MetaChip>{savedJob ? (isJobDirty ? 'JD Unsaved' : 'JD Ready') : 'JD Missing'}</MetaChip>
             <MetaChip>{workflow ? 'Result Ready' : 'Result Pending'}</MetaChip>
           </>
         }
@@ -1106,15 +1171,6 @@ export default function DashboardResumePage() {
               {isRetryingResumeParse ? '重新解析中' : '重试解析'}
             </Button>
             <Button
-              disabled={!canSaveJob || isSavingJob}
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={() => void handleSaveJob()}
-            >
-              {isSavingJob ? '保存 JD 中' : '保存 JD'}
-            </Button>
-            <Button
               disabled={!canGenerate || isGenerating || isWorkflowProcessing}
               size="sm"
               type="button"
@@ -1149,7 +1205,12 @@ export default function DashboardResumePage() {
             resume ? (
               <div className="bw-meta-row">
                 <MetaChip>
-                  <ResumeStatusIndicator resume={resume} processingStartTime={parseStartTime} isProcessingOverride={isConverting} />
+                  <ResumeStatusIndicator
+                    resume={resume}
+                    parseDebug={latestPdfConversion ?? resume.parse_artifacts_json}
+                    processingStartTime={parseStartTime}
+                    isProcessingOverride={isConverting}
+                  />
                 </MetaChip>
                 <MetaChip>{resume.file_name}</MetaChip>
                 <MetaChip>{formatDate(resume.updated_at)}</MetaChip>
@@ -1159,116 +1220,61 @@ export default function DashboardResumePage() {
         >
           {resume ? (
             <div className="space-y-4">
-              {isDevelopment && (hasImmediateAiDebug || hasPersistedAiDebug) ? (
-                <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-sm text-[#1C1C1C]/72">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#1C1C1C]/50">
-                    AI Debug
-                  </p>
-                  {hasImmediateAiDebug && immediateAiDebug ? (
-                    <div className="mt-3 border border-[#e5e5e5] bg-white p-3">
-                      <p className="text-xs font-semibold text-[#1C1C1C]/50">
-                        本次上传即时转换结果 (/tailored-resumes/pdf-to-md)
+              {(hasActiveResumeAiDebug || resume.parse_error) ? (
+                <details className="border border-[#e5e5e5] bg-[#fafafa]">
+                  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[#1C1C1C] marker:hidden">
+                    解析详情
+                  </summary>
+                  <div className="border-t border-[#e5e5e5] bg-white p-4 text-sm text-[#1C1C1C]/72">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <p>
+                        模型：{' '}
+                        {activeResumeAiDebug
+                          ? getResumeParseDetailModel(activeResumeAiDebug)
+                          : 'n/a'}
                       </p>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                        <p>AI cleaned: {immediateAiDebug.aiUsed ? 'yes' : 'no'}</p>
-                        <p>
-                          provider/model:{' '}
-                          {[immediateAiDebug.provider, immediateAiDebug.model]
-                            .filter(Boolean)
-                            .join('/') || 'n/a'}
-                        </p>
-                        <p>fallback used: {immediateAiDebug.fallbackUsed ? 'yes' : 'no'}</p>
-                        <p>AI path: {immediateAiDebug.aiPath || 'n/a'}</p>
-                        <p>degraded used: {immediateAiDebug.degradedUsed ? 'yes' : 'no'}</p>
-                        <p>
-                          AI latency:{' '}
-                          {immediateAiDebug.latencyMs === null
+                      <p>
+                        AI 链路耗时：{' '}
+                        {activeResumeAiDebug
+                          ? (activeResumeAiDebug.chainLatencyMs ?? activeResumeAiDebug.latencyMs) ===
+                            null
                             ? 'n/a'
-                            : `${immediateAiDebug.latencyMs} ms`}
-                        </p>
-                        <p>
-                          AI chain latency:{' '}
-                          {immediateAiDebug.chainLatencyMs === null
-                            ? 'n/a'
-                            : `${immediateAiDebug.chainLatencyMs} ms`}
-                        </p>
-                        <p>prompt version: {immediateAiDebug.promptVersion || 'n/a'}</p>
-                        <p>error message: {immediateAiDebug.error || 'none'}</p>
-                      </div>
-                      {immediateAiDebug.attempts.length > 0 ? (
-                        <div className="mt-3 space-y-1 border-t border-[#e5e5e5] pt-3 text-xs text-[#1C1C1C]/70">
-                          <p className="font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
-                            Attempts
-                          </p>
-                          {immediateAiDebug.attempts.map(attempt => (
-                            <p key={`${attempt.stage}-${attempt.provider}-${attempt.model}`}>
-                              {formatAttemptLine(
-                                attempt.stage,
-                                attempt.provider,
-                                attempt.model,
-                                attempt.status,
-                                attempt.latency_ms,
-                                attempt.error
-                              )}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {hasPersistedAiDebug && persistedAiDebug ? (
-                    <div className="mt-3 border border-[#e5e5e5] bg-white p-3">
-                      <p className="text-xs font-semibold text-[#1C1C1C]/50">
-                        已持久化解析结果 (parse_artifacts_json)
+                            : `${activeResumeAiDebug.chainLatencyMs ?? activeResumeAiDebug.latencyMs} ms`
+                          : 'n/a'}
                       </p>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                        <p>AI cleaned: {persistedAiDebug.aiUsed ? 'yes' : 'no'}</p>
-                        <p>
-                          provider/model:{' '}
-                          {[persistedAiDebug.provider, persistedAiDebug.model]
-                            .filter(Boolean)
-                            .join('/') || 'n/a'}
-                        </p>
-                        <p>fallback used: {persistedAiDebug.fallbackUsed ? 'yes' : 'no'}</p>
-                        <p>AI path: {persistedAiDebug.aiPath || 'n/a'}</p>
-                        <p>degraded used: {persistedAiDebug.degradedUsed ? 'yes' : 'no'}</p>
-                        <p>
-                          AI latency:{' '}
-                          {persistedAiDebug.latencyMs === null
-                            ? 'n/a'
-                            : `${persistedAiDebug.latencyMs} ms`}
-                        </p>
-                        <p>
-                          AI chain latency:{' '}
-                          {persistedAiDebug.chainLatencyMs === null
-                            ? 'n/a'
-                            : `${persistedAiDebug.chainLatencyMs} ms`}
-                        </p>
-                        <p>prompt version: {persistedAiDebug.promptVersion || 'n/a'}</p>
-                        <p>error message: {persistedAiDebug.error || 'none'}</p>
-                      </div>
-                      {persistedAiDebug.attempts.length > 0 ? (
-                        <div className="mt-3 space-y-1 border-t border-[#e5e5e5] pt-3 text-xs text-[#1C1C1C]/70">
-                          <p className="font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
-                            Attempts
-                          </p>
-                          {persistedAiDebug.attempts.map(attempt => (
-                            <p key={`${attempt.stage}-${attempt.provider}-${attempt.model}`}>
-                              {formatAttemptLine(
-                                attempt.stage,
-                                attempt.provider,
-                                attempt.model,
-                                attempt.status,
-                                attempt.latency_ms,
-                                attempt.error
-                              )}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
+                      <p>
+                        回退：{' '}
+                        {activeResumeAiDebug?.fallbackUsed ? '已启用' : '未启用'}
+                      </p>
+                      <p>
+                        失败分类： {getResumeParseFailureCategory(activeResumeAiDebug)}
+                      </p>
+                      <p>
+                        错误信息：{' '}
+                        {getResumeParseDetailError(activeResumeAiDebug, resume.parse_error)}
+                      </p>
                     </div>
-                  ) : null}
-                </div>
+                    {isDevelopment && activeResumeAiDebug?.attempts.length ? (
+                      <div className="mt-3 space-y-1 border-t border-[#e5e5e5] pt-3 text-xs text-[#1C1C1C]/70">
+                        <p className="font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
+                          Attempts
+                        </p>
+                        {activeResumeAiDebug.attempts.map(attempt => (
+                          <p key={`${attempt.stage}-${attempt.provider}-${attempt.model}`}>
+                            {formatAttemptLine(
+                              attempt.stage,
+                              attempt.provider,
+                              attempt.model,
+                              attempt.status,
+                              attempt.latency_ms,
+                              attempt.error
+                            )}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </details>
               ) : null}
               <PaperTextarea
                 value={resumeMarkdown}
@@ -1291,10 +1297,22 @@ export default function DashboardResumePage() {
           eyebrow="Job"
           title="岗位 JD"
           rightSlot={
-            savedJob ? (
-              <MetaChip>
-                <JobStatusIndicator job={savedJob} />
-              </MetaChip>
+            savedJob || canSaveJob ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {savedJob ? (
+                  <>
+                    <MetaChip>
+                      <JobStatusIndicator job={savedJob} isDirty={isJobDirty} />
+                    </MetaChip>
+                    {!isJobDirty ? <MetaChip>{formatDate(savedJob.updated_at)}</MetaChip> : null}
+                  </>
+                ) : null}
+                {canSaveJob ? (
+                  <Button size="sm" type="button" variant="outline" onClick={() => void handleSaveJob()}>
+                    {isSavingJob ? '保存 JD 中' : '保存 JD'}
+                  </Button>
+                ) : null}
+              </div>
             ) : null
           }
         >
@@ -1371,6 +1389,25 @@ export default function DashboardResumePage() {
                 className="min-h-[240px]"
               />
             </div>
+
+            <div
+              className={cn(
+                'border px-4 py-3 text-sm',
+                isJobDirty
+                  ? 'border-[#111111] bg-[#fafafa] text-[#111111]'
+                  : 'border-[#e5e5e5] bg-[#fafafa] text-[#1C1C1C]/70'
+              )}
+            >
+              {isJobDirty
+                ? savedJob
+                  ? '检测到未保存的 JD 改动。点击“保存 JD”后才会写入数据库，并重新解析最新版本。'
+                  : '当前 JD 还没有保存到数据库。填写完成后点击“保存 JD”。'
+                : savedJob
+                  ? savedJob.parse_status === 'success'
+                    ? '当前 JD 已保存到数据库，正在使用最新版本。'
+                    : '当前 JD 已保存到数据库，正在解析最新版本。'
+                  : '填写岗位标题和 JD 内容后即可保存。'}
+            </div>
           </div>
         </PaperSection>
         <PaperSection
@@ -1414,7 +1451,7 @@ export default function DashboardResumePage() {
         >
           {!canGenerate ? (
             <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
-              先保存主简历和岗位 JD。
+              {isJobDirty ? '岗位 JD 有未保存改动，请先保存并等待最新版本解析完成。' : '先保存主简历和岗位 JD。'}
             </div>
           ) : null}
 

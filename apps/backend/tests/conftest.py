@@ -50,6 +50,7 @@ async def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_path = tmp_path / "test.db"
     database_url = f"sqlite+aiosqlite:///{db_path}"
     settings = Settings(
+        _env_file=None,
         app_env="test",
         database_url=database_url,
         alembic_database_url=f"sqlite:///{db_path}",

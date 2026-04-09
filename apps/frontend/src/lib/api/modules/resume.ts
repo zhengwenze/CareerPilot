@@ -115,6 +115,12 @@ export type ResumeParseArtifacts = {
   ai_attempts: ResumeAIAttemptRecord[];
   ai_chain_latency_ms: number | null;
   degraded_used: boolean;
+  configured_primary_provider: string;
+  configured_primary_model: string;
+  configured_secondary_provider: string;
+  configured_secondary_model: string;
+  last_attempt_status: string;
+  ai_error_category?: string | null;
   meta: {
     source_type?: string;
     parser_version?: string;
@@ -132,6 +138,11 @@ export type ResumeParseArtifacts = {
     ai_path?: string;
     ai_chain_latency_ms?: number | null;
     degraded_used?: boolean;
+    configured_primary_provider?: string;
+    configured_primary_model?: string;
+    configured_secondary_provider?: string;
+    configured_secondary_model?: string;
+    last_attempt_status?: string;
   };
 };
 
@@ -142,8 +153,10 @@ export type ResumeAIAttemptRecord = {
   status:
     | "success"
     | "timeout"
+    | "upstream_disconnect"
     | "connection_error"
     | "http_error"
+    | "invalid_response_format"
     | "invalid_output"
     | "quality_guard_failed"
     | "skipped";
@@ -167,6 +180,12 @@ export type PdfToMarkdownConversionResult = {
   ai_attempts: ResumeAIAttemptRecord[];
   ai_chain_latency_ms: number | null;
   degraded_used: boolean;
+  configured_primary_provider: string;
+  configured_primary_model: string;
+  configured_secondary_provider: string;
+  configured_secondary_model: string;
+  last_attempt_status: string;
+  ai_error_category?: string | null;
 };
 
 /**

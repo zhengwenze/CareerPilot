@@ -105,9 +105,9 @@ class Settings(BaseSettings):
     resume_ai_api_key: str | None = None
     resume_ai_model: str = DEFAULT_CODEX2GPT_MODEL
     resume_ai_timeout_seconds: int = 30
-    resume_pdf_ai_primary_timeout_seconds: int = 30
-    resume_pdf_ai_retry_count: int = 0
-    resume_pdf_ai_secondary_provider: str = "ollama"
+    resume_pdf_ai_primary_timeout_seconds: int = 60
+    resume_pdf_ai_retry_count: int = 1
+    resume_pdf_ai_secondary_provider: str = ""
     resume_pdf_ai_secondary_base_url: str = DEFAULT_OLLAMA_BASE_URL
     resume_pdf_ai_secondary_api_key: str | None = None
     resume_pdf_ai_secondary_model: str = DEFAULT_OLLAMA_MODEL
