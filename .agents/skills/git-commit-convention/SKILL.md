@@ -7,9 +7,14 @@ description: Use this skill when the user wants to write, rewrite, validate, or 
 
 Write and validate Git commit messages using the Conventional Commits standard.
 
-For Career Pilot's repository-specific dual-remote publishing workflow, prefer `.agents/skills/dual-repo-publish/SKILL.md` after the commit message has been determined.
+## Related Skills
 
-Use this skill when the user asks to:
+This skill works closely with:
+
+- **`.agents/skills/dual-repo-publish/SKILL.md`** - For the complete commit-and-push workflow
+- **`.agents/skills/git-pre-commit-check/SKILL.md`** - For pre-commit validation
+
+## Use this skill when the user asks to:
 
 - write a commit message
 - rewrite or improve an existing commit message
@@ -327,6 +332,30 @@ Before finalizing, verify that the message:
 
 ---
 
+## Integration with Other Skills
+
+### With dual-repo-publish
+
+When `dual-repo-publish` skill is invoked, it will:
+
+1. Check working tree status
+2. Run pre-commit checks (via `git-pre-commit-check`)
+3. **Call this skill to generate commit message**
+4. Create the commit
+5. Push to remotes
+
+This skill should provide the commit message that `dual-repo-publish` will use.
+
+### With git-pre-commit-check
+
+Before generating a commit message:
+
+1. Pre-commit checks should pass
+2. If there are issues, they should be resolved or acknowledged
+3. Then proceed to generate the commit message
+
+---
+
 ## Output Format
 
 When the user asks for a commit message, default to this format:
@@ -339,4 +368,70 @@ type(scope): short description
 Optional body when needed.
 
 Optional footer
+```
+
+### Multiple commits
+
+When splitting is recommended:
+
+```text
+Proposed commits:
+
+1. refactor(module): prepare for feature X
+   - extract helper functions
+   - rename variables for clarity
+
+2. feat(module): add feature X
+   - implement core functionality
+   - add configuration options
+
+3. test(module): add tests for feature X
+   - unit tests
+   - integration tests
+
+4. docs(module): document feature X
+   - update README
+   - add usage examples
+```
+
+---
+
+## Quick Reference
+
+| Element | Format | Example |
+|---------|--------|---------|
+| Type | lowercase | `feat`, `fix`, `docs` |
+| Scope | lowercase, optional | `(auth)`, `(api)` |
+| Subject | lowercase, imperative | `add login feature` |
+| Body | paragraphs, explanatory | `Implements OAuth2...` |
+| Footer | key: value | `Closes: #123` |
+| Breaking | `!` after type/scope | `feat(api)!: remove endpoint` |
+
+---
+
+## Common Patterns for Career Pilot
+
+Based on the repository structure, common scopes include:
+
+- `backend` - FastAPI backend changes
+- `frontend` - Next.js frontend changes
+- `resume` - Resume-related features
+- `interview` - Mock interview features
+- `ai` - AI client and integration
+- `config` - Configuration changes
+- `test` - Test-related changes
+- `docs` - Documentation changes
+
+Example messages for this repo:
+
+```
+feat(backend): integrate codex2gpt AI provider for resume parsing
+
+fix(frontend): resolve resume editor state sync issue
+
+docs(readme): update local development setup instructions
+
+test(backend): add tests for AI client retry logic
+
+refactor(resume): extract markdown parser into separate module
 ```
