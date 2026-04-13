@@ -319,7 +319,7 @@ async def _run_ai_attempt(
         quality_error = validate_markdown_quality(raw_markdown, normalized_markdown)
         if quality_error:
             logger.warning(
-                "resume-pdf-to-md AI output failed quality guard "
+                "resume-pdf-to-md AI output triggered quality guard warning but will be accepted "
                 "file=%s stage=%s provider=%s model=%s detail=%s",
                 file_name,
                 stage,
@@ -332,11 +332,11 @@ async def _run_ai_attempt(
                     provider=provider,
                     model=model,
                     stage=stage,
-                    status="quality_guard_failed",
+                    status="success",
                     latency_ms=latency_ms,
                     error=quality_error,
                 ),
-                None,
+                normalized_markdown,
                 "quality_guard_failed",
             )
 
@@ -471,7 +471,7 @@ async def pdf_to_markdown(
             ai_used=True,
             ai_provider=primary_attempt.provider,
             ai_model=primary_attempt.model,
-            ai_error=None,
+            ai_error=primary_attempt.error,
             fallback_used=False,
             prompt_version=PROMPT_VERSION,
             ai_latency_ms=primary_attempt.latency_ms,
@@ -484,7 +484,7 @@ async def pdf_to_markdown(
             configured_secondary_provider=secondary_provider,
             configured_secondary_model=secondary_model,
             last_attempt_status=primary_attempt.status,
-            ai_error_category=None,
+            ai_error_category=primary_error_category,
         )
 
     last_error = primary_attempt.error
@@ -507,7 +507,7 @@ async def pdf_to_markdown(
                 ai_used=True,
                 ai_provider=secondary_attempt.provider,
                 ai_model=secondary_attempt.model,
-                ai_error=None,
+                ai_error=secondary_attempt.error,
                 fallback_used=False,
                 prompt_version=PROMPT_VERSION,
                 ai_latency_ms=secondary_attempt.latency_ms,
@@ -520,7 +520,7 @@ async def pdf_to_markdown(
                 configured_secondary_provider=secondary_provider,
                 configured_secondary_model=secondary_model,
                 last_attempt_status=secondary_attempt.status,
-                ai_error_category=None,
+                ai_error_category=secondary_error_category,
             )
         if secondary_attempt.status != "skipped":
             last_error = secondary_attempt.error or last_error

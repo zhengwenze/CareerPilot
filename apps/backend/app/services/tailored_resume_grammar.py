@@ -47,12 +47,20 @@ class ConfiguredTailoredResumeGrammarProvider(TailoredResumeGrammarProvider):
         api_key: str | None,
         model: str,
         timeout_seconds: int,
+        connect_timeout_seconds: int | None = None,
+        write_timeout_seconds: int | None = None,
+        read_timeout_seconds: int | None = None,
+        pool_timeout_seconds: int | None = None,
     ) -> None:
         self.provider = provider
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key.strip() if api_key else ""
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.connect_timeout_seconds = connect_timeout_seconds
+        self.write_timeout_seconds = write_timeout_seconds
+        self.read_timeout_seconds = read_timeout_seconds
+        self.pool_timeout_seconds = pool_timeout_seconds
 
     async def check(
         self, payload: TailoredResumeGrammarCheckRequest
@@ -64,6 +72,10 @@ class ConfiguredTailoredResumeGrammarProvider(TailoredResumeGrammarProvider):
                 api_key=self.api_key or None,
                 model=self.model,
                 timeout_seconds=self.timeout_seconds,
+                connect_timeout_seconds=self.connect_timeout_seconds,
+                write_timeout_seconds=self.write_timeout_seconds,
+                read_timeout_seconds=self.read_timeout_seconds,
+                pool_timeout_seconds=self.pool_timeout_seconds,
             ),
             instructions=get_tailored_resume_grammar_prompt(),
             payload=payload,
@@ -90,6 +102,10 @@ def build_tailored_resume_grammar_provider(
         api_key=settings.resume_ai_api_key,
         model=settings.resume_ai_model,
         timeout_seconds=settings.resume_ai_timeout_seconds,
+        connect_timeout_seconds=settings.resume_ai_connect_timeout_seconds,
+        write_timeout_seconds=settings.resume_ai_write_timeout_seconds,
+        read_timeout_seconds=settings.resume_ai_read_timeout_seconds,
+        pool_timeout_seconds=settings.resume_ai_pool_timeout_seconds,
     )
 
 

@@ -979,6 +979,10 @@ def _build_resume_ai_config(settings: Settings) -> AIProviderConfig:
         api_key=settings.resume_ai_api_key,
         model=settings.resume_ai_model,
         timeout_seconds=settings.resume_ai_timeout_seconds,
+        connect_timeout_seconds=settings.resume_ai_connect_timeout_seconds,
+        write_timeout_seconds=settings.resume_ai_write_timeout_seconds,
+        read_timeout_seconds=settings.resume_ai_read_timeout_seconds,
+        pool_timeout_seconds=settings.resume_ai_pool_timeout_seconds,
     )
 
 

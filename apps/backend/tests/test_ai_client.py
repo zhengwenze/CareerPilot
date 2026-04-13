@@ -31,6 +31,41 @@ class _FakeResponse:
         return self._payload
 
 
+class _FakeStreamResponse:
+    def __init__(
+        self,
+        *,
+        status_code: int = 200,
+        text: str = "",
+        stream_error: Exception | None = None,
+    ) -> None:
+        self.status_code = status_code
+        self.text = text
+        self._stream_error = stream_error
+        self._lines = text.splitlines()
+        self._request = httpx.Request("POST", "http://127.0.0.1:18100/v1/chat/completions")
+
+    async def __aenter__(self) -> "_FakeStreamResponse":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        del exc_type, exc, tb
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            response = httpx.Response(self.status_code, request=self._request, text=self.text)
+            raise httpx.HTTPStatusError("request failed", request=self._request, response=response)
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+        if self._stream_error is not None:
+            raise self._stream_error
+
+    async def aread(self) -> bytes:
+        return self.text.encode("utf-8")
+
+
 def _sse_payload_text(*payloads: dict[str, object]) -> str:
     lines = [f"data: {json_payload}" for json_payload in (json.dumps(payload, ensure_ascii=False) for payload in payloads)]
     lines.append("data: [DONE]")
@@ -53,18 +88,19 @@ async def test_request_text_completion_uses_codex2gpt_chat_completions(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
+        ) -> _FakeStreamResponse:
+            captured["method"] = method
             captured["url"] = url
             captured["json"] = json
             captured["headers"] = headers
-            return _FakeResponse(
-                {},
+            return _FakeStreamResponse(
                 text=_sse_payload_text(
                     {
                         "choices": [
@@ -96,6 +132,7 @@ async def test_request_text_completion_uses_codex2gpt_chat_completions(
 
     assert text == "OK from codex2gpt"
     assert captured["timeout"] == 20
+    assert captured["method"] == "POST"
     assert captured["url"] == "http://127.0.0.1:18100/v1/chat/completions"
     assert captured["headers"] == {"Content-Type": "application/json"}
     assert captured["json"] == {
@@ -127,16 +164,18 @@ async def test_request_text_completion_rewrites_local_codex2gpt_url_inside_conta
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
+        ) -> _FakeStreamResponse:
+            del method
             del json, headers
             captured["url"] = url
-            return _FakeResponse({}, text=_sse_payload_text({"choices": [{"delta": {"content": "OK"}}]}))
+            return _FakeStreamResponse(text=_sse_payload_text({"choices": [{"delta": {"content": "OK"}}]}))
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("app.services.ai_client._is_running_in_docker", lambda: True)
@@ -403,19 +442,20 @@ async def test_request_text_completion_retries_retryable_http_statuses(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
             nonlocal calls
             calls += 1
             if calls == 1:
-                return _FakeResponse({"error": "upstream failure"}, status_code=status_code)
-            return _FakeResponse({}, text=_sse_payload_text({"choices": [{"delta": {"content": "OK after retry"}}]}))
+                return _FakeStreamResponse(status_code=status_code, text='{"error":"upstream failure"}')
+            return _FakeStreamResponse(text=_sse_payload_text({"choices": [{"delta": {"content": "OK after retry"}}]}))
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
 
@@ -458,17 +498,18 @@ async def test_request_text_completion_does_not_retry_nonretryable_http_statuses
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
             nonlocal calls
             calls += 1
-            return _FakeResponse({"error": "not retryable"}, status_code=status_code)
+            return _FakeStreamResponse(status_code=status_code, text='{"error":"not retryable"}')
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
 
@@ -506,19 +547,20 @@ async def test_request_text_completion_retries_retryable_connection_error_marker
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
             nonlocal calls
             calls += 1
             if calls == 1:
                 raise httpx.RemoteProtocolError("Remote end closed connection without response")
-            return _FakeResponse({}, text=_sse_payload_text({"choices": [{"delta": {"content": "OK after reconnect"}}]}))
+            return _FakeStreamResponse(text=_sse_payload_text({"choices": [{"delta": {"content": "OK after reconnect"}}]}))
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
 
@@ -553,15 +595,16 @@ async def test_request_text_completion_extracts_text_from_choices_text(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
-            return _FakeResponse({}, text=_sse_payload_text({"choices": [{"text": "OK via choices text"}]}))
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            return _FakeStreamResponse(text=_sse_payload_text({"choices": [{"text": "OK via choices text"}]}))
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
 
@@ -595,15 +638,16 @@ async def test_request_text_completion_extracts_text_from_output_text(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
-            return _FakeResponse({}, text=_sse_payload_text({"choices": [], "output_text": "OK via output_text"}))
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            return _FakeStreamResponse(text=_sse_payload_text({"choices": [], "output_text": "OK via output_text"}))
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
 
@@ -637,16 +681,16 @@ async def test_request_text_completion_extracts_text_from_nested_response_output
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
-            return _FakeResponse(
-                {},
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            return _FakeStreamResponse(
                 text=_sse_payload_text({"choices": [], "response": {"output_text": "OK via nested output_text"}}),
             )
 
@@ -684,17 +728,20 @@ async def test_request_text_completion_returns_invalid_response_format_when_no_t
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
             nonlocal calls
             calls += 1
-            return _FakeResponse({}, text=_sse_payload_text({"choices": [{"message": {"role": "assistant", "content": None}}]}))
+            return _FakeStreamResponse(
+                text=_sse_payload_text({"choices": [{"message": {"role": "assistant", "content": None}}]})
+            )
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
 
@@ -712,8 +759,8 @@ async def test_request_text_completion_returns_invalid_response_format_when_no_t
             max_tokens=20,
         )
 
-    assert exc_info.value.category == "invalid_response_format"
-    assert calls == 1
+    assert exc_info.value.category == "codex2gpt_stream_empty_output"
+    assert calls == 3
 
 
 @pytest.mark.asyncio
@@ -722,7 +769,7 @@ async def test_request_text_completion_skips_retry_when_budget_is_exhausted(
 ) -> None:
     calls = 0
     sleep_calls = 0
-    perf_values = iter([100.0, 100.0, 117.3])
+    perf_values = iter([100.0, 100.0, 100.0, 117.3])
 
     class FakeAsyncClient:
         def __init__(self, *, timeout: float) -> None:
@@ -734,17 +781,18 @@ async def test_request_text_completion_skips_retry_when_budget_is_exhausted(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
             nonlocal calls
             calls += 1
-            return _FakeResponse({"error": "upstream closed"}, status_code=502)
+            return _FakeStreamResponse(status_code=502, text='{"error":"upstream closed"}')
 
     async def fake_sleep(seconds: float) -> None:
         del seconds
@@ -793,15 +841,16 @@ async def test_request_text_completion_logs_diagnostics_without_payload_leak(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             del exc_type, exc, tb
 
-        async def post(
+        def stream(
             self,
+            method: str,
             url: str,
             *,
             json: dict[str, object],
             headers: dict[str, str],
-        ) -> _FakeResponse:
-            del url, json, headers
-            return _FakeResponse({}, text=_sse_payload_text({"choices": [{"delta": {"content": "OK"}}]}))
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            return _FakeStreamResponse(text=_sse_payload_text({"choices": [{"delta": {"content": "OK"}}]}))
 
     monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
     caplog.set_level(logging.INFO)
@@ -828,5 +877,206 @@ async def test_request_text_completion_logs_diagnostics_without_payload_leak(
     assert "http_status_code=200" in caplog.text
     assert "raw_response_preview=" in caplog.text
     assert "response_text_source=choices[0].delta.content" in caplog.text
+    assert "time_to_first_token_ms=" in caplog.text
+    assert "stream_received_done=True" in caplog.text
     assert "exception_class=" not in caplog.text
     assert secret_resume_text not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_request_text_completion_retries_when_codex2gpt_stream_missing_done(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            del timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            del exc_type, exc, tb
+
+        def stream(
+            self,
+            method: str,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return _FakeStreamResponse(
+                    text='data: {"choices":[{"delta":{"content":"partial"}}]}'
+                )
+            return _FakeStreamResponse(
+                text=_sse_payload_text({"choices": [{"delta": {"content": "OK after stream retry"}}]})
+            )
+
+    monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
+
+    text = await request_text_completion(
+        config=AIProviderConfig(
+            provider="codex2gpt",
+            base_url="http://127.0.0.1:18100/v1",
+            api_key=None,
+            model="gpt-5.4",
+            timeout_seconds=20,
+        ),
+        instructions="Reply with exactly OK after stream retry.",
+        payload={"ping": "pong"},
+        max_tokens=20,
+    )
+
+    assert text == "OK after stream retry"
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_request_text_completion_retries_when_codex2gpt_stream_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            del timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            del exc_type, exc, tb
+
+        def stream(
+            self,
+            method: str,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return _FakeStreamResponse(text="data: [DONE]")
+            return _FakeStreamResponse(
+                text=_sse_payload_text({"choices": [{"delta": {"content": "OK after empty stream retry"}}]})
+            )
+
+    monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
+
+    text = await request_text_completion(
+        config=AIProviderConfig(
+            provider="codex2gpt",
+            base_url="http://127.0.0.1:18100/v1",
+            api_key=None,
+            model="gpt-5.4",
+            timeout_seconds=20,
+        ),
+        instructions="Reply with exactly OK after empty stream retry.",
+        payload={"ping": "pong"},
+        max_tokens=20,
+    )
+
+    assert text == "OK after empty stream retry"
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_request_text_completion_maps_codex2gpt_no_first_token_disconnect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            del timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            del exc_type, exc, tb
+
+        def stream(
+            self,
+            method: str,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            return _FakeStreamResponse(
+                stream_error=httpx.RemoteProtocolError("Remote end closed connection without response")
+            )
+
+    monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(AIClientError) as exc_info:
+        await request_text_completion(
+            config=AIProviderConfig(
+                provider="codex2gpt",
+                base_url="http://127.0.0.1:18100/v1",
+                api_key=None,
+                model="gpt-5.4",
+                timeout_seconds=20,
+            ),
+            instructions="Reply with exactly OK.",
+            payload={"ping": "pong"},
+            max_tokens=20,
+            retry_count_override=0,
+        )
+
+    assert exc_info.value.category == "codex2gpt_stream_no_first_token"
+    assert exc_info.value.metadata["disconnect_stage"] == "before_first_token"
+
+
+@pytest.mark.asyncio
+async def test_request_text_completion_maps_codex2gpt_stream_read_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            del timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            del exc_type, exc, tb
+
+        def stream(
+            self,
+            method: str,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> _FakeStreamResponse:
+            del method, url, json, headers
+            return _FakeStreamResponse(stream_error=httpx.ReadTimeout("timed out while reading stream"))
+
+    monkeypatch.setattr("app.services.ai_client.httpx.AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(AIClientError) as exc_info:
+        await request_text_completion(
+            config=AIProviderConfig(
+                provider="codex2gpt",
+                base_url="http://127.0.0.1:18100/v1",
+                api_key=None,
+                model="gpt-5.4",
+                timeout_seconds=20,
+            ),
+            instructions="Reply with exactly OK.",
+            payload={"ping": "pong"},
+            max_tokens=20,
+            retry_count_override=0,
+        )
+
+    assert exc_info.value.category == "codex2gpt_stream_read_timeout"

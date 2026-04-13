@@ -42,8 +42,6 @@ AI_STATUS_FALLBACK = "fallback"
 PARSE_PROGRESS_PREPARING = "排队完成，准备解析"
 PARSE_PROGRESS_READING_FILE = "读取文件中"
 PARSE_PROGRESS_PDF_TO_MARKDOWN = "PDF 转 Markdown 中"
-RESUME_PDF_TO_MD_PRIMARY_TIMEOUT_SECONDS = 60
-
 logger = logging.getLogger(__name__)
 _RESUME_PDF_TO_MD_MODULE: ModuleType | None = None
 
@@ -286,7 +284,11 @@ def build_resume_pdf_ai_configs(settings: Settings) -> list["AIProviderConfig"]:
         base_url=(settings.resume_ai_base_url or "").strip(),
         api_key=(settings.resume_ai_api_key or "").strip() or None,
         model=(settings.resume_ai_model or "gpt-5.4").strip(),
-        timeout_seconds=RESUME_PDF_TO_MD_PRIMARY_TIMEOUT_SECONDS,
+        timeout_seconds=settings.resume_pdf_ai_primary_timeout_seconds,
+        connect_timeout_seconds=settings.resume_ai_connect_timeout_seconds,
+        write_timeout_seconds=settings.resume_ai_write_timeout_seconds,
+        read_timeout_seconds=settings.resume_ai_read_timeout_seconds,
+        pool_timeout_seconds=settings.resume_ai_pool_timeout_seconds,
     )
     return [primary_config]
 
@@ -306,8 +308,8 @@ async def convert_pdf_bytes_to_markdown(
         pdf_bytes,
         file_name,
         ai_configs=build_resume_pdf_ai_configs(settings),
-        retry_count_override=min(max(0, settings.resume_pdf_ai_retry_count), 1),
-        total_timeout_budget_seconds=RESUME_PDF_TO_MD_PRIMARY_TIMEOUT_SECONDS,
+        retry_count_override=max(0, settings.resume_pdf_ai_retry_count),
+        total_timeout_budget_seconds=settings.resume_pdf_ai_primary_timeout_seconds,
     )
 
 
@@ -659,11 +661,14 @@ async def process_resume_parse_job(
                 )
             if pdf_to_md_result.ai_used:
                 ai_status = AI_STATUS_APPLIED
-                ai_message = (
-                    "主模型失败，已降级次模型整理生成最终 Markdown"
-                    if pdf_to_md_result.ai_path == "secondary"
-                    else "已通过 AI 整理生成最终 Markdown"
-                )
+                if ai_error_category == "quality_guard_failed":
+                    ai_message = "已通过 AI 整理生成最终 Markdown（质量守卫仅记录告警，不再阻断）"
+                else:
+                    ai_message = (
+                        "主模型失败，已降级次模型整理生成最终 Markdown"
+                        if pdf_to_md_result.ai_path == "secondary"
+                        else "已通过 AI 整理生成最终 Markdown"
+                    )
             elif pdf_to_md_result.fallback_used:
                 ai_status = AI_STATUS_FALLBACK
                 ai_message = (

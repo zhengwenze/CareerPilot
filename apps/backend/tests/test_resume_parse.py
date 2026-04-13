@@ -77,8 +77,8 @@ def test_settings_defaults_to_codex2gpt_without_api_key(monkeypatch: pytest.Monk
     assert settings.resume_ai_base_url == "http://127.0.0.1:18100/v1"
     assert settings.resume_ai_api_key is None
     assert settings.resume_ai_model == "gpt-5.4"
-    assert settings.resume_pdf_ai_primary_timeout_seconds == 60
-    assert settings.resume_pdf_ai_retry_count == 1
+    assert settings.resume_pdf_ai_primary_timeout_seconds == 120
+    assert settings.resume_pdf_ai_retry_count == 2
     assert settings.resume_pdf_ai_secondary_provider == ""
     assert settings.resume_pdf_ai_secondary_base_url == "http://127.0.0.1:11434"
     assert settings.resume_pdf_ai_secondary_api_key is None
@@ -154,10 +154,11 @@ async def test_convert_pdf_bytes_to_markdown_returns_primary_ai_markdown(
     monkeypatch.setattr(module, "extract_raw_markdown_from_pdf", lambda *_args, **_kwargs: "# Raw")
 
     async def fake_request_text_completion(**kwargs) -> str:
-        assert kwargs["retry_count_override"] == 1
-        assert kwargs["total_timeout_budget_seconds"] == 60
+        assert kwargs["retry_count_override"] == 2
+        assert kwargs["total_timeout_budget_seconds"] == 120
         assert kwargs["config"].provider == "codex2gpt"
-        assert kwargs["config"].timeout_seconds == 60
+        assert kwargs["config"].timeout_seconds == 120
+        assert kwargs["config"].read_timeout_seconds == settings.resume_ai_read_timeout_seconds
         return "# Polished"
 
     monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
@@ -203,8 +204,8 @@ async def test_convert_pdf_bytes_to_markdown_falls_back_after_primary_timeout_wi
 
     async def fake_request_text_completion(**kwargs) -> str:
         calls.append(kwargs["config"].provider)
-        assert kwargs["retry_count_override"] == 1
-        assert kwargs["total_timeout_budget_seconds"] == 60
+        assert kwargs["retry_count_override"] == 2
+        assert kwargs["total_timeout_budget_seconds"] == 120
         raise AIClientError(category="timeout", detail="primary timeout")
 
     monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
@@ -277,7 +278,7 @@ async def test_convert_pdf_bytes_to_markdown_falls_back_on_primary_error_only(
 
 
 @pytest.mark.asyncio
-async def test_convert_pdf_bytes_to_markdown_falls_back_when_primary_fails_quality_guard(
+async def test_convert_pdf_bytes_to_markdown_accepts_ai_markdown_when_quality_guard_warns(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = load_resume_pdf_to_md_module()
@@ -296,13 +297,16 @@ async def test_convert_pdf_bytes_to_markdown_falls_back_when_primary_fails_quali
     settings = Settings(_env_file=None, resume_pdf_ai_secondary_provider="ollama")
     result = await convert_pdf_bytes_to_markdown(b"%PDF", "resume.pdf", settings=settings)
 
-    assert result.ai_used is False
-    assert result.ai_path == "rules"
-    assert result.degraded_used is True
-    assert result.fallback_used is True
+    assert result.ai_used is True
+    assert result.ai_path == "primary"
+    assert result.degraded_used is False
+    assert result.fallback_used is False
     assert len(result.ai_attempts) == 1
-    assert result.ai_attempts[0].status == "quality_guard_failed"
-    assert result.last_attempt_status == "quality_guard_failed"
+    assert result.ai_attempts[0].status == "success"
+    assert result.ai_attempts[0].error == "AI output removed email(s): foo@example.com"
+    assert result.ai_error == "AI output removed email(s): foo@example.com"
+    assert result.ai_error_category == "quality_guard_failed"
+    assert result.last_attempt_status == "success"
 
 
 @pytest.mark.asyncio
@@ -505,6 +509,69 @@ async def test_resume_parse_job_persists_ai_cleanup_metadata_on_success(
     assert f"resume_id={resume_id} parse_job_id={parse_job_id} ai_used=True ai_error=None" in caplog.text
     assert "markdown_length_before=5 markdown_length_after=9 fallback_used=False" in caplog.text
     assert "ai_path=primary degraded_used=False" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_resume_parse_job_accepts_ai_markdown_when_quality_guard_warns(
+    app,
+    client,
+    db_session,
+    pdf_bytes: bytes,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, token = await create_test_user(db_session, email="resume-parse-quality-warning@example.com")
+
+    module = load_resume_pdf_to_md_module()
+    monkeypatch.setattr(
+        module,
+        "extract_raw_markdown_from_pdf",
+        lambda *_args, **_kwargs: "# 张三\n\n- 邮箱：foo@example.com\n\n## 教育经历\n- Example University\n",
+    )
+
+    async def fake_request_text_completion(**_kwargs) -> str:
+        return "# 张三\n\n## 教育经历\n- Example University\n"
+
+    monkeypatch.setattr(module, "request_text_completion", fake_request_text_completion)
+    caplog.set_level(logging.INFO)
+
+    upload_response = await client.post(
+        "/resumes/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("resume.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload_response.status_code == 201
+
+    upload_payload = upload_response.json()["data"]
+    resume_id = UUID(upload_payload["id"])
+    parse_job_id = UUID(upload_payload["latest_parse_job"]["id"])
+
+    await process_resume_parse_job(
+        resume_id=resume_id,
+        parse_job_id=parse_job_id,
+        storage=app.state.object_storage,
+        session_factory=app.state.session_factory,
+        settings=app.state.settings,
+    )
+
+    detail_response = await client.get(
+        f"/resumes/{resume_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_response.status_code == 200
+    payload = detail_response.json()["data"]
+
+    assert payload["parse_artifacts_json"]["canonical_resume_md"] == "# 张三\n\n## 教育经历\n- Example University"
+    assert payload["parse_artifacts_json"]["ai_used"] is True
+    assert payload["parse_artifacts_json"]["fallback_used"] is False
+    assert payload["parse_artifacts_json"]["ai_error"] == "AI output removed email(s): foo@example.com"
+    assert payload["parse_artifacts_json"]["ai_error_category"] == "quality_guard_failed"
+    assert payload["parse_artifacts_json"]["last_attempt_status"] == "success"
+    assert payload["parse_artifacts_json"]["ai_attempts"][0]["status"] == "success"
+    assert payload["parse_artifacts_json"]["ai_attempts"][0]["error"] == "AI output removed email(s): foo@example.com"
+    assert payload["latest_parse_job"]["ai_status"] == "applied"
+    assert "质量守卫仅记录告警，不再阻断" in (payload["latest_parse_job"]["ai_message"] or "")
+    assert "ai_used=True ai_error=AI output removed email(s): foo@example.com" in caplog.text
 
 
 @pytest.mark.asyncio
