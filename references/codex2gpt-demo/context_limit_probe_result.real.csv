@@ -1,0 +1,7 @@
+group_id,phase,attempt_index,target_scale_tokens,estimated_input_tokens,filler_repeat_count,input_chars,payload_chars,classification,usable,time_to_first_token_ms,time_to_last_token_ms,received_done,chunk_count,output_chars,finish_reason,error_type,error_message,seconds,http_status_code,quality_reasons
+simple_prompt,probe,1,2000,2882,11,8398,8321,stream_broken,False,,,False,0,0,,stream_broken,stream ended before [DONE] and no usable assistant text was recovered,3.05,200,
+complex_prompt_b1,probe,1,2000,2917,11,8483,8389,success_usable,True,7075.0,18880.3,True,562,821,stop,,,18.9,200,
+complex_prompt_b1,probe,1,4000,5669,22,16766,16672,stream_broken,False,,,False,0,0,,stream_broken,stream ended before [DONE] and no usable assistant text was recovered,3.06,200,
+complex_prompt_b2,probe,1,2000,3701,4,8333,8144,stream_broken,False,,,False,0,0,,stream_broken,stream ended before [DONE] and no usable assistant text was recovered,3.06,200,
+complex_prompt_b3,probe,1,2000,8430,0,20490,17211,success_usable,True,97321.5,178323.5,True,4515,10059,stop,,,178.37,200,
+complex_prompt_b3,probe,1,4000,8430,0,20490,17211,stream_broken,False,,,False,0,0,,stream_broken,stream ended before [DONE] and no usable assistant text was recovered,3.06,200,

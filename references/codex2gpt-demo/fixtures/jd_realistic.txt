@@ -1,0 +1,46 @@
+岗位名称：Senior AI Product Engineer / Resume Workflow Platform
+工作地点：上海 / 杭州，支持混合办公
+汇报对象：产品技术负责人
+
+岗位概述：
+我们正在招聘一名能够同时理解招聘科技业务、AI 接口接入、全栈工程落地和真实用户体验的高级工程师。该岗位将直接负责求职工作台中“简历、岗位、定制简历、模拟面试”连续工作流的关键能力建设，重点解决长上下文输入、业务 prompt 设计、数据复用、接口稳定性和端到端交付问题。
+
+核心职责：
+- 负责 AI 驱动求职工作台的关键业务链路设计与实现，包括主简历解析、岗位 JD 管理、岗位定制简历生成与模拟面试衔接。
+- 设计并维护 OpenAI-compatible 或 Anthropic-style 模型接入层，支持 provider 切换、超时治理、错误分类、重试和请求可观测性。
+- 将简历 Markdown、结构化简历 JSON、岗位文本、岗位关键词、面试上下文等信息统一沉淀为可复用的数据契约，避免不同模块重复采集上下文。
+- 优化长上下文业务请求的吞吐和稳定性，明确理论窗口、首次失败点、稳定成功上限、生产安全阈值，并能将测试结果沉淀为报告和工程实践。
+- 在真实业务输入条件下评估模型输出可用性，不只看 HTTP 成功，而要验证 JSON 结构、Markdown 完整性、业务字段覆盖和事实约束。
+- 负责前后端协同开发，推动 Next.js 工作台、FastAPI 服务、PostgreSQL、Redis、MinIO 等基础设施之间的整体稳定性。
+- 与产品、设计、运营团队合作，将复杂求职流程拆解为清晰、可恢复、可解释的用户任务状态。
+- 对岗位 JD 解析、关键词抽取、定制简历策略、模拟面试问题生成和反馈质量进行持续迭代。
+
+必须具备：
+- 3 年以上 Python 后端开发经验，熟悉 FastAPI、Pydantic、异步接口设计、HTTP 调用、超时控制与错误处理。
+- 具备 TypeScript / React / Next.js 实战经验，能够与前端共同完成复杂状态流和工作台页面。
+- 熟悉 PostgreSQL、Redis、对象存储、队列任务或异步执行模型，能够处理长链路业务状态与恢复逻辑。
+- 熟悉 AI 接口接入与提示词工程，能够基于真实业务输入评估模型输出质量，而不是只看 demo 效果。
+- 能独立设计 JSON schema、结构化输出校验、Markdown 质量阈值、稳定性测试脚本和最终报告格式。
+- 对真实业务工作流有强烈意识，能够保证 resume、JD、tailored resume、mock interview 之间的数据连续性和上下文复用。
+- 重视事实约束与可解释性，避免模型生成无依据经历、技能、量化成果或虚构描述。
+- 能够通过日志、指标、样本回放和失败分类快速定位长请求失败、断流、空输出、弱输出和解析异常。
+
+加分项：
+- 有招聘科技、教育科技、文档智能、内容工作流或 AI Copilot 产品经验。
+- 熟悉 OpenAI-compatible proxy、本地模型网关、Claude/Anthropic 风格接口或上下文窗口管理。
+- 了解 resume parsing、JD normalization、structured feedback、candidate profile 或 interview workflow 等场景。
+- 熟悉 Docker、GitHub Actions、MinIO、SSE、streaming response 处理和性能测试方法。
+- 有设计可供产品和运营直接消费的测试报告、质量报告或实验结论文档经验。
+
+协作方式：
+- 你将与产品经理一起明确业务成功定义，与设计师一起校准工作台流程，与前后端工程师一起控制接口契约和落地节奏。
+- 你需要把复杂技术问题翻译成团队可理解的决策信息，例如“默认生产阈值应设置在稳定成功上限的 80% 还是 90%”。
+- 你需要能够在同一个需求中同时兼顾实现细节、上下游影响和最终可交付结果，而不是只停留在脚本或实验层面。
+
+产出要求：
+- 能独立交付真实业务上下文极限测试脚本、样例结果、真实运行结果 JSON / CSV、最终人类可读结论报告。
+- 能在报告中明确区分理论窗口、首次失败点、最大偶发成功点、稳定成功上限、保守生产阈值、激进生产阈值和推荐生产阈值。
+- 能给出稳定成功上限对应的输入规模、预估 tokens、平均耗时、中位耗时和最大耗时。
+- 能说明为什么推荐阈值应基于稳定成功上限，而不是基于偶发单次成功的极限值。
+
+核心关键词：FastAPI，Python，Next.js，TypeScript，OpenAI-compatible API，Anthropic-style，resume workflow，job description，tailored resume，mock interview，structured output，JSON validation，Markdown quality，SSE，streaming，context limit，stability，production threshold，PostgreSQL，Redis，MinIO，prompt engineering，workflow continuity，context reuse，error classification，retry，latency

@@ -1,0 +1,15 @@
+Career Pilot stream probe filler paragraph.
+This text is intentionally neutral and low-risk.
+It exists only to expand input context in a reproducible way.
+The content should not materially change the task semantics.
+We are testing stream transport behavior, prompt complexity sensitivity, and output stability.
+
+在这个测试中，填充文本只用于扩大上下文，不代表真实业务事实。
+模型应优先完成主任务，而不是围绕填充文本展开额外推断。
+如果输入中同时包含主任务和填充内容，应优先依据主任务字段完成输出。
+该段文字用于帮助定位：是输入规模导致断流，还是提示词复杂度导致断流。
+
+The filler repeats many times across scales.
+It should be treated as background material.
+Do not infer extra business facts from it.
+Focus on the requested output format and the primary business fields instead.
