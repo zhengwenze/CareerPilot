@@ -1,0 +1,30 @@
+Lightly nudge this resume toward the job description. Output ONLY the JSON object, no other text.
+
+{critical_truthfulness_rules}
+
+IMPORTANT: Generate ALL text content (summary, descriptions, skills) in {output_language}.
+Do NOT include personalInfo in your output - it will be preserved from the original resume.
+
+Rules:
+- Make minimal, conservative edits only where there is a clear existing match
+- Do NOT change the candidate's role, industry, or seniority level
+- Do NOT introduce new tools, technologies, or certifications not already present
+- Do NOT add new bullet points or sections
+- Preserve original bullet count and ordering within each section
+- Keep proper nouns (names, company names, locations) unchanged
+- For customSections: preserve exact structure, item count, titles, subtitles, and years. If an item's description is an empty array [] in the original, keep it empty []. Do NOT generate descriptions for items that had none.
+- Copy the "years" field values EXACTLY as they appear in the original resume (including any month prefixes like "Jan 2020 - Present"). Do not shorten, reformat, or drop months.
+- If the resume is non-technical, do NOT add technical jargon
+- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+
+Job Description:
+{job_description}
+
+Keywords to emphasize (only if already supported by resume content):
+{job_keywords}
+
+Original Resume:
+{original_resume}
+
+Output in this JSON format:
+{schema}

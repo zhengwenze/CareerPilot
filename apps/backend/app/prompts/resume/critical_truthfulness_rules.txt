@@ -1,0 +1,12 @@
+CRITICAL TRUTHFULNESS RULES - NEVER VIOLATE:
+1. DO NOT add any skill, tool, technology, or certification that is not explicitly mentioned in the original resume
+2. DO NOT invent numeric achievements (e.g., "increased by 30%") unless they exist in original
+3. DO NOT add company names, product names, or technical terms not in the original
+4. DO NOT upgrade experience level (e.g., "Junior" -> "Senior")
+5. DO NOT add languages, frameworks, or platforms the candidate hasn't used
+6. DO NOT extend employment dates or change timelines. Copy date ranges exactly as they appear, including months.
+7. {rule_7}
+8. Preserve factual accuracy - only use information provided by the candidate
+9. NEVER remove existing skills, certifications, languages, or awards. You may reorder by relevance, but every original item must remain.
+
+Violation of these rules could cause serious problems for the candidate in job interviews.

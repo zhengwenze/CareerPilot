@@ -6,8 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
-from app.prompts.resume import get_resume_pdf_to_md_prompt
-from app.services.ai_client import AIClientError, AIProviderConfig, request_text_completion
+from app.prompts.resume import (
+    get_resume_pdf_to_md_prompt,
+    get_resume_pdf_to_md_user_prompt,
+)
+from app.services.ai_client import (
+    AIClientError,
+    AIProviderConfig,
+    request_text_completion,
+)
 from app.services.resume_ai import is_ai_configured
 
 logger = logging.getLogger(__name__)
@@ -88,32 +95,17 @@ def normalize_markdown(markdown: str) -> str:
     return "\n".join(cleaned).strip()
 
 
-def build_pdf_to_md_user_prompt(raw_markdown: str) -> str:
-    return f"""下面是从 PDF 简历中提取出来的原始 Markdown，请你整理成最终简历 Markdown。
-
-请特别注意：
-- 这是"高保真转换"任务，不是"润色改写"任务
-- 严禁编造、补充、猜测任何输入里不存在的事实
-- 必须完整保留邮箱、电话、URL、时间、公司名、学校名
-- 必须完整保留项目链接、仓库链接、个人主页链接
-- 如果你发现项目标题附近存在 URL，请务必保留到最终输出中
-- 只允许优化标题层级、列表格式、空行和段落结构
-- 优先保留信息，不要为了美观省略内容
-- 如果原始 Markdown 已经较好，只做最小必要清洗
-
-请直接输出最终 Markdown，不要输出解释。
-
----------------- RAW MARKDOWN BEGIN ----------------
-{raw_markdown}
----------------- RAW MARKDOWN END ----------------
-"""
+def build_pdf_to_md_user_prompt() -> str:
+    return get_resume_pdf_to_md_user_prompt()
 
 
 def extract_raw_markdown_from_pdf(pdf_bytes: bytes, file_name: str) -> str:
     try:
         import pymupdf4llm
     except ImportError:
-        logger.exception("resume-pdf-to-md missing dependency pymupdf4llm file=%s", file_name)
+        logger.exception(
+            "resume-pdf-to-md missing dependency pymupdf4llm file=%s", file_name
+        )
         return ""
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -123,7 +115,10 @@ def extract_raw_markdown_from_pdf(pdf_bytes: bytes, file_name: str) -> str:
     try:
         raw_markdown = pymupdf4llm.to_markdown(tmp_path)
     except Exception:
-        logger.exception("resume-pdf-to-md failed during raw markdown extraction file=%s", file_name)
+        logger.exception(
+            "resume-pdf-to-md failed during raw markdown extraction file=%s",
+            file_name,
+        )
         return ""
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -219,9 +214,9 @@ def validate_markdown_quality(raw_markdown: str, cleaned_markdown: str) -> str |
         return f"AI output removed URL(s): {', '.join(missing_urls[:3])}"
 
     for section_name, section_signals in SECTION_SIGNAL_GROUPS.items():
-        if _has_section_signal(raw_markdown, section_signals) and not _has_section_signal(
-            cleaned_markdown, section_signals
-        ):
+        if _has_section_signal(
+            raw_markdown, section_signals
+        ) and not _has_section_signal(cleaned_markdown, section_signals):
             return f"AI output removed required section: {section_name}"
 
     raw_date_tokens = _extract_date_token_count(raw_markdown)
@@ -302,7 +297,7 @@ async def _run_ai_attempt(
             instructions=get_resume_pdf_to_md_prompt(),
             payload={
                 "raw_markdown": raw_markdown,
-                "user_prompt": build_pdf_to_md_user_prompt(raw_markdown),
+                "user_prompt": build_pdf_to_md_user_prompt(),
             },
             max_tokens=4000,
             retry_count_override=retry_count_override,
@@ -491,12 +486,14 @@ async def pdf_to_markdown(
     last_error_category = primary_error_category
 
     if secondary_config is not None:
-        secondary_attempt, secondary_markdown, secondary_error_category = await _run_ai_attempt(
-            stage="secondary",
-            file_name=file_name,
-            raw_markdown=raw_markdown,
-            ai_config=secondary_config,
-            retry_count_override=retry_count_override,
+        secondary_attempt, secondary_markdown, secondary_error_category = (
+            await _run_ai_attempt(
+                stage="secondary",
+                file_name=file_name,
+                raw_markdown=raw_markdown,
+                ai_config=secondary_config,
+                retry_count_override=retry_count_override,
+            )
         )
         attempts.append(secondary_attempt)
         if secondary_attempt.status == "success" and secondary_markdown is not None:
@@ -513,7 +510,9 @@ async def pdf_to_markdown(
                 ai_latency_ms=secondary_attempt.latency_ms,
                 ai_path="secondary",
                 ai_attempts=attempts,
-                ai_chain_latency_ms=max(0, int((perf_counter() - chain_started) * 1000)),
+                ai_chain_latency_ms=max(
+                    0, int((perf_counter() - chain_started) * 1000)
+                ),
                 degraded_used=True,
                 configured_primary_provider=primary_provider,
                 configured_primary_model=primary_model,
@@ -554,7 +553,9 @@ async def pdf_to_markdown(
         configured_primary_model=primary_model,
         configured_secondary_provider=secondary_provider,
         configured_secondary_model=secondary_model,
-        last_attempt_status=str(getattr(attempts[-1], "status", "") or "") if attempts else "",
+        last_attempt_status=(
+            str(getattr(attempts[-1], "status", "") or "") if attempts else ""
+        ),
         ai_error_category=last_error_category or "provider_error",
     )
 
@@ -563,7 +564,9 @@ async def main():
     import sys
 
     if len(sys.argv) < 2:
-        print("用法: python -m app.services.resume_pdf_to_md <pdf_file> [output_md_file]")
+        print(
+            "用法: python -m app.services.resume_pdf_to_md <pdf_file> [output_md_file]"
+        )
         return
 
     pdf_path = Path(sys.argv[1])

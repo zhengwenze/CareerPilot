@@ -47,6 +47,8 @@ def get_mock_interview_deep_review_rubric(review_type: MockInterviewReviewType) 
     file_map = {
         MockInterviewReviewType.TECHNICAL_ANALYSIS: "deep_review_rubric_technical_analysis.txt",
         MockInterviewReviewType.PROJECT_EXPERIENCE: "deep_review_rubric_project_experience.txt",
-        MockInterviewReviewType.KNOWLEDGE_FUNDAMENTAL: "deep_review_rubric_knowledge_fundamental.txt",
+        MockInterviewReviewType.KNOWLEDGE_FUNDAMENTAL: (
+            "deep_review_rubric_knowledge_fundamental.txt"
+        ),
     }
     return (PROMPT_DIR / file_map[review_type]).read_text(encoding="utf-8").strip()
