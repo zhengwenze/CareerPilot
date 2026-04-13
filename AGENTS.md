@@ -450,6 +450,7 @@ For domain-specific work, prefer these skills before using purely technical rout
 - `.agents/skills/mock-interview-session/SKILL.md`
 
 Use technical skills such as frontend/backend helpers after the domain route is clear.
+
 - dependency awareness
 - low-risk rollout order
 - MVP-first sequencing
