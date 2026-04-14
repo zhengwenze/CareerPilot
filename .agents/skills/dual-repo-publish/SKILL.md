@@ -100,6 +100,7 @@ Default behavior is fully automatic once the user asks to submit and sync.
 ## Commit rules
 
 - treat `.agents/skills/git-commit-convention/SKILL.md` as the source of truth for commit classification and wording
+- **commit message 必须使用中文编写**（由 git-commit-convention 技能的 Language Rule 规定）
 - prefer one commit only when the diff is clearly one logical unit
 - if the changes are clearly mixed, split them before any push
 - do not invent repository-specific commit types outside Conventional Commits

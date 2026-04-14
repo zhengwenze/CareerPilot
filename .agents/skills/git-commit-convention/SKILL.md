@@ -203,6 +203,27 @@ Do not hide breaking behavior inside a vague body paragraph.
 
 ---
 
+## Language Rule
+
+**All commit messages must be written in Chinese (中文)**.
+
+- Use Chinese for the subject line, body, and footer
+- This ensures consistent, readable commit history for the team
+- Exception: code snippets, technical terms, or variable names may remain in English
+
+Examples of valid Chinese commit messages:
+
+- `feat(resume): 修复简历解析时 education_items 属性不存在的类型错误`
+- `fix(frontend): 添加"我的"导航项到侧边栏和顶部导航`
+- `docs(readme): 更新本地开发环境配置说明`
+
+Examples of invalid commit messages:
+
+- `feat(resume): fix type error` ❌
+- `fix: update something` ❌
+
+---
+
 ## Breaking Change Rules
 
 A change is breaking if it forces downstream users, callers, integrators, deploy scripts, configs, or consumers to change behavior.
@@ -398,14 +419,14 @@ Proposed commits:
 
 ## Quick Reference
 
-| Element | Format | Example |
-|---------|--------|---------|
-| Type | lowercase | `feat`, `fix`, `docs` |
-| Scope | lowercase, optional | `(auth)`, `(api)` |
-| Subject | lowercase, imperative | `add login feature` |
-| Body | paragraphs, explanatory | `Implements OAuth2...` |
-| Footer | key: value | `Closes: #123` |
-| Breaking | `!` after type/scope | `feat(api)!: remove endpoint` |
+| Element  | Format                  | Example                       |
+| -------- | ----------------------- | ----------------------------- |
+| Type     | lowercase               | `feat`, `fix`, `docs`         |
+| Scope    | lowercase, optional     | `(auth)`, `(api)`             |
+| Subject  | lowercase, imperative   | `add login feature`           |
+| Body     | paragraphs, explanatory | `Implements OAuth2...`        |
+| Footer   | key: value              | `Closes: #123`                |
+| Breaking | `!` after type/scope    | `feat(api)!: remove endpoint` |
 
 ---
 
