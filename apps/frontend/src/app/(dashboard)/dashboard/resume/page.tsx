@@ -1,9 +1,14 @@
 'use client';
-
 import Link from 'next/link';
-import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from 'react';
 import { ArrowUpRight, Download, FileUp, Sparkles } from 'lucide-react';
-
 import { useAuth } from '@/components/auth-provider';
 import { PaperInput, PaperTextarea } from '@/components/brutalist/form-controls';
 import { MetaChip, PageHeader, PageShell, PaperSection } from '@/components/brutalist/page-shell';
@@ -52,7 +57,7 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-  return '操作失败，请稍后重试。';
+  return '失败，请重试。';
 }
 
 function formatDate(value: string) {
@@ -100,20 +105,14 @@ function hasStructuredResumeReady(resume: ResumeRecord | null) {
   }
   return Boolean(
     structured.basic_info?.name?.trim() ||
-      structured.basic_info?.summary?.trim() ||
-      structured.education_items?.length ||
-      structured.education?.length ||
-      structured.work_experience_items?.length ||
-      structured.work_experience?.length ||
-      structured.project_items?.length ||
-      structured.projects?.length ||
-      structured.skills?.technical?.length ||
-      structured.skills?.tools?.length ||
-      structured.skills?.languages?.length ||
-      structured.certification_items?.length ||
-      structured.certifications?.length ||
-      structured.awards?.length ||
-      structured.custom_sections?.length
+    structured.basic_info?.summary?.trim() ||
+    structured.education?.length ||
+    structured.work_experience?.length ||
+    structured.projects?.length ||
+    structured.skills?.technical?.length ||
+    structured.skills?.tools?.length ||
+    structured.skills?.languages?.length ||
+    structured.certifications?.length
   );
 }
 
@@ -159,7 +158,9 @@ function getResumeAiDebug(
     model: source.ai_model,
     error: source.ai_error,
     aiErrorCategory:
-      source.ai_error_category ?? ('meta' in source ? source.meta?.ai_error_category : null) ?? null,
+      source.ai_error_category ??
+      ('meta' in source ? source.meta?.ai_error_category : null) ??
+      null,
     fallbackUsed: source.fallback_used,
     promptVersion: source.prompt_version,
     latencyMs: source.ai_latency_ms,
@@ -184,7 +185,9 @@ function getResumeAiDebug(
       ('meta' in source ? source.meta?.configured_secondary_model : '') ??
       '',
     lastAttemptStatus:
-      source.last_attempt_status ?? ('meta' in source ? source.meta?.last_attempt_status : '') ?? '',
+      source.last_attempt_status ??
+      ('meta' in source ? source.meta?.last_attempt_status : '') ??
+      '',
   };
 }
 
@@ -240,8 +243,10 @@ function getLastMeaningfulAttempt(debug: NonNullable<ReturnType<typeof getResume
   return (
     [...debug.attempts]
       .reverse()
-      .find(attempt => attempt.status !== 'skipped' && (attempt.provider || attempt.model || attempt.error)) ??
-    null
+      .find(
+        attempt =>
+          attempt.status !== 'skipped' && (attempt.provider || attempt.model || attempt.error)
+      ) ?? null
   );
 }
 
@@ -342,7 +347,10 @@ function hasAnyJobDraftContent(draft: JobDraft) {
 }
 
 function isSameJobDraft(left: JobDraft, right: JobDraft) {
-  return JSON.stringify(normalizeJobDraftForCompare(left)) === JSON.stringify(normalizeJobDraftForCompare(right));
+  return (
+    JSON.stringify(normalizeJobDraftForCompare(left)) ===
+    JSON.stringify(normalizeJobDraftForCompare(right))
+  );
 }
 
 const AUTO_SAVE_SECTION_TITLES = new Set([
@@ -730,7 +738,9 @@ function findWorkflowForPair(
   if (!resumeId || !jobId) {
     return null;
   }
-  return workflows.find(item => item.resume.id === resumeId && item.target_job.id === jobId) ?? null;
+  return (
+    workflows.find(item => item.resume.id === resumeId && item.target_job.id === jobId) ?? null
+  );
 }
 
 export default function DashboardResumePage() {
@@ -788,7 +798,9 @@ export default function DashboardResumePage() {
   const immediateAiDebug = getResumeAiDebug(latestPdfConversion);
   const persistedAiDebug = getResumeAiDebug(resume?.parse_artifacts_json);
   const activeResumeAiDebug = immediateAiDebug ?? persistedAiDebug;
-  const hasActiveResumeAiDebug = hasResumeAiDebug(latestPdfConversion ?? resume?.parse_artifacts_json);
+  const hasActiveResumeAiDebug = hasResumeAiDebug(
+    latestPdfConversion ?? resume?.parse_artifacts_json
+  );
 
   async function refreshWorkflowForPair(
     resumeId: string | null | undefined,
@@ -808,7 +820,10 @@ export default function DashboardResumePage() {
       setWorkflow(nextWorkflow);
       if (nextWorkflow?.tailored_resume.task_state.started_at) {
         setGenerateStartTime(Date.parse(nextWorkflow.tailored_resume.task_state.started_at));
-      } else if (!nextWorkflow || isTerminalWorkflowStatus(nextWorkflow.tailored_resume.display_status)) {
+      } else if (
+        !nextWorkflow ||
+        isTerminalWorkflowStatus(nextWorkflow.tailored_resume.display_status)
+      ) {
         setGenerateStartTime(null);
       }
       if (!nextWorkflow || isTerminalWorkflowStatus(nextWorkflow.tailored_resume.display_status)) {
@@ -823,13 +838,15 @@ export default function DashboardResumePage() {
     }
   }
 
-  const refreshWorkflowForPairEffect = useEffectEvent(async (
-    resumeId: string | null | undefined,
-    jobId: string | null | undefined,
-    options: { silent?: boolean } = {}
-  ) => {
-    await refreshWorkflowForPair(resumeId, jobId, options);
-  });
+  const refreshWorkflowForPairEffect = useEffectEvent(
+    async (
+      resumeId: string | null | undefined,
+      jobId: string | null | undefined,
+      options: { silent?: boolean } = {}
+    ) => {
+      await refreshWorkflowForPair(resumeId, jobId, options);
+    }
+  );
 
   useEffect(() => {
     if (!token) {
@@ -1000,10 +1017,7 @@ export default function DashboardResumePage() {
     !['pending', 'processing'].includes(resume?.parse_status ?? '')
   );
   const canSaveJob = Boolean(
-    token &&
-    isJobDirty &&
-    jobDraft.title.trim() &&
-    jobDraft.jd_text.trim()
+    token && isJobDirty && jobDraft.title.trim() && jobDraft.jd_text.trim()
   );
   const canGenerate = Boolean(
     token &&
@@ -1156,7 +1170,9 @@ export default function DashboardResumePage() {
     }
 
     if (!isResumeStructuredReady) {
-      setPageError('主简历已完成 Markdown 解析，但尚未完成结构化。请先点击“保存简历”完成结构化后再生成。');
+      setPageError(
+        '主简历已完成 Markdown 解析，但尚未完成结构化。请先点击“保存简历”完成结构化后再生成。'
+      );
       return;
     }
 
@@ -1261,7 +1277,9 @@ export default function DashboardResumePage() {
                   : 'Structured Missing'
                 : 'Structured Missing'}
             </MetaChip>
-            <MetaChip>{savedJob ? (isJobDirty ? 'JD Unsaved' : 'JD Ready') : 'JD Missing'}</MetaChip>
+            <MetaChip>
+              {savedJob ? (isJobDirty ? 'JD Unsaved' : 'JD Ready') : 'JD Missing'}
+            </MetaChip>
             <MetaChip>{workflow ? 'Result Ready' : 'Result Pending'}</MetaChip>
           </>
         }
@@ -1366,7 +1384,7 @@ export default function DashboardResumePage() {
         >
           {resume ? (
             <div className="space-y-4">
-              {(hasActiveResumeAiDebug || resume.parse_error) ? (
+              {hasActiveResumeAiDebug || resume.parse_error ? (
                 <details className="border border-[#e5e5e5] bg-[#fafafa]">
                   <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[#1C1C1C] marker:hidden">
                     解析详情
@@ -1382,19 +1400,14 @@ export default function DashboardResumePage() {
                       <p>
                         AI 链路耗时：{' '}
                         {activeResumeAiDebug
-                          ? (activeResumeAiDebug.chainLatencyMs ?? activeResumeAiDebug.latencyMs) ===
-                            null
+                          ? (activeResumeAiDebug.chainLatencyMs ??
+                              activeResumeAiDebug.latencyMs) === null
                             ? 'n/a'
                             : `${activeResumeAiDebug.chainLatencyMs ?? activeResumeAiDebug.latencyMs} ms`
                           : 'n/a'}
                       </p>
-                      <p>
-                        回退：{' '}
-                        {activeResumeAiDebug?.fallbackUsed ? '已启用' : '未启用'}
-                      </p>
-                      <p>
-                        失败分类： {getResumeParseFailureCategory(activeResumeAiDebug)}
-                      </p>
+                      <p>回退： {activeResumeAiDebug?.fallbackUsed ? '已启用' : '未启用'}</p>
+                      <p>失败分类： {getResumeParseFailureCategory(activeResumeAiDebug)}</p>
                       <p>
                         错误信息：{' '}
                         {getResumeParseDetailError(activeResumeAiDebug, resume.parse_error)}
@@ -1454,7 +1467,12 @@ export default function DashboardResumePage() {
                   </>
                 ) : null}
                 {canSaveJob ? (
-                  <Button size="sm" type="button" variant="outline" onClick={() => void handleSaveJob()}>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleSaveJob()}
+                  >
                     {isSavingJob ? '保存 JD 中' : '保存 JD'}
                   </Button>
                 ) : null}

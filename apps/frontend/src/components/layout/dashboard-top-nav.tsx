@@ -41,7 +41,7 @@ export function DashboardTopNav() {
               <Button
                 aria-busy={isLoggingOut}
                 className={cn(
-                  'bw-topbar-logout text-red-600 hover:text-red-700 font-semibold',
+                  'bw-topbar-logout !text-red-600 hover:!text-red-700',
                   !user && 'bw-topbar-logout-solo'
                 )}
                 disabled={isLoggingOut}

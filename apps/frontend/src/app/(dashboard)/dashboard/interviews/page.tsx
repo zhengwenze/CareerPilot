@@ -1,31 +1,15 @@
-"use client";
-
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import {
-  ArrowUpRight,
-  CheckCircle2,
-  Send,
-  Trash2,
-} from "lucide-react";
-
-import { useAuth } from "@/components/auth-provider";
-import { PaperTextarea } from "@/components/brutalist/form-controls";
-import {
-  MetaChip,
-  PageHeader,
-  PageShell,
-  PaperSection,
-} from "@/components/brutalist/page-shell";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/page-state";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { ApiError } from "@/lib/api/client";
+'use client';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowUpRight, CheckCircle2, Send, Trash2 } from 'lucide-react';
+import { useAuth } from '@/components/auth-provider';
+import { PaperTextarea } from '@/components/brutalist/form-controls';
+import { MetaChip, PageHeader, PageShell, PaperSection } from '@/components/brutalist/page-shell';
+import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/page-state';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { ApiError } from '@/lib/api/client';
 import {
   createMockInterviewSession,
   deleteMockInterviewSession,
@@ -38,7 +22,7 @@ import {
   type MockInterviewDeepReviewRecord,
   type MockInterviewSessionRecord,
   type MockInterviewTurnRecord,
-} from "@/lib/api/modules/mock-interviews";
+} from '@/lib/api/modules/mock-interviews';
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
@@ -47,42 +31,42 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-  return "操作失败，请稍后重试。";
+  return '操作失败，请稍后重试。';
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   }).format(new Date(value));
 }
 
 function getSessionStatusLabel(value: string) {
   const labels: Record<string, string> = {
-    active: "进行中",
-    completed: "已完成",
-    failed: "失败",
+    active: '进行中',
+    completed: '已完成',
+    failed: '失败',
   };
   return labels[value] ?? value;
 }
 
 function getQuestionTypeLabel(value: string) {
-  return value === "followup" ? "追问" : "主问题";
+  return value === 'followup' ? '追问' : '主问题';
 }
 
 function getReviewTypeLabel(value: string) {
   const labels: Record<string, string> = {
-    technical_analysis: "技术分析",
-    project_experience: "项目经历",
-    knowledge_fundamental: "基础原理",
+    technical_analysis: '技术分析',
+    project_experience: '项目经历',
+    knowledge_fundamental: '基础原理',
   };
   return labels[value] ?? value;
 }
 
 function getDeepReviewPayload(
-  payload: MockInterviewTurnRecord["evaluation_json"]
+  payload: MockInterviewTurnRecord['evaluation_json']
 ): MockInterviewDeepReviewRecord | null {
   if (!payload || Array.isArray(payload)) {
     return null;
@@ -102,13 +86,7 @@ function getDeepReviewPayload(
   return candidate;
 }
 
-function DeepReviewSection({
-  title,
-  items,
-}: {
-  title: string;
-  items: string[];
-}) {
+function DeepReviewSection({ title, items }: { title: string; items: string[] }) {
   if (!items.length) {
     return null;
   }
@@ -139,35 +117,31 @@ function DeepReviewCard({ turn }: { turn: MockInterviewTurnRecord }) {
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
           深度点评 · {getReviewTypeLabel(turn.review_type)}
         </p>
-        <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/60">
-          深度点评生成中。
-        </p>
+        <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/60">深度点评生成中。</p>
       </div>
     );
   }
 
-  if (review.status === "failed") {
+  if (review.status === 'failed') {
     return (
       <div className="mt-4 border border-[#1C1C1C]/12 bg-[#fafafa] p-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
           深度点评 · {getReviewTypeLabel(turn.review_type)}
         </p>
         <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/68">
-          {review.display_comment || "深度点评暂时不可用。"}
+          {review.display_comment || '深度点评暂时不可用。'}
         </p>
       </div>
     );
   }
 
-  if (review.status !== "ready") {
+  if (review.status !== 'ready') {
     return (
       <div className="mt-4 border border-dashed border-[#1C1C1C]/15 bg-[#fafafa] p-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
           深度点评 · {getReviewTypeLabel(turn.review_type)}
         </p>
-        <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/60">
-          深度点评生成中。
-        </p>
+        <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/60">深度点评生成中。</p>
       </div>
     );
   }
@@ -179,16 +153,14 @@ function DeepReviewCard({ turn }: { turn: MockInterviewTurnRecord }) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
             深度点评 · {getReviewTypeLabel(turn.review_type)}
           </p>
-          <p className="mt-2 text-sm leading-6 text-[#1C1C1C]">
-            {review.display_comment}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-[#1C1C1C]">{review.display_comment}</p>
         </div>
         <div className="border border-[#1C1C1C]/10 bg-white px-3 py-2 text-right">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/50">
             本题评分
           </p>
           <p className="mt-1 text-lg font-semibold text-[#1C1C1C]">
-            {typeof review.score === "number" ? review.score.toFixed(1) : "--"}
+            {typeof review.score === 'number' ? review.score.toFixed(1) : '--'}
           </p>
         </div>
       </div>
@@ -198,17 +170,13 @@ function DeepReviewCard({ turn }: { turn: MockInterviewTurnRecord }) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
             面试官判断
           </p>
-          <p className="mt-3 text-sm leading-6 text-[#1C1C1C]/72">
-            {review.overall_comment}
-          </p>
+          <p className="mt-3 text-sm leading-6 text-[#1C1C1C]/72">{review.overall_comment}</p>
         </div>
         <div className="border border-[#1C1C1C]/10 bg-white p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/55">
             为什么这会影响面试评价
           </p>
-          <p className="mt-3 text-sm leading-6 text-[#1C1C1C]/72">
-            {review.interviewer_concern}
-          </p>
+          <p className="mt-3 text-sm leading-6 text-[#1C1C1C]/72">{review.interviewer_concern}</p>
         </div>
       </div>
 
@@ -217,21 +185,14 @@ function DeepReviewCard({ turn }: { turn: MockInterviewTurnRecord }) {
         <DeepReviewSection title="主要问题" items={review.weaknesses ?? []} />
       </div>
 
-      {turn.review_type === "technical_analysis" &&
-      (review.missing_framework?.length ?? 0) > 0 ? (
+      {turn.review_type === 'technical_analysis' && (review.missing_framework?.length ?? 0) > 0 ? (
         <div className="mt-4">
-          <DeepReviewSection
-            title="缺失框架"
-            items={review.missing_framework ?? []}
-          />
+          <DeepReviewSection title="缺失框架" items={review.missing_framework ?? []} />
         </div>
       ) : null}
 
       <div className="mt-4">
-        <DeepReviewSection
-          title="更强回答方向"
-          items={review.stronger_answer_outline ?? []}
-        />
+        <DeepReviewSection title="更强回答方向" items={review.stronger_answer_outline ?? []} />
       </div>
     </div>
   );
@@ -239,49 +200,42 @@ function DeepReviewCard({ turn }: { turn: MockInterviewTurnRecord }) {
 
 function getNextActionMessage(value: unknown) {
   switch (value) {
-    case "processing":
-      return "回答已提交，系统正在准备下一题。";
+    case 'processing':
+      return '回答已提交，系统正在准备下一题。';
     default:
-      return "回答已提交。";
+      return '回答已提交。';
   }
 }
 
-function upsertSession(
-  items: MockInterviewSessionRecord[],
-  session: MockInterviewSessionRecord
-) {
-  const index = items.findIndex((item) => item.id === session.id);
+function upsertSession(items: MockInterviewSessionRecord[], session: MockInterviewSessionRecord) {
+  const index = items.findIndex(item => item.id === session.id);
   if (index === -1) {
     return [session, ...items];
   }
-  return items.map((item) => (item.id === session.id ? session : item));
+  return items.map(item => (item.id === session.id ? session : item));
 }
 
 export default function DashboardInterviewsPage() {
   const { token } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const sessionIdFromQuery = searchParams.get("sessionId");
-  const optimizationSessionId = searchParams.get("optimizationSessionId");
-  const jobId = searchParams.get("jobId");
+  const sessionIdFromQuery = searchParams.get('sessionId');
+  const optimizationSessionId = searchParams.get('optimizationSessionId');
+  const jobId = searchParams.get('jobId');
 
   const [sessions, setSessions] = useState<MockInterviewSessionRecord[]>([]);
-  const [selectedSession, setSelectedSession] =
-    useState<MockInterviewSessionRecord | null>(null);
-  const [answerText, setAnswerText] = useState("");
+  const [selectedSession, setSelectedSession] = useState<MockInterviewSessionRecord | null>(null);
+  const [answerText, setAnswerText] = useState('');
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
-  const [isDeletingSessionId, setIsDeletingSessionId] = useState<string | null>(
-    null
-  );
+  const [isDeletingSessionId, setIsDeletingSessionId] = useState<string | null>(null);
   const [isRetryingPrep, setIsRetryingPrep] = useState(false);
-  const [pageError, setPageError] = useState("");
-  const [statusMessage, setStatusMessage] = useState("");
-  const [loadingTitle, setLoadingTitle] = useState("正在加载模拟面试");
-  const [loadingDescription, setLoadingDescription] = useState(
-    "我们正在同步当前用户的训练会话和当前题目。"
-  );
+  const [pageError, setPageError] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [loadingTitle, setLoadingTitle] = useState('正在加载模拟面试');
+  const [loadingDescription, setLoadingDescription] =
+    useState('我们正在同步当前用户的训练会话和当前题目。');
 
   useEffect(() => {
     if (!token) {
@@ -296,9 +250,9 @@ export default function DashboardInterviewsPage() {
 
     async function bootstrap() {
       setIsPageLoading(true);
-      setPageError("");
-      setLoadingTitle("正在加载模拟面试");
-      setLoadingDescription("我们正在同步当前用户的训练会话和当前题目。");
+      setPageError('');
+      setLoadingTitle('正在加载模拟面试');
+      setLoadingDescription('我们正在同步当前用户的训练会话和当前题目。');
 
       try {
         const list = await listMockInterviewSessions(token!, {
@@ -309,10 +263,8 @@ export default function DashboardInterviewsPage() {
         }
 
         if (jobId && optimizationSessionId && !sessionIdFromQuery) {
-          setLoadingTitle("正在准备 AI 面试官");
-          setLoadingDescription(
-            "我们会先快速给出第一题，再在后台准备后续题。"
-          );
+          setLoadingTitle('正在准备 AI 面试官');
+          setLoadingDescription('我们会先快速给出第一题，再在后台准备后续题。');
           const created = await createMockInterviewSession(token!, {
             jobId,
             optimizationSessionId,
@@ -322,8 +274,8 @@ export default function DashboardInterviewsPage() {
           }
           setSessions(upsertSession(list, created));
           setSelectedSession(created);
-          setAnswerText("");
-          setStatusMessage(created.prep_state.message || "已创建新的模拟面试会话。");
+          setAnswerText('');
+          setStatusMessage(created.prep_state.message || '已创建新的模拟面试会话。');
           router.replace(`/dashboard/interviews?sessionId=${created.id}`);
           return;
         }
@@ -341,7 +293,7 @@ export default function DashboardInterviewsPage() {
         }
         setSessions(upsertSession(list, detail));
         setSelectedSession(detail);
-        setAnswerText("");
+        setAnswerText('');
       } catch (error) {
         if (!cancelled) {
           setPageError(getErrorMessage(error));
@@ -362,18 +314,14 @@ export default function DashboardInterviewsPage() {
   }, [jobId, optimizationSessionId, router, sessionIdFromQuery, token]);
 
   useEffect(() => {
-    if (
-      !token ||
-      !selectedSession?.id ||
-      selectedSession.prep_state.status !== "processing"
-    ) {
+    if (!token || !selectedSession?.id || selectedSession.prep_state.status !== 'processing') {
       return;
     }
 
     const timer = window.setInterval(async () => {
       try {
         const nextSession = await fetchMockInterviewSession(token, selectedSession.id);
-        setSessions((current) => upsertSession(current, nextSession));
+        setSessions(current => upsertSession(current, nextSession));
         setSelectedSession(nextSession);
       } catch {
         // keep the current visible state until the next retry
@@ -384,17 +332,13 @@ export default function DashboardInterviewsPage() {
   }, [selectedSession?.id, selectedSession?.prep_state.status, token]);
 
   useEffect(() => {
-    if (
-      !token ||
-      !selectedSession?.id ||
-      selectedSession.prep_state.status !== "processing"
-    ) {
+    if (!token || !selectedSession?.id || selectedSession.prep_state.status !== 'processing') {
       return;
     }
 
     const sendExitEvent = () => {
       void recordMockInterviewEvent(token, selectedSession.id, {
-        event_type: "interview_page_exit",
+        event_type: 'interview_page_exit',
         payload: {
           phase: selectedSession.prep_state.phase,
           status: selectedSession.prep_state.status,
@@ -403,30 +347,30 @@ export default function DashboardInterviewsPage() {
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
+      if (document.visibilityState === 'hidden') {
         sendExitEvent();
       }
     };
 
-    window.addEventListener("beforeunload", sendExitEvent);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener('beforeunload', sendExitEvent);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener("beforeunload", sendExitEvent);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener('beforeunload', sendExitEvent);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [selectedSession?.id, selectedSession?.prep_state.phase, selectedSession?.prep_state.status, token]);
+  }, [
+    selectedSession?.id,
+    selectedSession?.prep_state.phase,
+    selectedSession?.prep_state.status,
+    token,
+  ]);
 
   if (!token) {
     return null;
   }
 
   if (isPageLoading) {
-    return (
-      <PageLoadingState
-        title={loadingTitle}
-        description={loadingDescription}
-      />
-    );
+    return <PageLoadingState title={loadingTitle} description={loadingDescription} />;
   }
 
   if (pageError && sessions.length === 0 && !selectedSession) {
@@ -434,7 +378,7 @@ export default function DashboardInterviewsPage() {
       <PageErrorState
         actionLabel="返回专属简历"
         description={pageError}
-        onAction={() => router.push("/dashboard/resume")}
+        onAction={() => router.push('/dashboard/resume')}
         title="模拟面试加载失败"
       />
     );
@@ -445,11 +389,11 @@ export default function DashboardInterviewsPage() {
       return;
     }
 
-    setPageError("");
+    setPageError('');
     const nextSession = await fetchMockInterviewSession(token, sessionId);
-    setSessions((current) => upsertSession(current, nextSession));
+    setSessions(current => upsertSession(current, nextSession));
     setSelectedSession(nextSession);
-    setAnswerText("");
+    setAnswerText('');
     router.replace(`/dashboard/interviews?sessionId=${sessionId}`);
   }
 
@@ -460,13 +404,13 @@ export default function DashboardInterviewsPage() {
 
     const nextAnswer = answerText.trim();
     if (!nextAnswer) {
-      setPageError("请先写下这一题的回答，再提交。");
+      setPageError('请先写下这一题的回答，再提交。');
       return;
     }
 
     setIsSubmitting(true);
-    setPageError("");
-    setStatusMessage("");
+    setPageError('');
+    setStatusMessage('');
 
     try {
       const result = await submitMockInterviewAnswer(
@@ -490,17 +434,14 @@ export default function DashboardInterviewsPage() {
     }
 
     setIsFinishing(true);
-    setPageError("");
-    setStatusMessage("");
+    setPageError('');
+    setStatusMessage('');
 
     try {
-      const nextSession = await finishMockInterviewSession(
-        token,
-        selectedSession.id
-      );
-      setSessions((current) => upsertSession(current, nextSession));
+      const nextSession = await finishMockInterviewSession(token, selectedSession.id);
+      setSessions(current => upsertSession(current, nextSession));
       setSelectedSession(nextSession);
-      setStatusMessage("本场模拟已结束。");
+      setStatusMessage('本场模拟已结束。');
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -513,19 +454,19 @@ export default function DashboardInterviewsPage() {
       return;
     }
 
-    const confirmed = window.confirm("确认删除这场模拟面试吗？");
+    const confirmed = window.confirm('确认删除这场模拟面试吗？');
     if (!confirmed) {
       return;
     }
 
     setIsDeletingSessionId(sessionId);
-    setPageError("");
+    setPageError('');
 
     try {
       await deleteMockInterviewSession(token, sessionId);
-      const nextSessions = sessions.filter((item) => item.id !== sessionId);
+      const nextSessions = sessions.filter(item => item.id !== sessionId);
       setSessions(nextSessions);
-      setStatusMessage("模拟面试已删除。");
+      setStatusMessage('模拟面试已删除。');
 
       if (selectedSession?.id === sessionId) {
         const nextSelectedId = nextSessions[0]?.id ?? null;
@@ -533,8 +474,8 @@ export default function DashboardInterviewsPage() {
           await loadSelectedSession(nextSelectedId);
         } else {
           setSelectedSession(null);
-          setAnswerText("");
-          router.replace("/dashboard/interviews");
+          setAnswerText('');
+          router.replace('/dashboard/interviews');
         }
       }
     } catch (error) {
@@ -550,14 +491,14 @@ export default function DashboardInterviewsPage() {
     }
 
     setIsRetryingPrep(true);
-    setPageError("");
+    setPageError('');
 
     try {
       await retryMockInterviewPrep(token, selectedSession.id);
       const nextSession = await fetchMockInterviewSession(token, selectedSession.id);
-      setSessions((current) => upsertSession(current, nextSession));
+      setSessions(current => upsertSession(current, nextSession));
       setSelectedSession(nextSession);
-      setStatusMessage("正在重新准备后续题。");
+      setStatusMessage('正在重新准备后续题。');
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -573,7 +514,7 @@ export default function DashboardInterviewsPage() {
         meta={
           <>
             <MetaChip>{sessions.length} 场训练</MetaChip>
-            <MetaChip>{selectedSession ? "会话已选中" : "等待会话"}</MetaChip>
+            <MetaChip>{selectedSession ? '会话已选中' : '等待会话'}</MetaChip>
           </>
         }
         title="模拟面试"
@@ -626,37 +567,41 @@ export default function DashboardInterviewsPage() {
       <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
         <PaperSection title="训练会话" eyebrow="Session History">
           {sessions.length === 0 ? (
-            <PageEmptyState
-              description="先从专属简历开始。"
-              title="还没有模拟面试"
-            />
+            <PageEmptyState description="先从专属简历开始。" title="还没有模拟面试" />
           ) : (
             <div className="space-y-3">
-              {sessions.map((session) => {
+              {sessions.map(session => {
                 const isActive = session.id === selectedSession?.id;
                 return (
                   <button
                     className={`block w-full border p-4 text-left transition-colors ${
                       isActive
-                        ? "border-[#111111] bg-[#111111] text-[#fafafa]"
-                        : "border-[#1C1C1C]/10 bg-white hover:border-[#1C1C1C]/20"
+                        ? 'border-[#111111] bg-[#111111] text-[#fafafa]'
+                        : 'border-[#1C1C1C]/10 bg-white hover:border-[#1C1C1C]/20'
                     }`}
                     key={session.id}
                     onClick={() => void loadSelectedSession(session.id)}
                     type="button"
                   >
-                    <p className={`text-sm font-semibold ${isActive ? "text-[#fafafa]" : "text-[#1C1C1C]"}`}>
+                    <p
+                      className={`text-sm font-semibold ${isActive ? 'text-[#fafafa]' : 'text-[#1C1C1C]'}`}
+                    >
                       模拟面试 · {getSessionStatusLabel(session.status)}
                     </p>
-                    <p className={`mt-2 text-sm leading-relaxed ${isActive ? "text-[#fafafa]/80" : "text-[#1C1C1C]/60"}`}>
-                      简历 v{session.source_resume_version} / 岗位 v
-                      {session.source_job_version}
+                    <p
+                      className={`mt-2 text-sm leading-relaxed ${isActive ? 'text-[#fafafa]/80' : 'text-[#1C1C1C]/60'}`}
+                    >
+                      简历 v{session.source_resume_version} / 岗位 v{session.source_job_version}
                     </p>
-                    <p className={`mt-1 text-xs ${isActive ? "text-[#fafafa]/65" : "text-[#1C1C1C]/45"}`}>
+                    <p
+                      className={`mt-1 text-xs ${isActive ? 'text-[#fafafa]/65' : 'text-[#1C1C1C]/45'}`}
+                    >
                       {formatDate(session.created_at)}
                     </p>
                     {session.current_turn ? (
-                      <p className={`mt-3 line-clamp-2 text-sm leading-relaxed ${isActive ? "text-[#fafafa]/80" : "text-[#1C1C1C]/60"}`}>
+                      <p
+                        className={`mt-3 line-clamp-2 text-sm leading-relaxed ${isActive ? 'text-[#fafafa]/80' : 'text-[#1C1C1C]/60'}`}
+                      >
                         当前题目：{session.current_turn.question_text}
                       </p>
                     ) : null}
@@ -668,10 +613,7 @@ export default function DashboardInterviewsPage() {
         </PaperSection>
 
         {!selectedSession ? (
-          <PageEmptyState
-            description="先创建或选择一场训练。"
-            title="还没有选中训练会话"
-          />
+          <PageEmptyState description="先创建或选择一场训练。" title="还没有选中训练会话" />
         ) : (
           <div className="space-y-6">
             <PaperSection
@@ -682,14 +624,14 @@ export default function DashboardInterviewsPage() {
                   <div className="border border-[#1C1C1C]/10 bg-white px-4 py-2 text-sm text-[#1C1C1C]/60">
                     已提问 {selectedSession.question_count} / {selectedSession.max_questions}
                   </div>
-                  {selectedSession.prep_state.status === "failed" ? (
+                  {selectedSession.prep_state.status === 'failed' ? (
                     <Button
                       disabled={isRetryingPrep}
                       onClick={() => void handleRetryPrep()}
                       type="button"
                       variant="outline"
                     >
-                      {isRetryingPrep ? "重试中..." : "重试准备"}
+                      {isRetryingPrep ? '重试中...' : '重试准备'}
                     </Button>
                   ) : null}
                   <Button
@@ -698,9 +640,7 @@ export default function DashboardInterviewsPage() {
                     type="button"
                     variant="outline"
                   >
-                    {isDeletingSessionId === selectedSession.id
-                      ? "删除中..."
-                      : "删除会话"}
+                    {isDeletingSessionId === selectedSession.id ? '删除中...' : '删除会话'}
                     <Trash2 className="ml-2 size-4" />
                   </Button>
                 </div>
@@ -720,7 +660,7 @@ export default function DashboardInterviewsPage() {
                     追问上限
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-[#1C1C1C]/60">
-                    当前 {selectedSession.followup_count_for_current_main} /{" "}
+                    当前 {selectedSession.followup_count_for_current_main} /{' '}
                     {selectedSession.max_followups_per_main}
                   </p>
                 </div>
@@ -735,22 +675,19 @@ export default function DashboardInterviewsPage() {
               </div>
               <div className="mt-4 border border-[#e5e5e5] bg-[#fafafa] p-4">
                 <p className="text-sm font-medium text-[#1C1C1C]">
-                  {selectedSession.prep_state.message || "等待准备状态。"}
+                  {selectedSession.prep_state.message || '等待准备状态。'}
                 </p>
                 <p className="mt-2 text-sm text-[#1C1C1C]/60">
-                  阶段：{selectedSession.prep_state.phase || "idle"} · 状态：
+                  阶段：{selectedSession.prep_state.phase || 'idle'} · 状态：
                   {selectedSession.prep_state.status}
                 </p>
               </div>
             </PaperSection>
 
-            {selectedSession.status === "active" &&
-            selectedSession.current_turn ? (
+            {selectedSession.status === 'active' && selectedSession.current_turn ? (
               <PaperSection
                 title="当前题目"
-                eyebrow={getQuestionTypeLabel(
-                  selectedSession.current_turn.question_type
-                )}
+                eyebrow={getQuestionTypeLabel(selectedSession.current_turn.question_type)}
                 rightSlot={
                   <Button
                     disabled={isFinishing}
@@ -758,7 +695,7 @@ export default function DashboardInterviewsPage() {
                     type="button"
                     variant="outline"
                   >
-                    {isFinishing ? "结束中..." : "结束面试"}
+                    {isFinishing ? '结束中...' : '结束面试'}
                     <CheckCircle2 className="ml-2 size-4" />
                   </Button>
                 }
@@ -771,7 +708,7 @@ export default function DashboardInterviewsPage() {
                   </div>
 
                   <PaperTextarea
-                    onChange={(event) => setAnswerText(event.target.value)}
+                    onChange={event => setAnswerText(event.target.value)}
                     placeholder="用事实、动作、指标和结果来回答。"
                     value={answerText}
                   />
@@ -781,7 +718,7 @@ export default function DashboardInterviewsPage() {
                     onClick={() => void handleSubmitAnswer()}
                     type="button"
                   >
-                    {isSubmitting ? "提交中..." : "提交回答"}
+                    {isSubmitting ? '提交中...' : '提交回答'}
                     <Send className="ml-2 size-4" />
                   </Button>
                 </div>
@@ -790,11 +727,8 @@ export default function DashboardInterviewsPage() {
 
             <PaperSection title="问答记录" eyebrow="Transcript">
               <div className="space-y-4">
-                {selectedSession.turns.map((turn) => (
-                  <div
-                    className="border border-[#1C1C1C]/10 bg-white p-4"
-                    key={turn.id}
-                  >
+                {selectedSession.turns.map(turn => (
+                  <div className="border border-[#1C1C1C]/10 bg-white p-4" key={turn.id}>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1C1C1C]/60">
                       第 {turn.turn_index} 轮 · {getQuestionTypeLabel(turn.question_type)}
                     </p>
@@ -802,7 +736,7 @@ export default function DashboardInterviewsPage() {
                       {turn.question_text}
                     </p>
                     <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/60">
-                      {turn.answer_text || "尚未作答"}
+                      {turn.answer_text || '尚未作答'}
                     </p>
                     {turn.comment_text ? (
                       <p className="mt-3 text-sm leading-relaxed text-[#1C1C1C]/60">
@@ -815,9 +749,9 @@ export default function DashboardInterviewsPage() {
               </div>
             </PaperSection>
 
-            {(selectedSession.review.strengths.length > 0 ||
-              selectedSession.review.risks.length > 0 ||
-              selectedSession.review.next_steps.length > 0) ? (
+            {selectedSession.review.strengths.length > 0 ||
+            selectedSession.review.risks.length > 0 ||
+            selectedSession.review.next_steps.length > 0 ? (
               <PaperSection title="结构化复盘" eyebrow="Review">
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="border border-[#1C1C1C]/10 bg-white p-4">
@@ -826,9 +760,7 @@ export default function DashboardInterviewsPage() {
                     </p>
                     <div className="mt-3 space-y-2 text-sm leading-6 text-[#1C1C1C]/70">
                       {selectedSession.review.strengths.length ? (
-                        selectedSession.review.strengths.map((item) => (
-                          <p key={item}>{item}</p>
-                        ))
+                        selectedSession.review.strengths.map(item => <p key={item}>{item}</p>)
                       ) : (
                         <p>暂未生成。</p>
                       )}
@@ -840,9 +772,7 @@ export default function DashboardInterviewsPage() {
                     </p>
                     <div className="mt-3 space-y-2 text-sm leading-6 text-[#1C1C1C]/70">
                       {selectedSession.review.risks.length ? (
-                        selectedSession.review.risks.map((item) => (
-                          <p key={item}>{item}</p>
-                        ))
+                        selectedSession.review.risks.map(item => <p key={item}>{item}</p>)
                       ) : (
                         <p>暂未生成。</p>
                       )}
@@ -854,9 +784,7 @@ export default function DashboardInterviewsPage() {
                     </p>
                     <div className="mt-3 space-y-2 text-sm leading-6 text-[#1C1C1C]/70">
                       {selectedSession.review.next_steps.length ? (
-                        selectedSession.review.next_steps.map((item) => (
-                          <p key={item}>{item}</p>
-                        ))
+                        selectedSession.review.next_steps.map(item => <p key={item}>{item}</p>)
                       ) : (
                         <p>暂未生成。</p>
                       )}
@@ -868,9 +796,7 @@ export default function DashboardInterviewsPage() {
 
             {selectedSession.ending_text ? (
               <PaperSection title="结束语" eyebrow="Closing">
-                <p className="text-sm leading-7 text-[#1C1C1C]/68">
-                  {selectedSession.ending_text}
-                </p>
+                <p className="text-sm leading-7 text-[#1C1C1C]/68">{selectedSession.ending_text}</p>
               </PaperSection>
             ) : null}
           </div>

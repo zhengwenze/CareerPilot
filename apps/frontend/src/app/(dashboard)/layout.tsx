@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-
 import { ProtectedRoute } from '@/components/guards/protected-route';
 import { DashboardTopNav } from '@/components/layout/dashboard-top-nav';
 

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { FileText, LayoutDashboard, Settings, Sparkles } from 'lucide-react';
+import { FileText, LayoutDashboard, Settings, Sparkles, User } from 'lucide-react';
 
 export type NavMatchMode = 'exact' | 'prefix';
 
@@ -40,6 +40,17 @@ export const dashboardNavSections: NavSection[] = [
         href: '/dashboard/interviews',
         icon: Sparkles,
         match: 'prefix',
+      },
+    ],
+  },
+  {
+    title: '账户',
+    items: [
+      {
+        title: '我的',
+        href: '/dashboard/profile',
+        icon: User,
+        match: 'exact',
       },
     ],
   },
