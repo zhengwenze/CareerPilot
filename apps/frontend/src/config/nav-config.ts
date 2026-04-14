@@ -1,7 +1,7 @@
-import type { LucideIcon } from "lucide-react";
-import { FileText, LayoutDashboard, Settings, Sparkles } from "lucide-react";
+import type { LucideIcon } from 'lucide-react';
+import { FileText, LayoutDashboard, Settings, Sparkles } from 'lucide-react';
 
-export type NavMatchMode = "exact" | "prefix";
+export type NavMatchMode = 'exact' | 'prefix';
 
 export type NavItem = {
   title: string;
@@ -21,41 +21,41 @@ export type NavSection = {
 
 export const dashboardNavSections: NavSection[] = [
   {
-    title: "流程",
+    title: '流程',
     items: [
       {
-        title: "工作流概览",
-        href: "/dashboard/overview",
+        title: '概览',
+        href: '/dashboard/overview',
         icon: LayoutDashboard,
-        match: "exact",
+        match: 'exact',
       },
       {
-        title: "专属简历",
-        href: "/dashboard/resume",
+        title: '简历',
+        href: '/dashboard/resume',
         icon: FileText,
-        match: "prefix",
+        match: 'prefix',
       },
       {
-        title: "模拟面试",
-        href: "/dashboard/interviews",
+        title: '面试',
+        href: '/dashboard/interviews',
         icon: Sparkles,
-        match: "prefix",
+        match: 'prefix',
       },
     ],
   },
   {
-    title: "设置",
+    title: '设置',
     items: [
       {
-        title: "设置",
-        href: "/dashboard/setting",
+        title: '设置',
+        href: '/dashboard/setting',
         icon: Settings,
-        match: "prefix",
+        match: 'prefix',
       },
     ],
   },
 ] as const;
 
 export const dashboardNavItems: NavItem[] = dashboardNavSections
-  .flatMap((section) => section.items)
+  .flatMap(section => section.items)
   .filter((item): item is NavItem => Boolean(item.href) && !item.disabled);

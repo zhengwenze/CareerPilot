@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-import { useAuth } from "@/components/auth-provider";
+import { useAuth } from '@/components/auth-provider';
 
-const DASHBOARD_ENTRY_PATH = "/dashboard/overview";
-const LOGIN_PATH = "/login";
+const DASHBOARD_ENTRY_PATH = '/dashboard/overview';
+const LOGIN_PATH = '/login';
 
 export default function Home() {
   const router = useRouter();

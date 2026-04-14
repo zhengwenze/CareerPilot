@@ -1,4 +1,8 @@
-import type { PdfToMarkdownConversionResult, ResumeParseArtifacts, ResumeRecord } from '@/lib/api/modules/resume';
+import type {
+  PdfToMarkdownConversionResult,
+  ResumeParseArtifacts,
+  ResumeRecord,
+} from '@/lib/api/modules/resume';
 import { StatusIndicator } from './status-indicator';
 import { ProcessingTimer } from './ui/processing-timer';
 

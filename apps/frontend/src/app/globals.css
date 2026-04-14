@@ -1,11 +1,11 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-heading: "Inter", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   --background: #ffffff;
   --foreground: #111111;
@@ -145,10 +145,6 @@ h6 {
 a {
   color: var(--bw-link);
   text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
 }
 
 button,
@@ -429,7 +425,7 @@ th {
 }
 
 .bw-topbar-link::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 12px;
   right: 12px;
@@ -456,17 +452,17 @@ th {
     0 0 0 4px var(--bw-topbar-foreground);
 }
 
-.bw-topbar-link[aria-current="page"] {
+.bw-topbar-link[aria-current='page'] {
   color: var(--bw-topbar-foreground);
   font-weight: 600;
 }
 
-.bw-topbar-link[aria-current="page"]::after {
+.bw-topbar-link[aria-current='page']::after {
   opacity: 1;
   transform: scaleX(1);
 }
 
-.bw-topbar-link[aria-disabled="true"] {
+.bw-topbar-link[aria-disabled='true'] {
   pointer-events: none;
   color: #888888;
 }
@@ -559,21 +555,17 @@ th {
 }
 
 .bw-segmented-item::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.72) 0%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 100%);
   opacity: 0;
   transition: opacity 180ms ease;
   pointer-events: none;
 }
 
 .bw-segmented-item::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 16px;
   right: 16px;
@@ -597,7 +589,7 @@ th {
   opacity: 1;
 }
 
-.bw-segmented-item[data-state="on"] {
+.bw-segmented-item[data-state='on'] {
   border-color: var(--bw-segment-active-border);
   background: var(--bw-segment-active-surface);
   color: var(--bw-segment-active-foreground);
@@ -607,16 +599,16 @@ th {
   transform: translateY(0);
 }
 
-.bw-segmented-item[data-state="on"]::before {
+.bw-segmented-item[data-state='on']::before {
   opacity: 1;
 }
 
-.bw-segmented-item[data-state="on"]::after {
+.bw-segmented-item[data-state='on']::after {
   transform: scaleX(1);
   opacity: 1;
 }
 
-.bw-segmented-item.bw-segmented-label[data-state="on"] {
+.bw-segmented-item.bw-segmented-label[data-state='on'] {
   font-weight: 600;
 }
 
@@ -656,7 +648,7 @@ th {
 
 .bw-link-row a:hover,
 .bw-link-row Link:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 @media (min-width: 768px) {

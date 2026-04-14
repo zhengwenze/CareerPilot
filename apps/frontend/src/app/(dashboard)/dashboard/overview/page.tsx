@@ -1,43 +1,38 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { ArrowUpRight, FileText, Settings, Sparkles } from "lucide-react";
+import Link from 'next/link';
+import { ArrowUpRight, FileText, Settings, Sparkles } from 'lucide-react';
 
-import {
-  MetaChip,
-  PageHeader,
-  PageShell,
-  PaperSection,
-} from "@/components/brutalist/page-shell";
-import { Button } from "@/components/ui/button";
+import { MetaChip, PageHeader, PageShell, PaperSection } from '@/components/brutalist/page-shell';
+import { Button } from '@/components/ui/button';
 
 const flowSteps = [
-  { label: "Step 1", value: "主简历" },
-  { label: "Step 2", value: "岗位 JD" },
-  { label: "Step 3", value: "定制简历" },
-  { label: "Step 4", value: "模拟面试" },
+  { label: 'Step 1', value: '主简历' },
+  { label: 'Step 2', value: '岗位 JD' },
+  { label: 'Step 3', value: '定制简历' },
+  { label: 'Step 4', value: '模拟面试' },
 ];
 
 const modules = [
   {
-    title: "专属简历",
-    description: "上传主简历，保存岗位，生成定制结果。",
-    href: "/dashboard/resume",
-    action: "进入专属简历",
+    title: '专属简历',
+    description: '上传主简历，保存岗位，生成定制结果。',
+    href: '/dashboard/resume',
+    action: '进入专属简历',
     icon: FileText,
   },
   {
-    title: "模拟面试",
-    description: "继续当前岗位上下文，直接进入问答训练。",
-    href: "/dashboard/interviews",
-    action: "进入模拟面试",
+    title: '模拟面试',
+    description: '继续当前岗位上下文，直接进入问答训练。',
+    href: '/dashboard/interviews',
+    action: '进入模拟面试',
     icon: Sparkles,
   },
   {
-    title: "设置",
-    description: "查看账户信息与工作台状态。",
-    href: "/dashboard/setting",
-    action: "进入设置",
+    title: '设置',
+    description: '查看账户信息与工作台状态。',
+    href: '/dashboard/setting',
+    action: '进入设置',
     icon: Settings,
   },
 ];
@@ -59,7 +54,7 @@ export default function DashboardOverviewPage() {
       >
         <div className="bw-workbench-hero">
           <div className="bw-flow-strip">
-            {flowSteps.map((step) => (
+            {flowSteps.map(step => (
               <div key={step.label} className="bw-flow-step">
                 <strong>{step.label}</strong>
                 <span>{step.value}</span>
@@ -68,15 +63,15 @@ export default function DashboardOverviewPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button asChild size="lg">
+            <Button asChild size="lg" variant="outline">
               <Link href="/dashboard/resume">
-                进入专属简历
+                专属简历
                 <ArrowUpRight className="size-4" />
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <Link href="/dashboard/interviews">
-                进入模拟面试
+                模拟面试
                 <ArrowUpRight className="size-4" />
               </Link>
             </Button>
@@ -84,13 +79,9 @@ export default function DashboardOverviewPage() {
         </div>
       </PageHeader>
 
-      <PaperSection
-        eyebrow="Modules"
-        title="工作台入口"
-        bodyClassName="p-0"
-      >
+      <PaperSection eyebrow="Modules" title="工作台入口" bodyClassName="p-0">
         <div className="grid gap-px bg-[#e5e5e5] md:grid-cols-3">
-          {modules.map((module) => {
+          {modules.map(module => {
             const Icon = module.icon;
 
             return (
@@ -99,12 +90,8 @@ export default function DashboardOverviewPage() {
                   <Icon className="size-4 text-[#111111]" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-[#111111]">
-                    {module.title}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-[#666666]">
-                    {module.description}
-                  </p>
+                  <h2 className="text-xl font-semibold text-[#111111]">{module.title}</h2>
+                  <p className="mt-2 text-sm leading-6 text-[#666666]">{module.description}</p>
                 </div>
                 <div className="mt-auto">
                   <Button asChild variant="outline">
