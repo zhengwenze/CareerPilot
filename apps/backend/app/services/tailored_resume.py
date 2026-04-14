@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 import logging
 import re
 from decimal import Decimal
@@ -335,6 +336,60 @@ def _dedupe_strings(items: list[str]) -> list[str]:
         seen.add(normalized)
         result.append(_normalize_text(item))
     return result
+
+
+def _structured_top_level_keys(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    return sorted(value.keys())
+
+
+def _resume_has_structured_signal(resume_data: ResumeStructuredData) -> bool:
+    return any(
+        [
+            bool(_normalize_text(resume_data.basic_info.name)),
+            bool(_normalize_text(resume_data.basic_info.summary)),
+            bool(resume_data.education_items),
+            bool(resume_data.work_experience_items),
+            bool(resume_data.project_items),
+            bool(_dedupe_strings(resume_data.skills.technical)),
+            bool(_dedupe_strings(resume_data.skills.tools)),
+            bool(_dedupe_strings(resume_data.skills.languages)),
+            bool(resume_data.certification_items),
+            bool(_dedupe_strings(resume_data.awards)),
+            bool(resume_data.custom_sections),
+        ]
+    )
+
+
+def _resume_input_snapshot(resume: Resume) -> dict[str, Any]:
+    canonical_resume_md = _extract_original_resume_markdown(resume)
+    raw_text = str(resume.raw_text or "").strip()
+    structured_payload = resume.structured_json if isinstance(resume.structured_json, dict) else None
+    return {
+        "resume_id": resume.id,
+        "parse_status": resume.parse_status,
+        "structured_json_empty": not bool(structured_payload),
+        "structured_json_keys": _structured_top_level_keys(structured_payload),
+        "canonical_resume_md_present": bool(canonical_resume_md),
+        "canonical_resume_md_len": len(canonical_resume_md),
+        "raw_text_present": bool(raw_text),
+        "raw_text_len": len(raw_text),
+    }
+
+
+def _validate_structured_resume_payload(
+    payload: dict[str, Any] | None,
+) -> tuple[ResumeStructuredData | None, str | None]:
+    if not isinstance(payload, dict) or not payload:
+        return None, "missing"
+    try:
+        structured = ResumeStructuredData.model_validate(payload)
+    except ValidationError:
+        return None, "invalid"
+    if not _resume_has_structured_signal(structured):
+        return None, "empty"
+    return structured, None
 
 
 def _flatten_string_values(value: Any) -> list[str]:
@@ -1036,6 +1091,7 @@ def _build_rewrite_tasks(job: JobDescription, report: MatchReport) -> list[dict[
 async def _generate_rewrite_projection(
     *,
     source_resume: ResumeStructuredData,
+    original_resume_markdown: str,
     job: JobDescription,
     report: MatchReport,
     settings: Settings,
@@ -1050,6 +1106,7 @@ async def _generate_rewrite_projection(
 
     payload = {
         "source_resume": source_resume.model_dump(mode="json"),
+        "original_resume_markdown": original_resume_markdown,
         "job_snapshot": {
             "title": job.title,
             "company": job.company,
@@ -1063,6 +1120,20 @@ async def _generate_rewrite_projection(
         },
         "rewrite_tasks": _build_rewrite_tasks(job, report),
     }
+    logger.info(
+        "tailored_resume.rewrite_request prompt_template=%s payload_keys=%s source_resume_empty_skeleton=%s source_resume_keys=%s job_snapshot_present=%s job_snapshot_keys=%s match_report_snapshot_present=%s match_report_snapshot_keys=%s original_resume_markdown_in_payload=%s rewrite_tasks_count=%s payload_json_len=%s",
+        "tailored_resume/rewrite_only.txt",
+        sorted(payload.keys()),
+        not _resume_has_structured_signal(source_resume),
+        sorted(payload["source_resume"].keys()),
+        bool(payload["job_snapshot"]),
+        sorted(payload["job_snapshot"].keys()),
+        bool(payload["match_report_snapshot"]),
+        sorted(payload["match_report_snapshot"].keys()),
+        bool(payload["original_resume_markdown"].strip()),
+        len(payload["rewrite_tasks"]),
+        len(json.dumps(payload, ensure_ascii=False)),
+    )
     try:
         response = await request_json_completion(
             config=_build_resume_ai_config(settings),
@@ -1070,8 +1141,26 @@ async def _generate_rewrite_projection(
             payload=payload,
             max_tokens=3200,
         )
+        response_json_len = len(json.dumps(response, ensure_ascii=False))
         rewrite = _RewriteOnlyResponse.model_validate(response)
+        logger.info(
+            "tailored_resume.rewrite_result success=%s response_json_len=%s empty=%s fallback_used=%s unresolved_items=%s editor_notes=%s",
+            True,
+            response_json_len,
+            response_json_len == 0,
+            False,
+            len(rewrite.unresolved_items),
+            len(rewrite.editor_notes),
+        )
     except (AIClientError, ValidationError):
+        logger.warning(
+            "tailored_resume.rewrite_result success=%s response_json_len=%s empty=%s fallback_used=%s reason=%s",
+            False,
+            0,
+            True,
+            True,
+            "ai_error_or_validation_error",
+        )
         return source_resume.model_copy(deep=True), ["局部改写 AI 返回无效结果，当前保留原始摘要/经历/项目表达。"]
 
     projected = source_resume.model_copy(deep=True)
@@ -1556,14 +1645,42 @@ async def _build_workflow_response(
 
 
 def _ensure_resume_ready_for_tailoring(
-    *, parse_status: str, has_resume_markdown: bool
+    *,
+    parse_status: str,
+    has_resume_markdown: bool,
+    structured_payload: dict[str, Any] | None,
 ) -> None:
-    if parse_status == "success" and has_resume_markdown:
+    structured_resume, structured_reason = _validate_structured_resume_payload(
+        structured_payload
+    )
+    if parse_status == "success" and has_resume_markdown and structured_resume is not None:
+        logger.info(
+            "tailored_resume.resume_gate_passed parse_status=%s has_resume_markdown=%s rule=parse_success_and_markdown_and_structured structured_json_checked=%s structured_reason=%s structured_keys=%s",
+            parse_status,
+            has_resume_markdown,
+            True,
+            "ready",
+            _structured_top_level_keys(structured_payload),
+        )
         return
+    logger.warning(
+        "tailored_resume.resume_gate_failed parse_status=%s has_resume_markdown=%s rule=parse_success_and_markdown_and_structured structured_json_checked=%s structured_reason=%s structured_keys=%s",
+        parse_status,
+        has_resume_markdown,
+        True,
+        structured_reason,
+        _structured_top_level_keys(structured_payload),
+    )
+    if parse_status != "success" or not has_resume_markdown:
+        message = "主简历尚未完成 Markdown 解析，暂时不能生成定制简历。"
+    elif structured_reason in {"missing", "empty"}:
+        message = "主简历已完成 Markdown 解析，但尚未完成结构化。请先保存主简历，生成结构化内容后再生成定制简历。"
+    else:
+        message = "主简历的结构化内容无效。请重新保存主简历后再生成定制简历。"
     raise ApiException(
         status_code=409,
         code=ErrorCode.CONFLICT,
-        message="Resume must be parsed successfully into markdown before generating a tailored resume",
+        message=message,
     )
 
 
@@ -1810,9 +1927,34 @@ async def process_tailored_resume_workflow(
                 if report is None:
                     raise RuntimeError("Tailored resume match report disappeared after processing")
 
+            resume_snapshot = _resume_input_snapshot(resume)
+            logger.info(
+                "tailored_resume.workflow_start session_id=%s resume_id=%s job_id=%s parse_status=%s structured_json_empty=%s structured_json_keys=%s canonical_resume_md_present=%s canonical_resume_md_len=%s raw_text_present=%s raw_text_len=%s",
+                session_id,
+                resume.id,
+                job.id,
+                resume_snapshot["parse_status"],
+                resume_snapshot["structured_json_empty"],
+                resume_snapshot["structured_json_keys"],
+                resume_snapshot["canonical_resume_md_present"],
+                resume_snapshot["canonical_resume_md_len"],
+                resume_snapshot["raw_text_present"],
+                resume_snapshot["raw_text_len"],
+            )
             source_resume = ResumeStructuredData.model_validate(resume.structured_json or {})
             original_markdown = _extract_original_resume_markdown(resume)
             job_keywords = _extract_job_keywords(job, report)
+            logger.info(
+                "tailored_resume.workflow_inputs_ready session_id=%s resume_id=%s job_id=%s source_resume_empty_skeleton=%s source_resume_keys=%s original_resume_markdown_len=%s job_keywords_count=%s match_report_status=%s",
+                session_id,
+                resume.id,
+                job.id,
+                not _resume_has_structured_signal(source_resume),
+                _structured_top_level_keys(source_resume.model_dump(mode="json")),
+                len(original_markdown),
+                len(job_keywords),
+                report.status,
+            )
 
             skills_resume = _reorder_skills_for_job(
                 resume_data=source_resume,
@@ -1872,6 +2014,7 @@ async def process_tailored_resume_workflow(
 
             projected_resume, notes = await _generate_rewrite_projection(
                 source_resume=skills_resume,
+                original_resume_markdown=original_markdown,
                 job=job,
                 report=report,
                 settings=settings,
@@ -1987,6 +2130,15 @@ async def process_tailored_resume_workflow(
             )
             session_record.diagnosis_json = final_state.model_dump(mode="json")
             _append_event(session_record.diagnosis_json, event_type="tailored_resume_completed")
+            logger.info(
+                "tailored_resume.workflow_completed session_id=%s resume_id=%s job_id=%s markdown_len=%s change_items=%s warnings=%s",
+                session_id,
+                resume.id,
+                job.id,
+                len(document.markdown or ""),
+                len(change_items),
+                len(document.audit.warnings),
+            )
             session.add(session_record)
             await session.commit()
         except Exception as exc:
@@ -2046,6 +2198,7 @@ async def generate_tailored_resume_workflow(
     _ensure_resume_ready_for_tailoring(
         parse_status=resume.parse_status,
         has_resume_markdown=bool(original_markdown.strip()),
+        structured_payload=resume.structured_json if isinstance(resume.structured_json, dict) else None,
     )
 
     if payload.job_id is None:
@@ -2184,6 +2337,7 @@ async def generate_tailored_resume_for_saved_job(
     _ensure_resume_ready_for_tailoring(
         parse_status=resume.parse_status,
         has_resume_markdown=bool(original_markdown.strip()),
+        structured_payload=resume.structured_json if isinstance(resume.structured_json, dict) else None,
     )
 
     job = await get_job_or_404(

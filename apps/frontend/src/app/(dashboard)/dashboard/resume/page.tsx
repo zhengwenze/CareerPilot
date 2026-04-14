@@ -93,6 +93,60 @@ function getCanonicalResumeMarkdown(resume: ResumeRecord | null) {
   return resume.parse_artifacts_json?.canonical_resume_md?.trim() || resume.raw_text?.trim() || '';
 }
 
+function hasStructuredResumeReady(resume: ResumeRecord | null) {
+  const structured = resume?.structured_json;
+  if (!structured) {
+    return false;
+  }
+  return Boolean(
+    structured.basic_info?.name?.trim() ||
+      structured.basic_info?.summary?.trim() ||
+      structured.education_items?.length ||
+      structured.education?.length ||
+      structured.work_experience_items?.length ||
+      structured.work_experience?.length ||
+      structured.project_items?.length ||
+      structured.projects?.length ||
+      structured.skills?.technical?.length ||
+      structured.skills?.tools?.length ||
+      structured.skills?.languages?.length ||
+      structured.certification_items?.length ||
+      structured.certifications?.length ||
+      structured.awards?.length ||
+      structured.custom_sections?.length
+  );
+}
+
+function getGenerateBlockReason(params: {
+  resume: ResumeRecord | null;
+  savedJob: JobRecord | null;
+  isJobDirty: boolean;
+}) {
+  const { resume, savedJob, isJobDirty } = params;
+  if (!resume?.id) {
+    return '先上传主简历。';
+  }
+  if (resume.parse_status !== 'success') {
+    return '主简历尚未完成 Markdown 解析，请等待解析完成。';
+  }
+  if (!getCanonicalResumeMarkdown(resume)) {
+    return '主简历 Markdown 尚未就绪。';
+  }
+  if (!hasStructuredResumeReady(resume)) {
+    return '主简历已完成 Markdown 解析，但尚未完成结构化。请先点击“保存简历”完成结构化后再生成。';
+  }
+  if (!savedJob?.id) {
+    return '先保存岗位 JD。';
+  }
+  if (savedJob.parse_status !== 'success') {
+    return '岗位 JD 尚未完成解析，请等待解析完成。';
+  }
+  if (isJobDirty) {
+    return '岗位 JD 有未保存改动，请先保存并等待最新版本解析完成。';
+  }
+  return '先保存主简历和岗位 JD。';
+}
+
 function getResumeAiDebug(
   source: PdfToMarkdownConversionResult | ResumeRecord['parse_artifacts_json'] | null | undefined
 ) {
@@ -930,6 +984,10 @@ export default function DashboardResumePage() {
   ]);
 
   const canSaveResume = Boolean(token && resume?.id && normalizeMarkdown(resumeMarkdown));
+  const isResumeMarkdownReady = Boolean(
+    resume?.parse_status === 'success' && getCanonicalResumeMarkdown(resume)
+  );
+  const isResumeStructuredReady = hasStructuredResumeReady(resume);
   const isJobDirty = savedJob
     ? !isSameJobDraft(jobDraft, toJobDraft(savedJob))
     : hasAnyJobDraftContent(jobDraft);
@@ -950,11 +1008,17 @@ export default function DashboardResumePage() {
   const canGenerate = Boolean(
     token &&
     resume?.id &&
-    resume.parse_status === 'success' &&
+    isResumeMarkdownReady &&
+    isResumeStructuredReady &&
     savedJob?.id &&
     savedJob.parse_status === 'success' &&
     !isJobDirty
   );
+  const generateBlockReason = getGenerateBlockReason({
+    resume,
+    savedJob,
+    isJobDirty,
+  });
 
   if (!token) {
     return null;
@@ -1086,6 +1150,16 @@ export default function DashboardResumePage() {
       return;
     }
 
+    if (!resume || !isResumeMarkdownReady) {
+      setPageError('主简历尚未完成 Markdown 解析，请等待解析完成。');
+      return;
+    }
+
+    if (!isResumeStructuredReady) {
+      setPageError('主简历已完成 Markdown 解析，但尚未完成结构化。请先点击“保存简历”完成结构化后再生成。');
+      return;
+    }
+
     if (!token || !resume?.id || !savedJob?.id) {
       setPageError('请先完成简历保存和岗位 JD 保存。');
       return;
@@ -1180,6 +1254,13 @@ export default function DashboardResumePage() {
         meta={
           <>
             <MetaChip>{resume ? 'Resume Ready' : 'Resume Missing'}</MetaChip>
+            <MetaChip>
+              {resume
+                ? isResumeStructuredReady
+                  ? 'Structured Ready'
+                  : 'Structured Missing'
+                : 'Structured Missing'}
+            </MetaChip>
             <MetaChip>{savedJob ? (isJobDirty ? 'JD Unsaved' : 'JD Ready') : 'JD Missing'}</MetaChip>
             <MetaChip>{workflow ? 'Result Ready' : 'Result Pending'}</MetaChip>
           </>
@@ -1516,7 +1597,7 @@ export default function DashboardResumePage() {
         >
           {!canGenerate ? (
             <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
-              {isJobDirty ? '岗位 JD 有未保存改动，请先保存并等待最新版本解析完成。' : '先保存主简历和岗位 JD。'}
+              {generateBlockReason}
             </div>
           ) : null}
 

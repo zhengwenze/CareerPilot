@@ -241,6 +241,68 @@ async def test_tailored_resume_optimize_returns_processing_then_persists_segment
     )
 
 
+async def test_tailored_resume_optimize_requires_structured_resume_ready(
+    app, client, db_session
+):
+    user, token = await create_test_user(db_session, email="tailored-structured-required@example.com")
+    resume, job = await _seed_tailored_resume_dependencies(db_session, user=user, suffix="no-structured")
+    resume.structured_json = None
+    db_session.add(resume)
+    await db_session.commit()
+
+    response = await client.post(
+        "/tailored-resumes/optimize",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "resume_id": str(resume.id),
+            "job_id": str(job.id),
+            "force_refresh": True,
+        },
+    )
+    assert response.status_code == 409
+    assert (
+        response.json()["error"]["message"]
+        == "主简历已完成 Markdown 解析，但尚未完成结构化。请先保存主简历，生成结构化内容后再生成定制简历。"
+    )
+
+
+async def test_tailored_resume_rewrite_payload_includes_original_resume_markdown(
+    app, client, db_session, monkeypatch
+):
+    monkeypatch.setattr("app.routers.tailored_resumes.schedule_tailored_resume_generation", lambda *args, **kwargs: None)
+
+    user, token = await create_test_user(db_session, email="tailored-markdown-payload@example.com")
+    resume, job = await _seed_tailored_resume_dependencies(db_session, user=user, suffix="payload")
+    captured_payload: dict[str, object] = {}
+
+    async def fake_request_json_completion(*, config, instructions, payload, max_tokens=4000):
+        del config, instructions, max_tokens
+        captured_payload.update(payload)
+        return _fake_rewrite_response()
+
+    monkeypatch.setattr(tailored_resume_service, "request_json_completion", fake_request_json_completion)
+
+    response = await client.post(
+        "/tailored-resumes/optimize",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "resume_id": str(resume.id),
+            "job_id": str(job.id),
+            "force_refresh": True,
+        },
+    )
+    assert response.status_code == 200
+    workflow = response.json()["data"]
+
+    await tailored_resume_service.process_tailored_resume_workflow(
+        session_id=UUID(workflow["tailored_resume"]["session_id"]),
+        session_factory=app.state.session_factory,
+        settings=app.state.settings,
+    )
+
+    assert captured_payload["original_resume_markdown"] == "# Resume"
+
+
 async def test_tailored_resume_workflow_list_returns_processing_items(app, client, db_session, monkeypatch):
     monkeypatch.setattr("app.routers.tailored_resumes.schedule_tailored_resume_generation", lambda *args, **kwargs: None)
 
@@ -281,8 +343,8 @@ async def test_tailored_resume_scheduler_updates_workflow_progress_and_completes
     user, token = await create_test_user(db_session, email="tailored-scheduler@example.com")
     resume, job = await _seed_tailored_resume_dependencies(db_session, user=user, suffix="scheduler")
 
-    async def fake_generate_rewrite_projection(*, source_resume, job, report, settings):
-        del job, report, settings
+    async def fake_generate_rewrite_projection(*, source_resume, original_resume_markdown, job, report, settings):
+        del original_resume_markdown, job, report, settings
         await asyncio.sleep(0.15)
         return source_resume.model_copy(deep=True), ["scheduler test"]
 

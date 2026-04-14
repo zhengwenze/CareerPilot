@@ -259,6 +259,16 @@ def log_renderer_snapshot(*, structured: ResumeStructuredData, markdown: str) ->
     )
 
 
+def _resume_structured_top_level_keys(value: dict | None) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    return sorted(value.keys())
+
+
+def _resume_structured_payload_length(value: dict | None) -> int:
+    return len(str(value or {}))
+
+
 def load_resume_pdf_to_md_module() -> ModuleType:
     global _RESUME_PDF_TO_MD_MODULE
     if _RESUME_PDF_TO_MD_MODULE is not None:
@@ -659,6 +669,17 @@ async def process_resume_parse_job(
                     code=ErrorCode.BAD_REQUEST,
                     message="PDF 转 Markdown 失败，未生成可用内容",
                 )
+            logger.info(
+                "resume_parse.markdown_ready resume_id=%s parse_job_id=%s raw_resume_md_len=%s canonical_resume_md_len=%s raw_text_len=%s ai_used=%s fallback_used=%s ai_status=%s",
+                resume_id,
+                parse_job_id,
+                len(raw_resume_md or ""),
+                len(canonical_resume_md or ""),
+                len(raw_text or ""),
+                ai_used,
+                fallback_used,
+                ai_status,
+            )
             if pdf_to_md_result.ai_used:
                 ai_status = AI_STATUS_APPLIED
                 if ai_error_category == "quality_guard_failed":
@@ -734,6 +755,19 @@ async def process_resume_parse_job(
             and bool(existing_canonical_md)
             and bool(existing_raw_text)
         )
+        logger.info(
+            "resume_parse.finalize resume_id=%s parse_job_id=%s resume_parse_status=%s preserve_user_saved_markdown=%s existing_structured_json_present=%s existing_structured_json_keys=%s existing_canonical_resume_md_len=%s existing_raw_text_len=%s new_canonical_resume_md_len=%s new_raw_text_len=%s",
+            resume_id,
+            parse_job_id,
+            resume_parse_status,
+            preserve_user_saved_markdown,
+            bool(resume.structured_json),
+            _resume_structured_top_level_keys(resume.structured_json),
+            len(existing_canonical_md),
+            len(existing_raw_text),
+            len(canonical_resume_md or ""),
+            len(raw_text or ""),
+        )
 
         if not preserve_user_saved_markdown:
             if raw_text is not None:
@@ -769,11 +803,45 @@ async def process_resume_parse_job(
                 ocr_used=extraction_ocr_used,
                 ocr_engine=extraction_ocr_engine,
             )
+            logger.info(
+                "resume_parse.persist_markdown resume_id=%s parse_job_id=%s raw_text_len=%s canonical_resume_md_len=%s structured_json_generated_in_parse=%s",
+                resume_id,
+                parse_job_id,
+                len(resume.raw_text or ""),
+                len(str((resume.parse_artifacts_json or {}).get("canonical_resume_md") or "")),
+                False,
+            )
+        else:
+            logger.info(
+                "resume_parse.skip_markdown_persist resume_id=%s parse_job_id=%s reason=user_saved_markdown_preserved structured_json_present=%s structured_json_keys=%s",
+                resume_id,
+                parse_job_id,
+                bool(resume.structured_json),
+                _resume_structured_top_level_keys(resume.structured_json),
+            )
 
         resume.parse_status = resume_parse_status
         resume.parse_error = resume_parse_error
         if resume_parse_status == "success":
             resume.latest_version = max(resume.latest_version, 1)
+            if resume.structured_json:
+                logger.info(
+                    "resume_parse.success_structured_state resume_id=%s parse_job_id=%s structured_json_present=%s structured_json_keys=%s structured_json_len=%s",
+                    resume_id,
+                    parse_job_id,
+                    True,
+                    _resume_structured_top_level_keys(resume.structured_json),
+                    _resume_structured_payload_length(resume.structured_json),
+                )
+            else:
+                logger.warning(
+                    "resume_parse.success_without_structured_json resume_id=%s parse_job_id=%s reason=pdf_parse_only_generates_markdown structured_json_present=%s canonical_resume_md_len=%s raw_text_len=%s next_step=call_update_resume_structured_data",
+                    resume_id,
+                    parse_job_id,
+                    False,
+                    len(str((resume.parse_artifacts_json or {}).get("canonical_resume_md") or "")),
+                    len(resume.raw_text or ""),
+                )
 
         parse_job.status = parse_job_status
         parse_job.error_message = parse_job_error_message
@@ -959,27 +1027,72 @@ async def update_resume_structured_data(
         session, current_user=current_user, resume_id=resume_id
     )
     normalized_markdown = str(payload.markdown or "").strip()
+    logger.info(
+        "resume_structured_update.start resume_id=%s parse_status=%s incoming_markdown_len=%s existing_structured_json_present=%s existing_structured_json_keys=%s existing_canonical_resume_md_len=%s existing_raw_text_len=%s",
+        resume.id,
+        resume.parse_status,
+        len(normalized_markdown),
+        bool(resume.structured_json),
+        _resume_structured_top_level_keys(resume.structured_json),
+        len(str((resume.parse_artifacts_json or {}).get("canonical_resume_md") or "")),
+        len(str(resume.raw_text or "")),
+    )
     try:
         structured = parse_resume_markdown(normalized_markdown)
+        logger.info(
+            "resume_structured_update.parse_ok resume_id=%s parser=resume-markdown-parser-v1 fallback_used=%s structured_json_keys=%s structured_json_len=%s",
+            resume.id,
+            False,
+            _resume_structured_top_level_keys(structured.model_dump(mode="json")),
+            _resume_structured_payload_length(structured.model_dump(mode="json")),
+        )
     except ValueError as exc:
         fallback_markdown = normalize_resume_markdown_for_parser(normalized_markdown)
         if fallback_markdown and fallback_markdown != normalized_markdown:
             try:
                 structured = parse_resume_markdown(fallback_markdown)
                 normalized_markdown = fallback_markdown
+                logger.info(
+                    "resume_structured_update.parse_ok resume_id=%s parser=resume-markdown-parser-v1 fallback_used=%s structured_json_keys=%s structured_json_len=%s",
+                    resume.id,
+                    True,
+                    _resume_structured_top_level_keys(structured.model_dump(mode="json")),
+                    _resume_structured_payload_length(structured.model_dump(mode="json")),
+                )
             except ValueError:
+                logger.warning(
+                    "resume_structured_update.parse_failed resume_id=%s fallback_attempted=%s reason=%s",
+                    resume.id,
+                    True,
+                    str(exc),
+                )
                 raise ApiException(
                     status_code=422,
                     code=ErrorCode.VALIDATION_ERROR,
                     message=str(exc),
                 ) from exc
         else:
+            logger.warning(
+                "resume_structured_update.parse_failed resume_id=%s fallback_attempted=%s reason=%s",
+                resume.id,
+                False,
+                str(exc),
+            )
             raise ApiException(
                 status_code=422,
                 code=ErrorCode.VALIDATION_ERROR,
                 message=str(exc),
             ) from exc
 
+    logger.info(
+        "resume_structured_update.before_persist resume_id=%s structured_json_present=%s structured_json_keys=%s structured_json_len=%s canonical_resume_md_len=%s raw_text_len=%s",
+        resume.id,
+        True,
+        _resume_structured_top_level_keys(structured.model_dump(mode="json")),
+        _resume_structured_payload_length(structured.model_dump(mode="json")),
+        len(normalized_markdown),
+        len(normalized_markdown),
+    )
     resume.structured_json = structured.model_dump(mode="json")
     resume.raw_text = normalized_markdown
     artifacts = dict(resume.parse_artifacts_json or {})
@@ -1005,5 +1118,16 @@ async def update_resume_structured_data(
     session.add(resume)
     await session.commit()
     await session.refresh(resume)
+    logger.info(
+        "resume_structured_update.after_persist resume_id=%s parse_status=%s structured_json_present=%s structured_json_keys=%s structured_json_len=%s canonical_resume_md_len=%s raw_text_len=%s latest_version=%s",
+        resume.id,
+        resume.parse_status,
+        bool(resume.structured_json),
+        _resume_structured_top_level_keys(resume.structured_json),
+        _resume_structured_payload_length(resume.structured_json),
+        len(str((resume.parse_artifacts_json or {}).get("canonical_resume_md") or "")),
+        len(str(resume.raw_text or "")),
+        resume.latest_version,
+    )
     parse_job = await get_latest_parse_job(session, resume_id=resume.id)
     return serialize_resume(resume, parse_job=parse_job)
