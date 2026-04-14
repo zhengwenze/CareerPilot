@@ -1,14 +1,12 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useTransition } from "react";
-
-import { useAuth } from "@/components/auth-provider";
-import { DashboardModuleSwitcher } from "@/components/layout/dashboard-module-switcher";
-import { Button } from "@/components/ui/button";
-import { dashboardNavItems } from "@/config/nav-config";
-import { cn } from "@/lib/utils";
+'use client';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useTransition } from 'react';
+import { useAuth } from '@/components/auth-provider';
+import { DashboardModuleSwitcher } from '@/components/layout/dashboard-module-switcher';
+import { Button } from '@/components/ui/button';
+import { dashboardNavItems } from '@/config/nav-config';
+import { cn } from '@/lib/utils';
 
 export function DashboardTopNav() {
   const pathname = usePathname();
@@ -19,7 +17,7 @@ export function DashboardTopNav() {
   async function handleLogout() {
     await logout();
     startTransition(() => {
-      router.push("/login");
+      router.push('/login');
       router.refresh();
     });
   }
@@ -32,24 +30,19 @@ export function DashboardTopNav() {
             CareerPilot
           </Link>
 
-          <DashboardModuleSwitcher
-            items={dashboardNavItems}
-            pathname={pathname}
-          />
+          <DashboardModuleSwitcher items={dashboardNavItems} pathname={pathname} />
 
           <div className="bw-topbar-actions">
-            <div className={cn("bw-topbar-account", !user && "px-2")}>
+            <div className={cn('bw-topbar-account', !user && 'px-2')}>
               {user ? (
-                <span className="bw-topbar-user">
-                  {user.nickname || "CareerPilot Member"}
-                </span>
+                <span className="bw-topbar-user">{user.nickname || 'CareerPilot Member'}</span>
               ) : null}
 
               <Button
                 aria-busy={isLoggingOut}
                 className={cn(
-                  "bw-topbar-logout",
-                  !user && "bw-topbar-logout-solo",
+                  'bw-topbar-logout text-red-600 hover:text-red-700 font-semibold',
+                  !user && 'bw-topbar-logout-solo'
                 )}
                 disabled={isLoggingOut}
                 onClick={() => void handleLogout()}
@@ -57,7 +50,7 @@ export function DashboardTopNav() {
                 type="button"
                 variant="ghost"
               >
-                {isLoggingOut ? "Logging out" : "Logout"}
+                {isLoggingOut ? '退出中' : '退出'}
               </Button>
             </div>
           </div>
