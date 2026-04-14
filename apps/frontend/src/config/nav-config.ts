@@ -1,11 +1,12 @@
 import type { LucideIcon } from 'lucide-react';
-import { FileText, LayoutDashboard, Settings, Sparkles, User } from 'lucide-react';
+import { ExternalLink, FileText, LayoutDashboard, Settings, Sparkles, User } from 'lucide-react';
 
 export type NavMatchMode = 'exact' | 'prefix';
 
 export type NavItem = {
   title: string;
   href?: string;
+  externalHref?: string;
   icon: LucideIcon;
   description?: string;
   badge?: string | number;
@@ -65,8 +66,20 @@ export const dashboardNavSections: NavSection[] = [
       },
     ],
   },
+  {
+    title: '外部',
+    items: [
+      {
+        title: 'GitHub',
+        externalHref: 'https://github.com/zhengwenze/CareerPilot',
+        icon: ExternalLink,
+      },
+    ],
+  },
 ] as const;
 
 export const dashboardNavItems: NavItem[] = dashboardNavSections
   .flatMap(section => section.items)
-  .filter((item): item is NavItem => Boolean(item.href) && !item.disabled);
+  .filter(
+    (item): item is NavItem => (Boolean(item.href) || Boolean(item.externalHref)) && !item.disabled
+  );

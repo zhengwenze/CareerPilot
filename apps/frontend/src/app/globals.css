@@ -405,6 +405,46 @@ th {
 .bw-topbar-nav::-webkit-scrollbar {
   display: none;
 }
+/* 搜索框样式 */
+.bw-topbar-search {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 200px;
+  max-width: 1000px;
+  height: 40px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--bw-topbar-border);
+  border-radius: 8px;
+  background: var(--bw-topbar-action-surface);
+  padding: 0 12px;
+}
+
+.bw-topbar-search-icon {
+  flex: none;
+  color: var(--bw-topbar-muted);
+  width: 16px;
+  height: 16px;
+}
+
+.bw-topbar-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--bw-topbar-foreground);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.bw-topbar-search-input::placeholder {
+  color: var(--bw-topbar-muted);
+}
+
+.bw-topbar-search-input::-webkit-search-cancel-button {
+  display: none;
+}
 
 .bw-topbar-link {
   position: relative;

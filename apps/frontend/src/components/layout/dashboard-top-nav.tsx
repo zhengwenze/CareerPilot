@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { DashboardModuleSwitcher } from '@/components/layout/dashboard-module-switcher';
+import { TopBarSearch } from '@/components/layout/top-bar-search';
 import { Button } from '@/components/ui/button';
 import { dashboardNavItems } from '@/config/nav-config';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,8 @@ export function DashboardTopNav() {
           </Link>
 
           <DashboardModuleSwitcher items={dashboardNavItems} pathname={pathname} />
+
+          <TopBarSearch />
 
           <div className="bw-topbar-actions">
             <div className={cn('bw-topbar-account', !user && 'px-2')}>
