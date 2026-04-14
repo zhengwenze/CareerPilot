@@ -104,6 +104,7 @@ class JobCreateRequest(BaseModel):
     source_url: str | None = Field(default=None, max_length=2000)
     priority: int = Field(default=3, ge=1, le=5)
     jd_text: str = Field(min_length=1)
+    recommended_resume_id: UUID | None = None
 
 
 class JobUpdateRequest(BaseModel):
@@ -115,6 +116,7 @@ class JobUpdateRequest(BaseModel):
     source_url: str | None = Field(default=None, max_length=2000)
     priority: int | None = Field(default=None, ge=1, le=5)
     jd_text: str | None = Field(default=None, min_length=1)
+    recommended_resume_id: UUID | None = None
 
 
 class JobResponse(BaseModel):

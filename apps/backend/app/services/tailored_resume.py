@@ -174,6 +174,10 @@ def _normalize_text(value: str) -> str:
     return " ".join(value.split()).strip()
 
 
+def _join_non_empty(parts: list[str | None], *, separator: str = " / ") -> str:
+    return separator.join(part.strip() for part in parts if part and part.strip())
+
+
 def _serialize_task_state(state: TaskState | dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(state, TaskState):
         return state.model_dump(mode="json")

@@ -350,3 +350,4 @@ class ResumeDeleteResponse(BaseModel):
 
 class ResumeStructuredUpdateRequest(BaseModel):
     markdown: str = Field(min_length=1)
+    trigger_job_id: UUID | None = None

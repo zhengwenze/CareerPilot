@@ -28,6 +28,7 @@ from app.services.resume import (
 )
 from app.services.resume_parse_runtime import schedule_resume_parse_job
 from app.services.storage import ObjectStorage
+from app.services.tailored_resume_autostart import maybe_autostart_tailored_resume
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,13 @@ async def save_resume_structured_data(
         resume_id=resume_id,
         payload=payload,
     )
+    if payload.trigger_job_id is not None:
+        await maybe_autostart_tailored_resume(
+            request.app,
+            user_id=current_user.id,
+            resume_id=resume.id,
+            job_id=payload.trigger_job_id,
+        )
     return success_response(request, resume)
 
 

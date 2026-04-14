@@ -8,7 +8,7 @@ from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.errors import ApiException, ErrorCode
-from app.models import JobDescription, JobParseJob, JobReadinessEvent, MatchReport, User
+from app.models import JobDescription, JobParseJob, JobReadinessEvent, MatchReport, Resume, User
 from app.schemas.job import (
     JobCreateRequest,
     JobDeleteResponse,
@@ -279,12 +279,35 @@ async def get_job_response_or_404(
     return await build_job_response(session, job=job)
 
 
+async def _normalize_recommended_resume_id(
+    session: AsyncSession,
+    *,
+    current_user: User,
+    recommended_resume_id: UUID | None,
+) -> UUID | None:
+    if recommended_resume_id is None:
+        return None
+    resume = await session.get(Resume, recommended_resume_id)
+    if resume is None or resume.user_id != current_user.id:
+        raise ApiException(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="Recommended resume not found",
+        )
+    return resume.id
+
+
 async def create_job(
     session: AsyncSession,
     *,
     current_user: User,
     payload: JobCreateRequest,
 ) -> tuple[JobDescription, JobParseJob]:
+    recommended_resume_id = await _normalize_recommended_resume_id(
+        session,
+        current_user=current_user,
+        recommended_resume_id=payload.recommended_resume_id,
+    )
     job = JobDescription(
         user_id=current_user.id,
         title=_normalize_required_text(payload.title, field_name="title"),
@@ -297,7 +320,7 @@ async def create_job(
         jd_text=_normalize_required_text(payload.jd_text, field_name="jd_text"),
         latest_version=1,
         status_stage="draft",
-        recommended_resume_id=None,
+        recommended_resume_id=recommended_resume_id,
         latest_match_report_id=None,
         parse_confidence=None,
         competency_graph_json={},
@@ -470,6 +493,13 @@ async def update_job(
 
     if "priority" in updates and updates["priority"] is not None:
         job.priority = _normalize_priority(updates["priority"])
+
+    if "recommended_resume_id" in updates:
+        job.recommended_resume_id = await _normalize_recommended_resume_id(
+            session,
+            current_user=current_user,
+            recommended_resume_id=updates["recommended_resume_id"],
+        )
 
     previous_stage = job.status_stage
     parse_job: JobParseJob | None = None

@@ -282,24 +282,32 @@ export async function fetchJobDetail(
 
 export async function createJob(
   token: string,
-  draft: JobDraft
+  draft: JobDraft,
+  options: { recommendedResumeId?: string } = {}
 ): Promise<JobRecord> {
   return apiRequest<JobRecord>("/jobs", {
     method: "POST",
     token,
-    body: JSON.stringify(normalizeDraft(draft)),
+    body: JSON.stringify({
+      ...normalizeDraft(draft),
+      recommended_resume_id: options.recommendedResumeId,
+    }),
   });
 }
 
 export async function updateJob(
   token: string,
   jobId: string,
-  draft: JobDraft
+  draft: JobDraft,
+  options: { recommendedResumeId?: string } = {}
 ): Promise<JobRecord> {
   return apiRequest<JobRecord>(`/jobs/${jobId}`, {
     method: "PUT",
     token,
-    body: JSON.stringify(normalizeDraft(draft)),
+    body: JSON.stringify({
+      ...normalizeDraft(draft),
+      recommended_resume_id: options.recommendedResumeId,
+    }),
   });
 }
 

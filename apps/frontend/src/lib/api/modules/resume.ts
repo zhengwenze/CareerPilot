@@ -681,11 +681,13 @@ export async function retryResumeParse(
 export async function updateResumeStructuredData(
   token: string,
   resumeId: string,
-  markdown: string
+  markdown: string,
+  options: { triggerJobId?: string } = {}
 ): Promise<ResumeRecord> {
   logResumeApi("save-structured:start", {
     resumeId,
     markdownLength: markdown.trim().length,
+    triggerJobId: options.triggerJobId ?? null,
   });
   const response = await apiRequest<ResumeRecord>(
     `/resumes/${resumeId}/structured`,
@@ -694,6 +696,7 @@ export async function updateResumeStructuredData(
       token,
       body: JSON.stringify({
         markdown: markdown.trim(),
+        trigger_job_id: options.triggerJobId,
       }),
     }
   );

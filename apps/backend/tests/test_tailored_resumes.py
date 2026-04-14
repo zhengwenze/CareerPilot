@@ -17,6 +17,11 @@ from app.schemas.resume import (
 )
 from app.schemas.tailored_resume import TailoredResumeDocument
 from app.services import tailored_resume as tailored_resume_service
+from app.services.job import process_job_parse_job
+from app.services.tailored_resume_autostart import (
+    maybe_autostart_tailored_resume,
+    maybe_autostart_tailored_resume_for_job,
+)
 
 from conftest import create_test_user
 
@@ -92,6 +97,30 @@ async def _seed_tailored_resume_dependencies(db_session, *, user, suffix: str) -
     db_session.add_all([resume, job])
     await db_session.commit()
     return resume, job
+
+
+async def _seed_ready_job(
+    db_session,
+    *,
+    user,
+    suffix: str,
+) -> JobDescription:
+    job = JobDescription(
+        user_id=user.id,
+        title=f"Backend Engineer {suffix}",
+        jd_text=f"Need APIs, SQLAlchemy and delivery ownership for {suffix}",
+        latest_version=1,
+        priority=3,
+        status_stage="interview_ready",
+        parse_status="success",
+        structured_json={"title": f"Backend Engineer {suffix}"},
+        competency_graph_json={},
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db_session.add(job)
+    await db_session.commit()
+    return job
 
 
 def _fake_rewrite_response() -> dict[str, object]:
@@ -519,3 +548,149 @@ async def test_tailored_resume_retry_and_event_recording_preserve_completed_segm
     )
     session_record = session_query.scalar_one()
     assert session_record.diagnosis_json["events"][-1]["event_type"] == "workflow_page_exit"
+
+
+async def test_job_parse_success_autostarts_tailored_resume_for_recommended_resume(
+    app, client, db_session, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.services.tailored_resume_autostart.schedule_tailored_resume_generation",
+        lambda *args, **kwargs: None,
+    )
+
+    user, token = await create_test_user(db_session, email="tailored-autostart-job@example.com")
+    resume, _ = await _seed_tailored_resume_dependencies(db_session, user=user, suffix="autostart-job")
+
+    response = await client.post(
+        "/jobs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Platform Engineer",
+            "jd_text": "Need Python APIs, SQLAlchemy, background jobs and ownership.",
+            "recommended_resume_id": str(resume.id),
+        },
+    )
+    assert response.status_code == 201
+    created_job = response.json()["data"]
+    assert created_job["recommended_resume_id"] == str(resume.id)
+
+    await process_job_parse_job(
+        job_id=UUID(created_job["id"]),
+        parse_job_id=UUID(created_job["latest_parse_job"]["id"]),
+        session_factory=app.state.session_factory,
+    )
+
+    workflow = await maybe_autostart_tailored_resume_for_job(
+        app,
+        job_id=UUID(created_job["id"]),
+    )
+    assert workflow is not None
+    assert workflow.resume.id == resume.id
+    assert workflow.target_job.id == UUID(created_job["id"])
+    assert workflow.tailored_resume.display_status == "processing"
+
+    result = await db_session.execute(
+        select(ResumeOptimizationSession).where(
+            ResumeOptimizationSession.resume_id == resume.id,
+            ResumeOptimizationSession.jd_id == UUID(created_job["id"]),
+        )
+    )
+    sessions = list(result.scalars().all())
+    assert len(sessions) == 1
+
+
+async def test_resume_save_autostarts_only_for_trigger_job(app, client, db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.tailored_resume_autostart.schedule_tailored_resume_generation",
+        lambda *args, **kwargs: None,
+    )
+
+    user, token = await create_test_user(db_session, email="tailored-autostart-resume@example.com")
+    resume, job_a = await _seed_tailored_resume_dependencies(db_session, user=user, suffix="resume-a")
+    job_b = await _seed_ready_job(db_session, user=user, suffix="resume-b")
+
+    response = await client.put(
+        f"/resumes/{resume.id}/structured",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "markdown": "# Resume\n\n## Summary\n- refreshed content",
+            "trigger_job_id": str(job_a.id),
+        },
+    )
+    assert response.status_code == 200
+
+    result = await db_session.execute(
+        select(ResumeOptimizationSession).where(
+            ResumeOptimizationSession.resume_id == resume.id,
+        )
+    )
+    sessions = list(result.scalars().all())
+    assert len(sessions) == 1
+    assert sessions[0].jd_id == job_a.id
+    assert sessions[0].status == "processing"
+    assert sessions[0].source_resume_version == 2
+
+    workflow_b = await maybe_autostart_tailored_resume(
+        app,
+        user_id=user.id,
+        resume_id=resume.id,
+        job_id=job_b.id,
+    )
+    assert workflow_b is not None
+
+    result = await db_session.execute(
+        select(ResumeOptimizationSession).where(
+            ResumeOptimizationSession.resume_id == resume.id,
+        )
+    )
+    sessions = list(result.scalars().all())
+    assert len(sessions) == 2
+
+
+async def test_autostart_reuses_existing_fresh_success_workflow(app, db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.tailored_resume_autostart.schedule_tailored_resume_generation",
+        lambda *args, **kwargs: None,
+    )
+
+    async def fake_request_json_completion(*, config, instructions, payload, max_tokens=4000):
+        del config, instructions, payload, max_tokens
+        return _fake_rewrite_response()
+
+    monkeypatch.setattr(tailored_resume_service, "request_json_completion", fake_request_json_completion)
+
+    user, _token = await create_test_user(db_session, email="tailored-autostart-idempotent@example.com")
+    resume, job = await _seed_tailored_resume_dependencies(db_session, user=user, suffix="idempotent")
+
+    first_workflow = await maybe_autostart_tailored_resume(
+        app,
+        user_id=user.id,
+        resume_id=resume.id,
+        job_id=job.id,
+    )
+    assert first_workflow is not None
+
+    await tailored_resume_service.process_tailored_resume_workflow(
+        session_id=first_workflow.tailored_resume.session_id,
+        session_factory=app.state.session_factory,
+        settings=app.state.settings,
+    )
+
+    second_workflow = await maybe_autostart_tailored_resume(
+        app,
+        user_id=user.id,
+        resume_id=resume.id,
+        job_id=job.id,
+    )
+    assert second_workflow is not None
+    assert second_workflow.tailored_resume.session_id == first_workflow.tailored_resume.session_id
+    assert second_workflow.tailored_resume.display_status == "success"
+
+    result = await db_session.execute(
+        select(ResumeOptimizationSession).where(
+            ResumeOptimizationSession.resume_id == resume.id,
+            ResumeOptimizationSession.jd_id == job.id,
+        )
+    )
+    sessions = list(result.scalars().all())
+    assert len(sessions) == 1

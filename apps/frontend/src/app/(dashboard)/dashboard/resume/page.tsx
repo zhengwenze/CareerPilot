@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { ArrowUpRight, Download, FileUp, Sparkles } from 'lucide-react';
 
 import { useAuth } from '@/components/auth-provider';
@@ -668,6 +668,17 @@ function upsertWorkflowRecord(
   );
 }
 
+function findWorkflowForPair(
+  workflows: TailoredResumeWorkflowRecord[],
+  resumeId: string | null | undefined,
+  jobId: string | null | undefined
+) {
+  if (!resumeId || !jobId) {
+    return null;
+  }
+  return workflows.find(item => item.resume.id === resumeId && item.target_job.id === jobId) ?? null;
+}
+
 export default function DashboardResumePage() {
   const { token } = useAuth();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -725,6 +736,47 @@ export default function DashboardResumePage() {
   const activeResumeAiDebug = immediateAiDebug ?? persistedAiDebug;
   const hasActiveResumeAiDebug = hasResumeAiDebug(latestPdfConversion ?? resume?.parse_artifacts_json);
 
+  async function refreshWorkflowForPair(
+    resumeId: string | null | undefined,
+    jobId: string | null | undefined,
+    options: { silent?: boolean } = {}
+  ) {
+    if (!token || !resumeId || !jobId) {
+      setWorkflow(null);
+      setGenerateStartTime(null);
+      return null;
+    }
+
+    try {
+      const workflows = await fetchTailoredResumeWorkflows(token);
+      const nextWorkflow = findWorkflowForPair(workflows, resumeId, jobId);
+      setWorkflowList(workflows);
+      setWorkflow(nextWorkflow);
+      if (nextWorkflow?.tailored_resume.task_state.started_at) {
+        setGenerateStartTime(Date.parse(nextWorkflow.tailored_resume.task_state.started_at));
+      } else if (!nextWorkflow || isTerminalWorkflowStatus(nextWorkflow.tailored_resume.display_status)) {
+        setGenerateStartTime(null);
+      }
+      if (!nextWorkflow || isTerminalWorkflowStatus(nextWorkflow.tailored_resume.display_status)) {
+        setIsGenerating(false);
+      }
+      return nextWorkflow;
+    } catch (error) {
+      if (!options.silent) {
+        setPageError(getErrorMessage(error));
+      }
+      return null;
+    }
+  }
+
+  const refreshWorkflowForPairEffect = useEffectEvent(async (
+    resumeId: string | null | undefined,
+    jobId: string | null | undefined,
+    options: { silent?: boolean } = {}
+  ) => {
+    await refreshWorkflowForPair(resumeId, jobId, options);
+  });
+
   useEffect(() => {
     if (!token) {
       return;
@@ -747,10 +799,7 @@ export default function DashboardResumePage() {
 
         const nextResume = resumes[0] ?? null;
         const nextSavedJob = jobs[0] ?? null;
-        const nextWorkflow =
-          workflows.find(
-            item => item.resume.id === nextResume?.id && item.target_job.id === nextSavedJob?.id
-          ) ?? null;
+        const nextWorkflow = findWorkflowForPair(workflows, nextResume?.id, nextSavedJob?.id);
 
         setResume(nextResume);
         setLatestPdfConversion(null);
@@ -809,13 +858,16 @@ export default function DashboardResumePage() {
         const nextJob = await fetchJobDetail(token, savedJob.id);
         setSavedJob(nextJob);
         setJobDraft(current => (current.jd_text.trim() ? current : toJobDraft(nextJob)));
+        if (savedJob.parse_status !== 'success' && nextJob.parse_status === 'success') {
+          await refreshWorkflowForPairEffect(resume?.id, nextJob.id, { silent: true });
+        }
       } catch {
         // keep the last visible state until the next retry
       }
     }, 2000);
 
     return () => window.clearInterval(timer);
-  }, [savedJob?.id, savedJob?.parse_status, token]);
+  }, [resume?.id, savedJob?.id, savedJob?.parse_status, token]);
 
   useEffect(() => {
     if (!token || !workflow?.tailored_resume.session_id || !isWorkflowProcessing) {
@@ -937,11 +989,13 @@ export default function DashboardResumePage() {
 
       setIsSavingResume(true);
 
-      const autoSaved = await updateResumeStructuredData(token, uploaded.id, nextMarkdown);
+      const autoSaved = await updateResumeStructuredData(token, uploaded.id, nextMarkdown, {
+        triggerJobId: savedJob?.id,
+      });
       setResume(autoSaved);
       setResumeMarkdown(getCanonicalResumeMarkdown(autoSaved) || nextMarkdown);
-      setWorkflowList([]);
       setWorkflow(null);
+      await refreshWorkflowForPair(autoSaved.id, savedJob?.id, { silent: true });
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -963,11 +1017,16 @@ export default function DashboardResumePage() {
       const saved = await updateResumeStructuredData(
         token,
         resume.id,
-        normalizeMarkdown(resumeMarkdown)
+        normalizeMarkdown(resumeMarkdown),
+        {
+          triggerJobId: savedJob?.id,
+        }
       );
       const nextMarkdown = getCanonicalResumeMarkdown(saved) || normalizeMarkdown(resumeMarkdown);
       setResume(saved);
       setResumeMarkdown(nextMarkdown);
+      setWorkflow(null);
+      await refreshWorkflowForPair(saved.id, savedJob?.id, { silent: true });
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {
@@ -1004,10 +1063,16 @@ export default function DashboardResumePage() {
 
     try {
       const nextJob = savedJob
-        ? await updateJob(token, savedJob.id, jobDraft)
-        : await createJob(token, jobDraft);
+        ? await updateJob(token, savedJob.id, jobDraft, {
+            recommendedResumeId: resume?.id,
+          })
+        : await createJob(token, jobDraft, {
+            recommendedResumeId: resume?.id,
+          });
       setSavedJob(nextJob);
       setJobDraft(toJobDraft(nextJob));
+      setWorkflow(null);
+      setGenerateStartTime(null);
     } catch (error) {
       setPageError(getErrorMessage(error));
     } finally {

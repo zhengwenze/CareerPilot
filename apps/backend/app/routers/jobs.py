@@ -22,6 +22,9 @@ from app.services.job import (
     serialize_job,
     update_job,
 )
+from app.services.tailored_resume_autostart import (
+    maybe_autostart_tailored_resume_for_job,
+)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -41,6 +44,10 @@ async def run_job_parse_job(
             job_id=job_id,
             parse_job_id=parse_job_id,
             session_factory=resolve_session_factory(app),
+        )
+        await maybe_autostart_tailored_resume_for_job(
+            app,
+            job_id=job_id,
         )
     except Exception:
         return
