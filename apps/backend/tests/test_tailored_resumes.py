@@ -161,6 +161,37 @@ def _fake_rewrite_response() -> dict[str, object]:
     }
 
 
+def _pdf_style_resume_markdown() -> str:
+    return "\n".join(
+        [
+            "**郑文泽** 手机：17590522997 | 邮箱：2017160177@qq.com | 北京",
+            "",
+            "## **教育背景**",
+            "",
+            "## **新疆大学（211 / 双一流）**",
+            "",
+            "本科 / 软件工程",
+            "2023.09 – 2027.06 GPA 3.73，专业排名 50/800",
+            "",
+            "- **竞赛获奖：** 百度之星省赛金奖；RoboCup 新疆一等奖",
+            "",
+            "## **项目经历**",
+            "",
+            "## **职点迷津**",
+            "",
+            "https://gitee.com/zwz050418/career-pilot.git",
+            "智能求职工作台；React + Next.js + FastAPI",
+            "- 负责简历解析、岗位匹配、优化建议生成等核心链路开发。",
+            "",
+            "## **专业技能**",
+            "",
+            "- React",
+            "- FastAPI",
+            "- PostgreSQL",
+        ]
+    )
+
+
 def _build_match_report(*, user_id, resume: Resume, job: JobDescription) -> MatchReport:
     return MatchReport(
         user_id=user_id,
@@ -215,7 +246,7 @@ async def test_tailored_resume_optimize_returns_processing_then_persists_segment
     workflow = response.json()["data"]
     assert workflow["tailored_resume"]["task_state"]["status"] == "processing"
     assert workflow["tailored_resume"]["display_status"] == "processing"
-    assert len(workflow["tailored_resume"]["segments"]) == 5
+    assert len(workflow["tailored_resume"]["segments"]) == 6
     assert workflow["tailored_resume"]["downloadable"] is False
 
     await tailored_resume_service.process_tailored_resume_workflow(
@@ -233,12 +264,22 @@ async def test_tailored_resume_optimize_returns_processing_then_persists_segment
     assert completed["tailored_resume"]["task_state"]["status"] == "success"
     assert completed["tailored_resume"]["display_status"] == "success"
     assert completed["tailored_resume"]["document"]["markdown"]
-    assert len(completed["tailored_resume"]["segments"]) == 5
+    assert len(completed["tailored_resume"]["segments"]) == 6
     assert completed["tailored_resume"]["downloadable"] is True
     assert completed["tailored_resume"]["retryable"] is False
-    assert all(
-        segment["explanation"]["what"] for segment in completed["tailored_resume"]["segments"]
-    )
+    segments_by_key = {
+        segment["key"]: segment for segment in completed["tailored_resume"]["segments"]
+    }
+    assert segments_by_key["summary"]["status"] == "success"
+    assert segments_by_key["summary"]["suggested_text"] == _fake_rewrite_response()["summary"]
+    assert segments_by_key["summary"]["explanation"]["what"] == "已对摘要做改写。"
+    assert "工作经历" in segments_by_key["experience"]["explanation"]["value"]
+    assert segments_by_key["projects"]["suggested_text"] != segments_by_key["projects"]["original_text"]
+    assert segments_by_key["education"]["original_text"] == ""
+    assert segments_by_key["education"]["suggested_text"] == ""
+    assert segments_by_key["education"]["explanation"]["what"] == "该模块无原始内容。"
+    assert segments_by_key["skills"]["explanation"]["what"] == "该模块无原始内容。"
+    assert segments_by_key["summary"]["explanation"]["what"] != segments_by_key["projects"]["explanation"]["what"]
 
 
 async def test_tailored_resume_optimize_requires_structured_resume_ready(
@@ -264,6 +305,56 @@ async def test_tailored_resume_optimize_requires_structured_resume_ready(
         response.json()["error"]["message"]
         == "主简历已完成 Markdown 解析，但尚未完成结构化。请先保存主简历，生成结构化内容后再生成定制简历。"
     )
+
+
+async def test_tailored_resume_optimize_accepts_resume_after_pdf_style_structured_save(
+    app, client, db_session, monkeypatch
+):
+    monkeypatch.setattr("app.routers.tailored_resumes.schedule_tailored_resume_generation", lambda *args, **kwargs: None)
+
+    user, token = await create_test_user(db_session, email="tailored-pdf-style-structured@example.com")
+    markdown = _pdf_style_resume_markdown()
+    resume = Resume(
+        user_id=user.id,
+        file_name="resume-pdf-style.pdf",
+        file_url="https://example.test/resume-pdf-style.pdf",
+        storage_bucket="test",
+        storage_object_key="resume-pdf-style.pdf",
+        content_type="application/pdf",
+        file_size=123,
+        parse_status="success",
+        raw_text=markdown,
+        structured_json=None,
+        parse_artifacts_json={"canonical_resume_md": markdown},
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db_session.add(resume)
+    await db_session.commit()
+
+    job = await _seed_ready_job(db_session, user=user, suffix="pdf-style")
+
+    save_response = await client.put(
+        f"/resumes/{resume.id}/structured",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"markdown": markdown},
+    )
+    assert save_response.status_code == 200
+    assert save_response.json()["data"]["structured_json"]["basic_info"]["name"] == "郑文泽"
+
+    optimize_response = await client.post(
+        "/tailored-resumes/optimize",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "resume_id": str(resume.id),
+            "job_id": str(job.id),
+            "force_refresh": True,
+        },
+    )
+    assert optimize_response.status_code == 200
+    workflow = optimize_response.json()["data"]
+    assert workflow["tailored_resume"]["task_state"]["status"] == "processing"
+    assert workflow["tailored_resume"]["display_status"] == "processing"
 
 
 async def test_tailored_resume_rewrite_payload_includes_original_resume_markdown(
@@ -334,7 +425,7 @@ async def test_tailored_resume_workflow_list_returns_processing_items(app, clien
     )
     assert listed["tailored_resume"]["task_state"]["status"] == "processing"
     assert listed["tailored_resume"]["display_status"] == "processing"
-    assert len(listed["tailored_resume"]["segments"]) == 5
+    assert len(listed["tailored_resume"]["segments"]) == 6
 
 
 async def test_tailored_resume_scheduler_updates_workflow_progress_and_completes(
@@ -564,7 +655,7 @@ async def test_tailored_resume_retry_and_event_recording_preserve_completed_segm
     success_segment = ContentSegment(
         key="skills",
         label="技能聚焦",
-        sequence=2,
+        sequence=3,
         status="success",
         original_text="React",
         suggested_text="React",
@@ -610,6 +701,87 @@ async def test_tailored_resume_retry_and_event_recording_preserve_completed_segm
     )
     session_record = session_query.scalar_one()
     assert session_record.diagnosis_json["events"][-1]["event_type"] == "workflow_page_exit"
+
+
+async def test_tailored_resume_success_rebuilds_segments_from_final_artifacts_not_stale_drafts(
+    app, client, db_session
+):
+    user, token = await create_test_user(db_session, email="tailored-final-segments@example.com")
+    resume, job = await _seed_tailored_resume_dependencies(db_session, user=user, suffix="final-segments")
+
+    report = _build_match_report(user_id=user.id, resume=resume, job=job)
+    db_session.add(report)
+    await db_session.flush()
+
+    optimized_resume = ResumeStructuredData.model_validate(resume.structured_json)
+    optimized_resume.basic_info.summary = "聚焦 React 组件体系建设与复杂前端交付。"
+    optimized_resume.work_experience_items[0].bullets[0].text = "主导后台管理系统重构，沉淀可复用组件体系。"
+
+    session_record = ResumeOptimizationSession(
+        user_id=user.id,
+        resume_id=resume.id,
+        jd_id=job.id,
+        match_report_id=report.id,
+        source_resume_version=resume.latest_version,
+        source_job_version=job.latest_version,
+        status="success",
+        optimized_resume_json=optimized_resume.model_dump(mode="json"),
+        tailored_resume_json=TailoredResumeDocument(summary=optimized_resume.basic_info.summary).model_dump(
+            mode="json"
+        ),
+        tailored_resume_md="# Tailored Resume\n\n## Summary\n- rebuilt from final artifacts",
+        draft_sections_json={
+            "summary": ContentSegment(
+                key="summary",
+                label="职业摘要",
+                sequence=1,
+                status="success",
+                original_text="旧预览原文",
+                suggested_text="旧预览建议",
+                markdown="旧预览建议",
+                explanation=SegmentExplanation(
+                    what="旧模板说明",
+                    why="旧模板原因",
+                    value="旧模板价值",
+                ),
+            ).model_dump(mode="json")
+        },
+        audit_report_json={
+            "change_items": [
+                {
+                    "id": "summary_1",
+                    "segment_key": "summary",
+                    "section_label": "职业摘要",
+                    "item_label": "摘要",
+                    "change_type": "rewrite",
+                    "before_text": "负责复杂前端项目交付与组件体系建设。",
+                    "after_text": "聚焦 React 组件体系建设与复杂前端交付。",
+                    "why": "在不新增事实的前提下，调整表达以更贴近岗位职责和关键词。",
+                    "suggestion": "改写职业摘要的措辞，但不要新增无法证明的事实。",
+                    "evidence": ["React"],
+                }
+            ]
+        },
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    db_session.add(session_record)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/tailored-resumes/workflows/{session_record.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    workflow = response.json()["data"]
+    segments_by_key = {
+        segment["key"]: segment for segment in workflow["tailored_resume"]["segments"]
+    }
+    assert len(workflow["tailored_resume"]["segments"]) == 6
+    assert segments_by_key["summary"]["original_text"] == "负责复杂前端项目交付与组件体系建设。"
+    assert segments_by_key["summary"]["suggested_text"] == "聚焦 React 组件体系建设与复杂前端交付。"
+    assert segments_by_key["summary"]["explanation"]["what"] != "旧模板说明"
+    assert segments_by_key["summary"]["explanation"]["value"] == "让招聘方更快在职业摘要中看到 React 等相关证据。"
 
 
 async def test_job_parse_success_autostarts_tailored_resume_for_recommended_resume(

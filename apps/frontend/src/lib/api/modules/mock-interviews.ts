@@ -34,6 +34,7 @@ export type MockInterviewDeepReviewRecord = {
 export type MockInterviewSessionRecord = {
   id: string;
   user_id: string;
+  resume_id: string;
   job_id: string;
   resume_optimization_session_id: string | null;
   source_resume_version: number;
@@ -80,7 +81,8 @@ export async function createMockInterviewSession(
   token: string,
   payload: {
     jobId: string;
-    optimizationSessionId: string;
+    resumeId?: string;
+    optimizationSessionId?: string;
   }
 ): Promise<MockInterviewSessionRecord> {
   return apiRequest<MockInterviewSessionRecord>("/mock-interviews", {
@@ -88,6 +90,7 @@ export async function createMockInterviewSession(
     token,
     body: JSON.stringify({
       job_id: payload.jobId,
+      resume_id: payload.resumeId,
       resume_optimization_session_id: payload.optimizationSessionId,
     }),
   });

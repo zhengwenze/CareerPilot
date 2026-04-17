@@ -221,6 +221,7 @@ export default function DashboardInterviewsPage() {
   const searchParams = useSearchParams();
   const sessionIdFromQuery = searchParams.get('sessionId');
   const optimizationSessionId = searchParams.get('optimizationSessionId');
+  const resumeId = searchParams.get('resumeId');
   const jobId = searchParams.get('jobId');
 
   const [sessions, setSessions] = useState<MockInterviewSessionRecord[]>([]);
@@ -262,12 +263,13 @@ export default function DashboardInterviewsPage() {
           return;
         }
 
-        if (jobId && optimizationSessionId && !sessionIdFromQuery) {
+        if (jobId && (resumeId || optimizationSessionId) && !sessionIdFromQuery) {
           setLoadingTitle('正在准备 AI 面试官');
-          setLoadingDescription('我们会先快速给出第一题，再在后台准备后续题。');
+          setLoadingDescription('我们会先读取岗位和简历上下文，快速给出第一题，再在后台准备后续题。');
           const created = await createMockInterviewSession(token!, {
             jobId,
-            optimizationSessionId,
+            resumeId: resumeId ?? undefined,
+            optimizationSessionId: optimizationSessionId ?? undefined,
           });
           if (cancelled) {
             return;
@@ -311,7 +313,7 @@ export default function DashboardInterviewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [jobId, optimizationSessionId, router, sessionIdFromQuery, token]);
+  }, [jobId, optimizationSessionId, resumeId, router, sessionIdFromQuery, token]);
 
   useEffect(() => {
     if (!token || !selectedSession?.id || selectedSession.prep_state.status !== 'processing') {
@@ -509,7 +511,7 @@ export default function DashboardInterviewsPage() {
   return (
     <PageShell className="gap-8 py-4 md:py-6">
       <PageHeader
-        description="继续当前岗位上下文，直接训练。"
+        description="继续当前岗位和简历上下文，直接训练。"
         eyebrow="Mock Interviews"
         meta={
           <>
@@ -567,7 +569,7 @@ export default function DashboardInterviewsPage() {
       <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
         <PaperSection title="训练会话" eyebrow="Session History">
           {sessions.length === 0 ? (
-            <PageEmptyState description="先从专属简历开始。" title="还没有模拟面试" />
+            <PageEmptyState description="先准备岗位 JD 和简历。" title="还没有模拟面试" />
           ) : (
             <div className="space-y-3">
               {sessions.map(session => {

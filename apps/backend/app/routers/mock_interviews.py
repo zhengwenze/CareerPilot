@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.responses import success_response
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_session_factory
 from app.models import User
 from app.routers.deps import get_current_user, get_settings_dependency
 from app.schemas.ai_runtime import ClientEventRequest, ClientEventResponse
@@ -38,6 +38,10 @@ from app.services.mock_interview_runtime import (
 router = APIRouter(prefix="/mock-interviews", tags=["mock-interviews"])
 
 
+def resolve_session_factory(request: Request):
+    return getattr(request.app.state, "session_factory", get_session_factory())
+
+
 @router.post(
     "",
     response_model=ApiSuccessResponse[MockInterviewSessionRecord],
@@ -54,6 +58,7 @@ async def create_session(
         session,
         current_user=current_user,
         payload=payload,
+        session_factory=resolve_session_factory(request),
         settings=settings,
     )
     schedule_mock_interview_prep(request.app, session_id=created.id)

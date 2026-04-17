@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/components/auth-provider';
 import { dashboardNavSections, type NavItem } from '@/config/nav-config';
+import logoImage from '@/images/logo.png';
 import { cn } from '@/lib/utils';
 
 function isItemActive(pathname: string, item: NavItem): boolean {
@@ -144,9 +146,16 @@ export function AppSidebar() {
     <div className="flex h-full flex-col bg-white font-mono">
       <div className="border-b-2 border-black px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center border-2 border-black bg-black text-white">
-            <PanelLeftOpen className="size-4" />
-          </div>
+          <Link className="shrink-0" href="/dashboard/overview">
+            <Image
+              alt="CareerPilot Logo"
+              className="h-11 w-auto object-contain"
+              height={80}
+              priority
+              src={logoImage}
+              width={120}
+            />
+          </Link>
           {!collapsed ? (
             <div className="min-w-0 flex-1">
               <p className="truncate font-serif text-lg font-bold text-black">CareerPilot</p>
@@ -228,7 +237,16 @@ export function AppSidebar() {
     return (
       <div className="fixed inset-0 z-50 bg-white">
         <div className="flex items-center justify-between border-b-2 border-black px-4 py-4">
-          <span className="font-serif text-xl font-bold text-black">CareerPilot</span>
+          <Link className="shrink-0" href="/dashboard/overview" onClick={() => setMobileOpen(false)}>
+            <Image
+              alt="CareerPilot Logo"
+              className="h-10 w-auto object-contain"
+              height={80}
+              priority
+              src={logoImage}
+              width={120}
+            />
+          </Link>
           <Button
             onClick={() => setMobileOpen(false)}
             size="icon-sm"

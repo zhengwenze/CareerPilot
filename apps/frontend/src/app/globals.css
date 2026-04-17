@@ -372,6 +372,7 @@ th {
   display: inline-flex;
   flex: none;
   align-items: center;
+  justify-content: flex-start;
   min-height: 40px;
   color: var(--bw-topbar-foreground);
   font-family: var(--font-heading);
@@ -379,6 +380,14 @@ th {
   font-weight: 600;
   letter-spacing: -0.03em;
   transition: color 150ms ease;
+}
+
+.bw-topbar-brand-logo {
+  display: block;
+  width: clamp(168px, 18vw, 220px);
+  height: 42px;
+  object-fit: cover;
+  object-position: center;
 }
 
 .bw-topbar-brand:hover {

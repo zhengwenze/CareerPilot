@@ -68,20 +68,29 @@ export type ContentSegmentRecord = {
 export type ResumeStructuredData = {
   basic_info: {
     name: string;
+    title?: string;
     email: string;
     phone: string;
     location: string;
     summary: string;
+    links?: string[];
   };
   education: string[];
+  education_items?: Array<Record<string, unknown>>;
   work_experience: string[];
+  work_experience_items?: Array<Record<string, unknown>>;
   projects: string[];
+  project_items?: Array<Record<string, unknown>>;
   skills: {
     technical: string[];
     tools: string[];
     languages: string[];
   };
   certifications: string[];
+  certification_items?: Array<Record<string, unknown>>;
+  awards?: string[];
+  custom_sections?: Array<Record<string, unknown>>;
+  meta?: Record<string, unknown>;
 };
 
 /**

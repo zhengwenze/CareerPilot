@@ -1,6 +1,8 @@
+import Image from 'next/image';
 import Link from 'next/link';
 
 import { GuestRoute } from '@/components/guards/guest-route';
+import logoImage from '@/images/logo.png';
 
 import { AuthForm } from './auth-form';
 
@@ -22,7 +24,15 @@ export function AuthPage({ mode }: AuthPageProps) {
           <div className="mx-auto max-w-[1360px] px-4 py-px sm:px-6 lg:px-8">
             <div className="bw-topbar">
               <Link href="/" className="bw-topbar-brand">
-                CareerPilot
+                <Image
+                  alt="CareerPilot Logo"
+                  className="bw-topbar-brand-logo"
+                  height={42}
+                  priority
+                  sizes="(max-width: 640px) 168px, 220px"
+                  src={logoImage}
+                  width={220}
+                />
               </Link>
 
               <nav className="bw-topbar-nav">

@@ -53,6 +53,8 @@ SKILL_LABEL_TO_GROUP = {
     "开发工具": "tools",
 }
 INLINE_STRONG_LABEL_RE = re.compile(r"^\*\*([^*]+)\*\*\s*(.+)?$")
+WRAPPED_STRONG_RE = re.compile(r"^\*\*([^*]+)\*\*$")
+LEADING_STRONG_RE = re.compile(r"^\*\*([^*]+)\*\*(.*)$")
 
 
 @dataclass(slots=True)
@@ -135,40 +137,51 @@ def normalize_resume_markdown_for_parser(markdown: str) -> str:
             continue
 
         if index == first_content_index and not stripped.startswith("# "):
-            normalized_lines.append(f"# {stripped.lstrip('#').strip()}")
+            name_heading, remainder = _normalize_first_content_line(stripped)
+            normalized_lines.append(name_heading)
+            if remainder:
+                normalized_lines.append(remainder)
             current_section_key = ""
             has_subsection = False
             continue
 
         if stripped.startswith("# "):
-            normalized_lines.append(stripped)
+            normalized_lines.append(f"# {_normalize_heading_title(stripped.removeprefix('# ').strip())}")
             current_section_key = ""
             has_subsection = False
             continue
 
         if stripped.startswith("## "):
-            normalized_lines.append(stripped)
-            current_section_key = SECTION_TITLE_MAP.get(
-                stripped.removeprefix("## ").strip().lower(),
-                "custom",
-            )
-            has_subsection = False
+            title = _normalize_heading_title(stripped.removeprefix("## ").strip())
+            mapped_key = SECTION_TITLE_MAP.get(title.lower())
+            if mapped_key:
+                normalized_lines.append(f"## {title}")
+                current_section_key = mapped_key
+                has_subsection = False
+            elif current_section_key in SECTION_SUBSECTION_KEYS:
+                normalized_lines.append(f"### {title}")
+                has_subsection = True
+            else:
+                normalized_lines.append(f"## {title}")
+                current_section_key = "custom"
+                has_subsection = False
             continue
 
         if stripped.startswith("### "):
-            normalized_lines.append(stripped)
+            normalized_lines.append(f"### {_normalize_heading_title(stripped.removeprefix('### ').strip())}")
             has_subsection = True
             continue
 
-        section_key = SECTION_TITLE_MAP.get(stripped.lower())
+        normalized_title = _normalize_heading_title(stripped)
+        section_key = SECTION_TITLE_MAP.get(normalized_title.lower())
         if section_key:
-            normalized_lines.append(f"## {stripped}")
+            normalized_lines.append(f"## {normalized_title}")
             current_section_key = section_key
             has_subsection = False
             continue
 
         if current_section_key in SECTION_SUBSECTION_KEYS and not has_subsection:
-            normalized_lines.append(f"### {stripped}")
+            normalized_lines.append(f"### {normalized_title}")
             has_subsection = True
             continue
 
@@ -194,6 +207,38 @@ def normalize_resume_markdown_for_parser(markdown: str) -> str:
         normalized_lines.append(stripped)
 
     return "\n".join(normalized_lines).strip()
+
+
+def _normalize_heading_title(value: str) -> str:
+    candidate = value.strip().lstrip("#").strip()
+    strong_match = WRAPPED_STRONG_RE.match(candidate)
+    if strong_match:
+        candidate = strong_match.group(1).strip()
+    return candidate
+
+
+def _normalize_first_content_line(value: str) -> tuple[str, str]:
+    candidate = value.strip().lstrip("#").strip()
+    strong_match = LEADING_STRONG_RE.match(candidate)
+    if strong_match:
+        name = strong_match.group(1).strip()
+        remainder = strong_match.group(2).strip()
+        if _looks_like_name_candidate(name):
+            return f"# {name}", remainder.lstrip("| ").strip()
+    return f"# {_normalize_heading_title(candidate)}", ""
+
+
+def _looks_like_name_candidate(value: str) -> bool:
+    candidate = value.strip()
+    if not candidate:
+        return False
+    if len(candidate) > 40:
+        return False
+    if "@" in candidate:
+        return False
+    if candidate.startswith("http://") or candidate.startswith("https://"):
+        return False
+    return True
 
 
 def _split_resume_markdown(lines: list[str]) -> tuple[str, list[str], list[str]]:

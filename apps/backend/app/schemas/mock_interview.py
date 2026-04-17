@@ -12,7 +12,8 @@ from app.schemas.interview_review import DeepReviewResult, MockInterviewReviewTy
 
 class MockInterviewSessionCreateRequest(BaseModel):
     job_id: UUID
-    resume_optimization_session_id: UUID
+    resume_id: UUID | None = None
+    resume_optimization_session_id: UUID | None = None
 
 
 class MockInterviewAnswerSubmitRequest(BaseModel):
@@ -62,6 +63,7 @@ class MockInterviewTurnRecord(BaseModel):
 class MockInterviewSessionRecord(BaseModel):
     id: UUID
     user_id: UUID
+    resume_id: UUID
     job_id: UUID
     resume_optimization_session_id: UUID | None
     source_job_version: int

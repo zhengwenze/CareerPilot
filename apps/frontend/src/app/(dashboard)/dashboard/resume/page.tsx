@@ -70,6 +70,13 @@ function formatDate(value: string) {
 }
 
 type WorkflowDisplayStatus = TailoredResumeArtifactRecord['display_status'];
+type ResumeSaveFeedbackStatus = 'idle' | 'saving' | 'success' | 'error';
+type GenerateCheck = {
+  key: string;
+  label: string;
+  passed: boolean;
+  failureReason: string;
+};
 
 const TERMINAL_WORKFLOW_STATUSES = new Set<WorkflowDisplayStatus>([
   'success',
@@ -79,6 +86,11 @@ const TERMINAL_WORKFLOW_STATUSES = new Set<WorkflowDisplayStatus>([
   'aborted',
   'empty_result',
 ]);
+const STRUCTURED_BLOCK_REASON =
+  '当前简历仅完成解析，尚未完成结构化。请先点击“保存简历”完成结构化后，再继续生成定制简历。';
+const STRUCTURED_SAVE_SUCCESS_MESSAGE = '结构化保存成功，现在可以继续生成定制简历。';
+const STRUCTURED_SAVE_UNREADY_MESSAGE =
+  '结构化保存已完成，但当前简历仍未达到可生成状态。请检查 Markdown 内容后再次点击“保存简历”。';
 
 function getFitBandLabel(value: string) {
   const labels: Record<string, string> = {
@@ -105,14 +117,21 @@ function hasStructuredResumeReady(resume: ResumeRecord | null) {
   }
   return Boolean(
     structured.basic_info?.name?.trim() ||
+    structured.basic_info?.title?.trim() ||
     structured.basic_info?.summary?.trim() ||
     structured.education?.length ||
+    structured.education_items?.length ||
     structured.work_experience?.length ||
+    structured.work_experience_items?.length ||
     structured.projects?.length ||
+    structured.project_items?.length ||
     structured.skills?.technical?.length ||
     structured.skills?.tools?.length ||
     structured.skills?.languages?.length ||
-    structured.certifications?.length
+    structured.certifications?.length ||
+    structured.certification_items?.length ||
+    structured.awards?.length ||
+    structured.custom_sections?.length
   );
 }
 
@@ -132,7 +151,7 @@ function getGenerateBlockReason(params: {
     return '主简历 Markdown 尚未就绪。';
   }
   if (!hasStructuredResumeReady(resume)) {
-    return '主简历已完成 Markdown 解析，但尚未完成结构化。请先点击“保存简历”完成结构化后再生成。';
+    return STRUCTURED_BLOCK_REASON;
   }
   if (!savedJob?.id) {
     return '先保存岗位 JD。';
@@ -144,6 +163,10 @@ function getGenerateBlockReason(params: {
     return '岗位 JD 有未保存改动，请先保存并等待最新版本解析完成。';
   }
   return '先保存主简历和岗位 JD。';
+}
+
+function formatBooleanDebugValue(value: boolean) {
+  return value ? 'true' : 'false';
 }
 
 function getResumeAiDebug(
@@ -567,6 +590,22 @@ function isInterviewReadyWorkflow(workflow: TailoredResumeWorkflowRecord | null)
   );
 }
 
+function canStartInterviewWithOriginalResume(params: {
+  resume: ResumeRecord | null;
+  savedJob: JobRecord | null;
+  isJobDirty: boolean;
+}) {
+  const { resume, savedJob, isJobDirty } = params;
+  return Boolean(
+    resume?.id &&
+    resume.parse_status === 'success' &&
+    getCanonicalResumeMarkdown(resume) &&
+    savedJob?.id &&
+    savedJob.parse_status === 'success' &&
+    !isJobDirty
+  );
+}
+
 function getWorkflowStatusLabel(status: WorkflowDisplayStatus | null | undefined) {
   switch (status) {
     case 'success':
@@ -665,12 +704,106 @@ function getSegmentStatusLabel(status: ContentSegmentRecord['status']) {
   }
 }
 
+type SegmentDisplayState =
+  | 'rewritten'
+  | 'unchanged'
+  | 'no_source'
+  | 'failed'
+  | 'processing'
+  | 'pending';
+
+function normalizeSegmentText(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function getSegmentDisplayState(segment: ContentSegmentRecord): SegmentDisplayState {
+  if (segment.status === 'failed') {
+    return 'failed';
+  }
+  if (segment.status === 'processing') {
+    return 'processing';
+  }
+  if (segment.status !== 'success') {
+    return 'pending';
+  }
+
+  const originalText = normalizeSegmentText(segment.original_text);
+  const suggestedText = normalizeSegmentText(segment.suggested_text);
+
+  if (!originalText && !suggestedText) {
+    return 'no_source';
+  }
+  if (originalText === suggestedText) {
+    return 'unchanged';
+  }
+  return 'rewritten';
+}
+
+function getSegmentStatusChipLabel(segment: ContentSegmentRecord) {
+  const displayState = getSegmentDisplayState(segment);
+  switch (displayState) {
+    case 'rewritten':
+      return '已改写';
+    case 'unchanged':
+      return '未改写';
+    case 'no_source':
+      return '无原始内容';
+    case 'failed':
+      return '生成失败';
+    case 'processing':
+      return '进行中';
+    default:
+      return getSegmentStatusLabel(segment.status);
+  }
+}
+
+function getSegmentOriginalDisplayText(segment: ContentSegmentRecord) {
+  const displayState = getSegmentDisplayState(segment);
+  if (displayState === 'no_source') {
+    return '该模块无原始内容';
+  }
+  if (segment.original_text.trim()) {
+    return segment.original_text;
+  }
+  return segment.status === 'processing' ? '等待提取原始内容' : '该模块无原始内容';
+}
+
+function getSegmentSuggestedDisplayText(segment: ContentSegmentRecord) {
+  const displayState = getSegmentDisplayState(segment);
+  if (segment.suggested_text.trim()) {
+    return segment.suggested_text;
+  }
+  switch (displayState) {
+    case 'no_source':
+      return '该模块无原始内容';
+    case 'unchanged':
+      return '该模块未发生改写';
+    case 'failed':
+      return segment.error_message || '该模块生成失败';
+    case 'processing':
+      return '该模块生成中';
+    default:
+      return '该模块未生成可展示结果';
+  }
+}
+
+function shouldShowSegmentInResultList(
+  segment: ContentSegmentRecord,
+  workflowStatus: WorkflowDisplayStatus
+) {
+  const displayState = getSegmentDisplayState(segment);
+  if (workflowStatus === 'success' || workflowStatus === 'empty_result') {
+    return displayState === 'rewritten' || displayState === 'failed';
+  }
+  return true;
+}
+
 function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
   return (
     <div className="border border-[#e5e5e5] bg-white p-5">
       <div className="flex flex-wrap items-center gap-2">
         <MetaChip>{segment.label}</MetaChip>
-        <MetaChip>{getSegmentStatusLabel(segment.status)}</MetaChip>
+        <MetaChip>{getSegmentStatusChipLabel(segment)}</MetaChip>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
@@ -678,7 +811,7 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
             原内容
           </p>
           <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-sm leading-7 text-[#1C1C1C]/68 whitespace-pre-wrap">
-            {segment.original_text || '暂无'}
+            {getSegmentOriginalDisplayText(segment)}
           </div>
         </div>
         <div className="space-y-2">
@@ -686,7 +819,7 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
             优化后
           </p>
           <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-sm leading-7 text-[#1C1C1C] whitespace-pre-wrap">
-            {segment.suggested_text || '处理中'}
+            {getSegmentSuggestedDisplayText(segment)}
           </div>
         </div>
       </div>
@@ -694,19 +827,19 @@ function SegmentCard({ segment }: { segment: ContentSegmentRecord }) {
         <div className="border border-[#e5e5e5] bg-[#fafafa] p-4">
           <p className="text-xs font-semibold text-[#1C1C1C]/50">改了什么</p>
           <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/72">
-            {segment.explanation.what || '保持原有结构，仅做保守优化。'}
+            {segment.explanation.what || '该模块暂无可展示说明。'}
           </p>
         </div>
         <div className="border border-[#e5e5e5] bg-[#fafafa] p-4">
           <p className="text-xs font-semibold text-[#1C1C1C]/50">为什么这样改</p>
           <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/72">
-            {segment.explanation.why || '优先贴合岗位重点，但不新增事实。'}
+            {segment.explanation.why || '该模块暂无可展示原因。'}
           </p>
         </div>
         <div className="border border-[#e5e5e5] bg-[#fafafa] p-4">
           <p className="text-xs font-semibold text-[#1C1C1C]/50">这样改的价值</p>
           <p className="mt-2 text-sm leading-6 text-[#1C1C1C]/72">
-            {segment.explanation.value || '让招聘方更快看到相关证据。'}
+            {segment.explanation.value || '该模块暂无可展示价值说明。'}
           </p>
         </div>
       </div>
@@ -756,6 +889,13 @@ export default function DashboardResumePage() {
   const [workflowList, setWorkflowList] = useState<TailoredResumeWorkflowRecord[]>([]);
   const [workflow, setWorkflow] = useState<TailoredResumeWorkflowRecord | null>(null);
   const [pageError, setPageError] = useState('');
+  const [resumeSaveFeedback, setResumeSaveFeedback] = useState<{
+    status: ResumeSaveFeedbackStatus;
+    message: string;
+  }>({
+    status: 'idle',
+    message: '',
+  });
   const [isUploading, setIsUploading] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [isSavingResume, setIsSavingResume] = useState(false);
@@ -770,6 +910,12 @@ export default function DashboardResumePage() {
   const workflowDisplayStatus = workflow?.tailored_resume.display_status ?? 'idle';
   const isWorkflowProcessing =
     workflowDisplayStatus === 'processing' || workflowDisplayStatus === 'segment_progress';
+  const visibleWorkflowSegments = workflow
+    ? workflow.tailored_resume.segments
+        .slice()
+        .sort((a, b) => a.sequence - b.sequence)
+        .filter(segment => shouldShowSegmentInResultList(segment, workflowDisplayStatus))
+    : [];
   const latestSuccessfulWorkflow =
     workflowList.find(item => {
       if (!resume?.id || !savedJob?.id || !workflow?.tailored_resume.session_id) {
@@ -793,7 +939,17 @@ export default function DashboardResumePage() {
     : isInterviewReadyWorkflow(latestSuccessfulWorkflow)
       ? latestSuccessfulWorkflow
       : null;
-  const canStartInterview = Boolean(interviewEntryWorkflow);
+  const canStartInterviewDirectly = canStartInterviewWithOriginalResume({
+    resume,
+    savedJob,
+    isJobDirty,
+  });
+  const interviewEntryHref = interviewEntryWorkflow
+    ? `/dashboard/interviews?jobId=${interviewEntryWorkflow.target_job.id}&resumeId=${interviewEntryWorkflow.resume.id}&optimizationSessionId=${interviewEntryWorkflow.tailored_resume.session_id}`
+    : canStartInterviewDirectly
+      ? `/dashboard/interviews?jobId=${savedJob?.id}&resumeId=${resume?.id}`
+      : null;
+  const canStartInterview = Boolean(interviewEntryHref);
   const isDevelopment = process.env.NODE_ENV === 'development';
   const immediateAiDebug = getResumeAiDebug(latestPdfConversion);
   const persistedAiDebug = getResumeAiDebug(resume?.parse_artifacts_json);
@@ -905,6 +1061,7 @@ export default function DashboardResumePage() {
         const nextResume = await fetchResumeDetail(token, resume.id);
         setResume(nextResume);
         const nextMarkdown = getCanonicalResumeMarkdown(nextResume);
+        clearResumeSaveFeedback();
         if (nextMarkdown) {
           setResumeMarkdown(nextMarkdown);
         }
@@ -1019,20 +1176,105 @@ export default function DashboardResumePage() {
   const canSaveJob = Boolean(
     token && isJobDirty && jobDraft.title.trim() && jobDraft.jd_text.trim()
   );
-  const canGenerate = Boolean(
-    token &&
-    resume?.id &&
-    isResumeMarkdownReady &&
-    isResumeStructuredReady &&
-    savedJob?.id &&
-    savedJob.parse_status === 'success' &&
-    !isJobDirty
-  );
+  const generateChecks: GenerateCheck[] = [
+    {
+      key: 'auth',
+      label: '已登录',
+      passed: Boolean(token),
+      failureReason: '当前登录状态失效，请重新登录。',
+    },
+    {
+      key: 'resume',
+      label: '已上传主简历',
+      passed: Boolean(resume?.id),
+      failureReason: '先上传主简历。',
+    },
+    {
+      key: 'resume-markdown',
+      label: '主简历 Markdown 已就绪',
+      passed: isResumeMarkdownReady,
+      failureReason: '主简历尚未完成 Markdown 解析，请等待解析完成。',
+    },
+    {
+      key: 'resume-structured',
+      label: '主简历结构化已完成',
+      passed: isResumeStructuredReady,
+      failureReason: STRUCTURED_BLOCK_REASON,
+    },
+    {
+      key: 'job',
+      label: '已保存岗位 JD',
+      passed: Boolean(savedJob?.id),
+      failureReason: '先保存岗位 JD。',
+    },
+    {
+      key: 'job-parse',
+      label: '岗位 JD 解析已完成',
+      passed: savedJob?.parse_status === 'success',
+      failureReason: '岗位 JD 尚未完成解析，请等待解析完成。',
+    },
+    {
+      key: 'job-dirty',
+      label: '岗位 JD 当前版本已保存',
+      passed: !isJobDirty,
+      failureReason: '岗位 JD 有未保存改动，请先保存并等待最新版本解析完成。',
+    },
+  ];
+  const generateFailures = generateChecks.filter(check => !check.passed);
+  const firstGenerateFailure = generateFailures[0] ?? null;
+  const canGenerate = generateFailures.length === 0;
   const generateBlockReason = getGenerateBlockReason({
     resume,
     savedJob,
     isJobDirty,
   });
+  const generatePrimaryBlockReason =
+    firstGenerateFailure?.failureReason ?? generateBlockReason;
+  const generationRuntimeMessage = isWorkflowProcessing
+    ? '后台已经存在一个生成任务，按钮会在当前任务结束后恢复。'
+    : isGenerating
+      ? '正在提交生成请求，请稍候。'
+      : '';
+  const generateDebugItems = [
+    {
+      label: 'resume.parse_status',
+      value: resume?.parse_status ?? 'null',
+    },
+    {
+      label: 'isResumeMarkdownReady',
+      value: formatBooleanDebugValue(isResumeMarkdownReady),
+    },
+    {
+      label: 'isResumeStructuredReady',
+      value: formatBooleanDebugValue(isResumeStructuredReady),
+    },
+    {
+      label: 'savedJob.parse_status',
+      value: savedJob?.parse_status ?? 'null',
+    },
+    {
+      label: 'isJobDirty',
+      value: formatBooleanDebugValue(isJobDirty),
+    },
+    {
+      label: 'isGenerating',
+      value: formatBooleanDebugValue(isGenerating),
+    },
+    {
+      label: 'isWorkflowProcessing',
+      value: formatBooleanDebugValue(isWorkflowProcessing),
+    },
+  ];
+  const showStructuredResumeCallout = Boolean(
+    isResumeMarkdownReady && !isResumeStructuredReady
+  );
+
+  function clearResumeSaveFeedback() {
+    setResumeSaveFeedback({
+      status: 'idle',
+      message: '',
+    });
+  }
 
   if (!token) {
     return null;
@@ -1049,6 +1291,7 @@ export default function DashboardResumePage() {
     setIsConverting(true);
     setParseStartTime(Date.now());
     setPageError('');
+    clearResumeSaveFeedback();
 
     try {
       const uploaded = await uploadPrimaryResume(token, file);
@@ -1090,6 +1333,10 @@ export default function DashboardResumePage() {
 
     setIsSavingResume(true);
     setPageError('');
+    setResumeSaveFeedback({
+      status: 'saving',
+      message: '',
+    });
 
     try {
       const saved = await updateResumeStructuredData(
@@ -1103,10 +1350,19 @@ export default function DashboardResumePage() {
       const nextMarkdown = getCanonicalResumeMarkdown(saved) || normalizeMarkdown(resumeMarkdown);
       setResume(saved);
       setResumeMarkdown(nextMarkdown);
+      setResumeSaveFeedback({
+        status: hasStructuredResumeReady(saved) ? 'success' : 'error',
+        message: hasStructuredResumeReady(saved)
+          ? STRUCTURED_SAVE_SUCCESS_MESSAGE
+          : STRUCTURED_SAVE_UNREADY_MESSAGE,
+      });
       setWorkflow(null);
       await refreshWorkflowForPair(saved.id, savedJob?.id, { silent: true });
     } catch (error) {
-      setPageError(getErrorMessage(error));
+      setResumeSaveFeedback({
+        status: 'error',
+        message: getErrorMessage(error),
+      });
     } finally {
       setIsSavingResume(false);
     }
@@ -1119,6 +1375,8 @@ export default function DashboardResumePage() {
 
     setIsRetryingResumeParse(true);
     setPageError('');
+    setParseStartTime(Date.now());
+    clearResumeSaveFeedback();
 
     try {
       const nextResume = await retryResumeParse(token, resume.id);
@@ -1269,7 +1527,13 @@ export default function DashboardResumePage() {
         description="上传主简历，保存岗位，生成结果。"
         meta={
           <>
-            <MetaChip>{resume ? 'Resume Ready' : 'Resume Missing'}</MetaChip>
+            <MetaChip>
+              {resume
+                ? isResumeMarkdownReady
+                  ? 'Markdown Ready'
+                  : 'Markdown Missing'
+                : 'Markdown Missing'}
+            </MetaChip>
             <MetaChip>
               {resume
                 ? isResumeStructuredReady
@@ -1384,6 +1648,30 @@ export default function DashboardResumePage() {
         >
           {resume ? (
             <div className="space-y-4">
+              {showStructuredResumeCallout ? (
+                <Alert className="border border-[#111111] bg-[#fafafa] text-[#111111]">
+                  <AlertTitle>下一步：保存简历</AlertTitle>
+                  <AlertDescription>{STRUCTURED_BLOCK_REASON}</AlertDescription>
+                </Alert>
+              ) : null}
+              {resumeSaveFeedback.status === 'saving' ? (
+                <Alert className="border border-[#e5e5e5] bg-white text-[#111111]">
+                  <AlertTitle>保存简历中</AlertTitle>
+                  <AlertDescription>正在生成结构化简历，请稍候。</AlertDescription>
+                </Alert>
+              ) : null}
+              {resumeSaveFeedback.status === 'success' ? (
+                <Alert className="border border-[#111111] bg-white text-[#111111]">
+                  <AlertTitle>结构化已完成</AlertTitle>
+                  <AlertDescription>{resumeSaveFeedback.message}</AlertDescription>
+                </Alert>
+              ) : null}
+              {resumeSaveFeedback.status === 'error' ? (
+                <Alert className="border border-[#111111] bg-[#fafafa] text-[#111111]">
+                  <AlertTitle>保存简历失败</AlertTitle>
+                  <AlertDescription>{resumeSaveFeedback.message}</AlertDescription>
+                </Alert>
+              ) : null}
               {hasActiveResumeAiDebug || resume.parse_error ? (
                 <details className="border border-[#e5e5e5] bg-[#fafafa]">
                   <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[#1C1C1C] marker:hidden">
@@ -1437,7 +1725,10 @@ export default function DashboardResumePage() {
               ) : null}
               <PaperTextarea
                 value={resumeMarkdown}
-                onChange={event => setResumeMarkdown(event.target.value)}
+                onChange={event => {
+                  clearResumeSaveFeedback();
+                  setResumeMarkdown(event.target.value);
+                }}
                 placeholder="上传 PDF 后在这里编辑 Markdown。"
                 className="min-h-[320px]"
               />
@@ -1580,6 +1871,22 @@ export default function DashboardResumePage() {
           rightSlot={
             <div className="flex flex-wrap gap-2">
               <Button
+                disabled={!canGenerate || isGenerating || isWorkflowProcessing}
+                size="sm"
+                type="button"
+                onClick={() => void handleGenerateTailoredResume()}
+              >
+                <Sparkles className="size-4" />
+                {(isGenerating || isWorkflowProcessing) && generateStartTime !== null ? (
+                  <>
+                    生成中
+                    <Timer startTime={generateStartTime} isActive={true} />
+                  </>
+                ) : (
+                  '生成定制简历'
+                )}
+              </Button>
+              <Button
                 disabled={!canDownloadCurrentWorkflow || isDownloading}
                 size="sm"
                 type="button"
@@ -1602,9 +1909,7 @@ export default function DashboardResumePage() {
               ) : null}
               {canStartInterview ? (
                 <Button asChild size="sm" type="button" variant="outline">
-                  <Link
-                    href={`/dashboard/interviews?jobId=${interviewEntryWorkflow?.target_job.id}&optimizationSessionId=${interviewEntryWorkflow?.tailored_resume.session_id}`}
-                  >
+                  <Link href={interviewEntryHref ?? '/dashboard/interviews'}>
                     进入面试
                     <ArrowUpRight className="size-4" />
                   </Link>
@@ -1614,10 +1919,75 @@ export default function DashboardResumePage() {
           }
         >
           {!canGenerate ? (
-            <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
-              {generateBlockReason}
+            <div className="space-y-3">
+              <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                {generatePrimaryBlockReason}
+              </div>
+              {generateFailures.length > 1 ? (
+                <details className="border border-[#e5e5e5] bg-[#fafafa]">
+                  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[#1C1C1C] marker:hidden">
+                    查看全部阻断项（{generateFailures.length}）
+                  </summary>
+                  <div className="border-t border-[#e5e5e5] bg-white px-4 py-3 text-sm text-[#1C1C1C]/72">
+                    <ul className="space-y-2">
+                      {generateFailures.map(check => (
+                        <li key={check.key}>
+                          {check.label}：{check.failureReason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </details>
+              ) : null}
             </div>
           ) : null}
+
+          {generationRuntimeMessage ? (
+            <Alert className="border border-[#111111] bg-white text-[#111111]">
+              <AlertTitle>生成状态</AlertTitle>
+              <AlertDescription>{generationRuntimeMessage}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <details className="border border-[#e5e5e5] bg-[#fafafa]">
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[#1C1C1C] marker:hidden">
+              生成条件调试
+            </summary>
+            <div className="border-t border-[#e5e5e5] bg-white p-4 text-sm text-[#1C1C1C]/72">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {generateDebugItems.map(item => (
+                  <p key={item.label}>
+                    {item.label}: {item.value}
+                  </p>
+                ))}
+              </div>
+              <div className="mt-4 border-t border-[#e5e5e5] pt-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#1C1C1C]/50">
+                  前置条件检查
+                </p>
+                <div className="mt-3 space-y-2">
+                  {generateChecks.map(check => (
+                    <div
+                      key={check.key}
+                      className={cn(
+                        'border px-3 py-2',
+                        check.passed
+                          ? 'border-[#e5e5e5] bg-[#fafafa] text-[#1C1C1C]/72'
+                          : 'border-[#111111] bg-white text-[#111111]'
+                      )}
+                    >
+                      <p className="font-medium">
+                        {check.label} · {check.passed ? 'passed' : 'failed'}
+                      </p>
+                      {!check.passed ? (
+                        <p className="mt-1 text-sm text-[#1C1C1C]/72">{check.failureReason}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </details>
 
           {workflow ? (
             <div className="space-y-4">
@@ -1652,14 +2022,16 @@ export default function DashboardResumePage() {
                   {isDownloading ? '下载中' : '下载上一份结果'}
                 </Button>
               ) : null}
-              {workflow.tailored_resume?.segments?.length ? (
+              {visibleWorkflowSegments.length ? (
                 <div className="space-y-4">
-                  {workflow.tailored_resume.segments
-                    .slice()
-                    .sort((a, b) => a.sequence - b.sequence)
-                    .map(segment => (
-                      <SegmentCard key={segment.key} segment={segment} />
-                    ))}
+                  {visibleWorkflowSegments.map(segment => (
+                    <SegmentCard key={segment.key} segment={segment} />
+                  ))}
+                </div>
+              ) : workflow.tailored_resume?.segments?.length &&
+                (workflowDisplayStatus === 'success' || workflowDisplayStatus === 'empty_result') ? (
+                <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
+                  本次没有发生可展示的 section 级改写。
                 </div>
               ) : (
                 <div className="border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#1C1C1C]/70">
@@ -1681,7 +2053,12 @@ export default function DashboardResumePage() {
               )}
             </div>
           ) : (
-            <PageEmptyState title="还没有定制结果" description="保存简历和 JD 后开始生成。" />
+            <PageEmptyState
+              title="还没有定制结果"
+              description={
+                canGenerate ? '当前条件已就绪，点击“生成定制简历”。' : generatePrimaryBlockReason
+              }
+            />
           )}
         </PaperSection>
       </div>

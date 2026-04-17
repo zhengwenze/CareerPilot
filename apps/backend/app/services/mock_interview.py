@@ -44,9 +44,12 @@ from app.schemas.mock_interview import (
     MockInterviewTurnDecision,
     MockInterviewTurnRecord,
 )
+from app.schemas.match_report import MatchReportCreateRequest
 from app.services.ai_client import AIProviderConfig, request_text_completion
 from app.services.interview_review import review_interview_answer
+from app.services.match_report import create_match_report, process_match_report
 from app.services.resume_ai import is_ai_configured
+from app.services.tailored_resume import _extract_original_resume_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -207,20 +210,34 @@ def _build_candidate_profile(*, role_summary: str, resume_summary: str) -> str:
     return next_role_summary or next_resume_summary
 
 
-def _build_first_question(job: JobDescription, workflow: ResumeOptimizationSession) -> MainQuestionPlan:
+def _resolve_resume_context_markdown(
+    *,
+    resume: Resume,
+    workflow: ResumeOptimizationSession | None,
+) -> tuple[str, str]:
+    tailored_resume_md = str(workflow.tailored_resume_md or "").strip() if workflow is not None else ""
+    if tailored_resume_md:
+        return tailored_resume_md, "tailored"
+    return _extract_original_resume_markdown(resume).strip(), "original"
+
+
+def _build_first_question(job: JobDescription, *, resume_source_kind: str) -> MainQuestionPlan:
     job_title = job.title.strip() or "目标岗位"
-    candidate_title = job.company.strip() if job.company else "你当前最相关的经历"
-    if workflow.tailored_resume_md.strip():
+    if resume_source_kind == "tailored":
         text = f"先请你做一个简短自我介绍，并重点讲一段最能证明你适合“{job_title}”的经历。"
+        intent = f"快速判断候选人与岗位 {job_title} 的直接相关性"
+        followup_hints = ["与岗位最相关的经历", "岗位匹配证据"]
     else:
-        text = f"先请你做一个简短自我介绍，并说明你为什么想申请“{job_title}”。"
+        text = f"先请你做一个简短自我介绍，并从原始简历里挑一段最贴近“{job_title}”的经历展开说明。"
+        intent = f"快速判断候选人是否能从原始简历中提炼出与岗位 {job_title} 的直接相关性"
+        followup_hints = ["原始简历中的相关经历", "岗位匹配证据"]
     return MainQuestionPlan(
         question_id="opening-1",
         category="开场",
         review_type=MockInterviewReviewType.PROJECT_EXPERIENCE,
         text=text,
-        intent=f"快速判断候选人与岗位 {candidate_title} 的直接相关性",
-        followup_hints=["与岗位最相关的经历", "岗位动机"],
+        intent=intent,
+        followup_hints=followup_hints,
     )
 
 
@@ -311,6 +328,7 @@ def _serialize_session(
     return MockInterviewSessionRecord(
         id=session_record.id,
         user_id=session_record.user_id,
+        resume_id=session_record.resume_id,
         job_id=session_record.jd_id,
         resume_optimization_session_id=session_record.optimization_session_id,
         source_job_version=session_record.source_job_version,
@@ -837,17 +855,22 @@ async def process_mock_interview_prep(
         if session_record is None:
             return
         job = await session.get(JobDescription, session_record.jd_id)
-        workflow = await session.get(ResumeOptimizationSession, session_record.optimization_session_id)
-        if job is None or workflow is None:
+        resume = await session.get(Resume, session_record.resume_id)
+        workflow = (
+            await session.get(ResumeOptimizationSession, session_record.optimization_session_id)
+            if session_record.optimization_session_id is not None
+            else None
+        )
+        if job is None or resume is None:
             state = _mark_prep_state(
                 session_record,
                 status="failed",
                 phase="failed",
-                message="准备失败，缺少岗位或优化简历信息。",
+                message="准备失败，缺少岗位或简历信息。",
             )
             state.metrics["failure_reason"] = "missing_dependencies"
             session_record.plan_json = {**(session_record.plan_json or {}), "prep_state": _serialize_task_state(state)}
-            session_record.error_message = "准备失败，缺少岗位或优化简历信息。"
+            session_record.error_message = "准备失败，缺少岗位或简历信息。"
             session.add(session_record)
             await session.commit()
             return
@@ -863,9 +886,14 @@ async def process_mock_interview_prep(
             session.add(session_record)
             await session.commit()
 
-            tailored_resume_md = workflow.tailored_resume_md or ""
+            resume_context_md, resume_source_kind = _resolve_resume_context_markdown(
+                resume=resume,
+                workflow=workflow,
+            )
+            if not resume_context_md:
+                raise ValueError("missing_resume_markdown")
             role_summary = await summarize_role_desc(settings, job.jd_text)
-            resume_summary = await summarize_resume(settings, tailored_resume_md)
+            resume_summary = await summarize_resume(settings, resume_context_md)
             candidate_profile = _build_candidate_profile(
                 role_summary=role_summary,
                 resume_summary=resume_summary,
@@ -892,6 +920,7 @@ async def process_mock_interview_prep(
                     "role_summary": role_summary,
                     "resume_summary": resume_summary,
                     "candidate_profile": candidate_profile,
+                    "resume_source_kind": resume_source_kind,
                     "main_questions": remaining_questions,
                     "prep_state": _serialize_task_state(
                         TaskState(
@@ -1102,42 +1131,95 @@ async def create_mock_interview_session(
     *,
     current_user: User,
     payload: MockInterviewSessionCreateRequest,
+    session_factory,
     settings: Settings,
 ) -> MockInterviewSessionRecord:
     job = await session.get(JobDescription, payload.job_id)
-    workflow = await session.get(ResumeOptimizationSession, payload.resume_optimization_session_id)
     if job is None or job.user_id != current_user.id:
         raise ApiException(status_code=404, code=ErrorCode.NOT_FOUND, message="Job not found")
-    if workflow is None or workflow.user_id != current_user.id:
-        raise ApiException(
-            status_code=404,
-            code=ErrorCode.NOT_FOUND,
-            message="Tailored resume workflow not found",
-        )
-    if workflow.jd_id != job.id:
+
+    workflow: ResumeOptimizationSession | None = None
+    if payload.resume_optimization_session_id is not None:
+        workflow = await session.get(ResumeOptimizationSession, payload.resume_optimization_session_id)
+        if workflow is None or workflow.user_id != current_user.id:
+            raise ApiException(
+                status_code=404,
+                code=ErrorCode.NOT_FOUND,
+                message="Tailored resume workflow not found",
+            )
+        if workflow.jd_id != job.id:
+            raise ApiException(
+                status_code=409,
+                code=ErrorCode.CONFLICT,
+                message="Workflow does not belong to the target job",
+            )
+
+    resolved_resume_id = payload.resume_id or (workflow.resume_id if workflow is not None else None)
+    if resolved_resume_id is None:
         raise ApiException(
             status_code=409,
             code=ErrorCode.CONFLICT,
-            message="Workflow does not belong to the target job",
+            message="Resume is required to start mock interview",
         )
 
-    resume = await session.get(Resume, workflow.resume_id)
-    report = await session.get(MatchReport, workflow.match_report_id)
+    resume = await session.get(Resume, resolved_resume_id)
     if resume is None or resume.user_id != current_user.id:
         raise ApiException(status_code=404, code=ErrorCode.NOT_FOUND, message="Resume not found")
-    if report is None or report.user_id != current_user.id:
-        raise ApiException(status_code=404, code=ErrorCode.NOT_FOUND, message="Match report not found")
 
-    tailored_resume_md = workflow.tailored_resume_md or ""
-    if not tailored_resume_md.strip():
+    if workflow is not None and workflow.resume_id != resume.id:
         raise ApiException(
             status_code=409,
             code=ErrorCode.CONFLICT,
-            message="Tailored resume markdown is not ready",
+            message="Workflow does not belong to the target resume",
+        )
+
+    resume_context_md, resume_source_kind = _resolve_resume_context_markdown(
+        resume=resume,
+        workflow=workflow,
+    )
+    if not resume_context_md:
+        raise ApiException(
+            status_code=409,
+            code=ErrorCode.CONFLICT,
+            message="Resume markdown is not ready",
+        )
+
+    report: MatchReport | None = None
+    if workflow is not None:
+        report = await session.get(MatchReport, workflow.match_report_id)
+        if report is not None and report.user_id != current_user.id:
+            report = None
+
+    if report is None:
+        report = await create_match_report(
+            session,
+            current_user=current_user,
+            job_id=job.id,
+            payload=MatchReportCreateRequest(
+                resume_id=resume.id,
+                force_refresh=False,
+            ),
+        )
+        if report.status == "pending":
+            await process_match_report(
+                report_id=report.id,
+                session_factory=session_factory,
+                settings=settings,
+            )
+            session.expire_all()
+            report = await session.get(MatchReport, report.id)
+
+    if report is None or report.user_id != current_user.id:
+        raise ApiException(status_code=404, code=ErrorCode.NOT_FOUND, message="Match report not found")
+    if report.status != "success":
+        raise ApiException(
+            status_code=409,
+            code=ErrorCode.CONFLICT,
+            message=report.error_message or "Match report is not ready",
         )
 
     del settings
-    first_question = _build_first_question(job, workflow)
+    first_question = _build_first_question(job, resume_source_kind=resume_source_kind)
     prep_state = TaskState(
         status="processing",
         phase="preparing_question_pool",
@@ -1151,9 +1233,9 @@ async def create_mock_interview_session(
         resume_id=resume.id,
         jd_id=job.id,
         match_report_id=report.id,
-        optimization_session_id=workflow.id,
-        source_resume_version=workflow.source_resume_version,
-        source_job_version=workflow.source_job_version,
+        optimization_session_id=workflow.id if resume_source_kind == "tailored" and workflow is not None else None,
+        source_resume_version=workflow.source_resume_version if resume_source_kind == "tailored" and workflow is not None else resume.latest_version,
+        source_job_version=workflow.source_job_version if resume_source_kind == "tailored" and workflow is not None else job.latest_version,
         mode="general",
         status="active",
         current_question_index=1,
@@ -1164,6 +1246,7 @@ async def create_mock_interview_session(
             "role_summary": "",
             "resume_summary": "",
             "candidate_profile": "",
+            "resume_source_kind": resume_source_kind,
             "main_questions": [],
             "main_question_index": -1,
             "followup_count_for_current_main": 0,

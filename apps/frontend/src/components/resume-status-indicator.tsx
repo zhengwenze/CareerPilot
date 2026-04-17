@@ -19,22 +19,19 @@ function resolveResumeStatus(
   resume: ResumeRecord,
   parseDebug?: PdfToMarkdownConversionResult | ResumeParseArtifacts | null
 ) {
-  if (parseDebug?.ai_used && parseDebug.ai_path !== 'rules') {
-    return { status: 'success' as const, label: 'AI 解析完成' };
-  }
   if (parseDebug?.ai_path === 'rules' && (parseDebug.fallback_used || !parseDebug.ai_used)) {
-    return { status: 'success' as const, label: 'AI 不可用，已切换为规则解析' };
+    return { status: 'success' as const, label: 'Markdown 已就绪（规则解析）' };
   }
   if (resume.parse_status === 'failed') {
     return { status: 'failed' as const, label: '解析失败' };
   }
   if (resume.parse_status === 'success') {
-    return { status: 'success' as const, label: 'AI 解析完成' };
+    return { status: 'success' as const, label: 'Markdown 已就绪' };
   }
   if (resume.parse_status === 'processing') {
-    return { status: 'processing' as const, label: '转 MD 中' };
+    return { status: 'processing' as const, label: '解析中' };
   }
-  return { status: 'pending' as const, label: '待转 MD' };
+  return { status: 'pending' as const, label: '待解析' };
 }
 
 export function ResumeStatusIndicator({

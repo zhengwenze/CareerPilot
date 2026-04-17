@@ -288,6 +288,7 @@ async def test_mock_interview_returns_first_question_then_prepares_followups_asy
         headers={"Authorization": f"Bearer {token}"},
         json={
             "job_id": str(job.id),
+            "resume_id": str(workflow.resume_id),
             "resume_optimization_session_id": str(workflow.id),
         },
     )
@@ -397,6 +398,133 @@ async def test_mock_interview_returns_first_question_then_prepares_followups_asy
     assert any(call[0] == "review_interview_answer" for call in calls)
 
 
+@pytest.mark.asyncio
+async def test_mock_interview_can_start_with_job_and_original_resume_only(
+    app, client, db_session, monkeypatch
+):
+    monkeypatch.setattr("app.routers.mock_interviews.schedule_mock_interview_prep", lambda *args, **kwargs: None)
+
+    user, token = await create_test_user(db_session, email="interview-original-only@example.com")
+    job, workflow = await _seed_interview_dependencies(db_session, user=user, suffix="original-only")
+    resume = await db_session.get(Resume, workflow.resume_id)
+    assert resume is not None
+    resume.parse_artifacts_json = {"canonical_resume_md": "# Master Resume\n\n- built resilient frontend systems"}
+    db_session.add(resume)
+    await db_session.commit()
+
+    calls: list[tuple[str, str]] = []
+
+    async def fake_summarize_role_desc(settings, target_role_desc: str) -> str:
+        del settings
+        calls.append(("summarize_role_desc", target_role_desc))
+        return "岗位需要候选人证明复杂前端项目经验"
+
+    async def fake_summarize_resume(settings, resume_md: str) -> str:
+        del settings
+        calls.append(("summarize_resume", resume_md))
+        return "候选人原始简历包含复杂前端系统建设经历"
+
+    async def fake_generate_main_questions(settings, *, role_summary: str, candidate_profile: str):
+        del settings
+        calls.append(("generate_main_questions", f"{role_summary} || {candidate_profile}"))
+        return []
+
+    monkeypatch.setattr(mock_interview_service, "summarize_role_desc", fake_summarize_role_desc)
+    monkeypatch.setattr(mock_interview_service, "summarize_resume", fake_summarize_resume)
+    monkeypatch.setattr(mock_interview_service, "generate_main_questions", fake_generate_main_questions)
+
+    response = await client.post(
+        "/mock-interviews",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "job_id": str(job.id),
+            "resume_id": str(resume.id),
+        },
+    )
+    assert response.status_code == 201
+    created_session = response.json()["data"]
+    assert created_session["resume_id"] == str(resume.id)
+    assert created_session["resume_optimization_session_id"] is None
+    assert "原始简历" in created_session["current_turn"]["question_text"]
+
+    await mock_interview_service.process_mock_interview_prep(
+        session_id=UUID(created_session["id"]),
+        session_factory=app.state.session_factory,
+        settings=app.state.settings,
+    )
+
+    assert calls[:2] == [
+        ("summarize_role_desc", job.jd_text),
+        ("summarize_resume", "# Master Resume\n\n- built resilient frontend systems"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_mock_interview_falls_back_to_original_resume_when_tailored_markdown_missing(
+    app, client, db_session, monkeypatch
+):
+    monkeypatch.setattr("app.routers.mock_interviews.schedule_mock_interview_prep", lambda *args, **kwargs: None)
+
+    user, token = await create_test_user(db_session, email="interview-fallback-original@example.com")
+    job, workflow = await _seed_interview_dependencies(
+        db_session,
+        user=user,
+        suffix="fallback-original",
+        tailored_resume_md="   ",
+    )
+    resume = await db_session.get(Resume, workflow.resume_id)
+    assert resume is not None
+    resume.parse_artifacts_json = {"canonical_resume_md": "# Source Resume\n\n- shipped product architecture changes"}
+    db_session.add(resume)
+    await db_session.commit()
+
+    calls: list[tuple[str, str]] = []
+
+    async def fake_summarize_role_desc(settings, target_role_desc: str) -> str:
+        del settings
+        calls.append(("summarize_role_desc", target_role_desc))
+        return "岗位需要候选人体现系统设计与落地经验"
+
+    async def fake_summarize_resume(settings, resume_md: str) -> str:
+        del settings
+        calls.append(("summarize_resume", resume_md))
+        return "候选人原始简历里有可复用的系统设计经历"
+
+    async def fake_generate_main_questions(settings, *, role_summary: str, candidate_profile: str):
+        del settings
+        calls.append(("generate_main_questions", f"{role_summary} || {candidate_profile}"))
+        return []
+
+    monkeypatch.setattr(mock_interview_service, "summarize_role_desc", fake_summarize_role_desc)
+    monkeypatch.setattr(mock_interview_service, "summarize_resume", fake_summarize_resume)
+    monkeypatch.setattr(mock_interview_service, "generate_main_questions", fake_generate_main_questions)
+
+    response = await client.post(
+        "/mock-interviews",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "job_id": str(job.id),
+            "resume_id": str(resume.id),
+            "resume_optimization_session_id": str(workflow.id),
+        },
+    )
+    assert response.status_code == 201
+    created_session = response.json()["data"]
+    assert created_session["resume_optimization_session_id"] is None
+    assert "原始简历" in created_session["current_turn"]["question_text"]
+
+    await mock_interview_service.process_mock_interview_prep(
+        session_id=UUID(created_session["id"]),
+        session_factory=app.state.session_factory,
+        settings=app.state.settings,
+    )
+
+    assert calls[:2] == [
+        ("summarize_role_desc", job.jd_text),
+        ("summarize_resume", "# Source Resume\n\n- shipped product architecture changes"),
+    ]
+
+
 async def test_mock_interview_list_and_finish_return_structured_runtime_state(
     app, client, db_session, monkeypatch
 ):
@@ -410,6 +538,7 @@ async def test_mock_interview_list_and_finish_return_structured_runtime_state(
         headers={"Authorization": f"Bearer {token}"},
         json={
             "job_id": str(job.id),
+            "resume_id": str(workflow.resume_id),
             "resume_optimization_session_id": str(workflow.id),
         },
     )
@@ -461,6 +590,7 @@ async def test_mock_interview_rejects_cross_user_supports_retry_and_events(
         headers={"Authorization": f"Bearer {token_a}"},
         json={
             "job_id": str(job_a.id),
+            "resume_id": str(workflow_b.resume_id),
             "resume_optimization_session_id": str(workflow_b.id),
         },
     )
@@ -471,6 +601,7 @@ async def test_mock_interview_rejects_cross_user_supports_retry_and_events(
         headers={"Authorization": f"Bearer {token_a}"},
         json={
             "job_id": str(job_a.id),
+            "resume_id": str(workflow_empty.resume_id),
             "resume_optimization_session_id": str(workflow_empty.id),
         },
     )
@@ -481,6 +612,7 @@ async def test_mock_interview_rejects_cross_user_supports_retry_and_events(
         headers={"Authorization": f"Bearer {token_a}"},
         json={
             "job_id": str(job_a.id),
+            "resume_id": str(workflow_a.resume_id),
             "resume_optimization_session_id": str(workflow_a.id),
         },
     )
@@ -616,6 +748,7 @@ async def test_mock_interview_turn_deep_review_failure_does_not_block_next_turn(
         headers={"Authorization": f"Bearer {token}"},
         json={
             "job_id": str(job.id),
+            "resume_id": str(workflow.resume_id),
             "resume_optimization_session_id": str(workflow.id),
         },
     )

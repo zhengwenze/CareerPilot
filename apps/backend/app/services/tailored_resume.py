@@ -79,10 +79,11 @@ from app.services.tailored_resume_document_ai import (
 TOKEN_PATTERN = re.compile(r"[a-z0-9+#./-]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 TAILORED_RESUME_SEGMENT_ORDER: tuple[tuple[str, str], ...] = (
     ("summary", "职业摘要"),
+    ("education", "教育经历"),
     ("skills", "技能聚焦"),
     ("experience", "工作经历"),
     ("projects", "项目经历"),
-    ("additional", "教育与补充信息"),
+    ("additional", "补充信息"),
 )
 TASK_STATE_STATUSES = {
     "pending",
@@ -557,6 +558,23 @@ def _build_summary_text(item: ResumeStructuredData) -> str:
     return (item.basic_info.summary or "").strip()
 
 
+def _build_education_text(item: ResumeStructuredData) -> str:
+    lines: list[str] = []
+    for edu in item.education_items:
+        value = " | ".join(
+            part
+            for part in [edu.school, edu.major, edu.degree, edu.start_date, edu.end_date]
+            if part
+        )
+        if value:
+            lines.append(f"教育：{value}")
+        for honor in edu.honors:
+            normalized = honor.strip()
+            if normalized:
+                lines.append(f"  - {normalized}")
+    return "\n".join(lines).strip()
+
+
 def _build_experience_text(item: ResumeStructuredData) -> str:
     lines: list[str] = []
     for work in item.work_experience_items:
@@ -598,10 +616,6 @@ def _build_skills_text(item: ResumeStructuredData) -> str:
 
 def _build_additional_text(item: ResumeStructuredData) -> str:
     lines: list[str] = []
-    for edu in item.education_items:
-        value = " | ".join(part for part in [edu.school, edu.major, edu.degree, edu.start_date, edu.end_date] if part)
-        if value:
-            lines.append(f"教育：{value}")
     for cert in item.certification_items:
         value = " | ".join(part for part in [cert.name, cert.issuer, cert.date] if part)
         if value:
@@ -618,6 +632,7 @@ def _build_additional_text(item: ResumeStructuredData) -> str:
 def _build_resume_preview(segment_key: str, resume_data: ResumeStructuredData) -> str:
     builders = {
         "summary": _build_summary_text,
+        "education": _build_education_text,
         "experience": _build_experience_text,
         "projects": _build_projects_text,
         "skills": _build_skills_text,
@@ -647,19 +662,19 @@ def _build_segment_explanation(
     suggested_text: str,
     report: MatchReport,
 ) -> SegmentExplanation:
-    gap_json = report.gap_json or {}
-    matched = _dedupe_strings([str(item) for item in gap_json.get("strengths", []) if str(item).strip()])[:3]
-    gaps = _dedupe_strings([str(item) for item in gap_json.get("gaps", []) if str(item).strip()])[:3]
-    if original_text.strip() == suggested_text.strip():
-        what = "保留原有事实表达，未做激进改写。"
+    del report
+    if not original_text.strip() and not suggested_text.strip():
+        what = f"{key} 模块当前没有可展示的原始内容。"
+        why = "原始简历里缺少该模块内容，本次不构造占位改写。"
+        value = "避免把空模块误展示为已生成结果。"
+    elif original_text.strip() == suggested_text.strip():
+        what = "保留原有事实表达，当前未发生改写。"
+        why = "该模块暂未发现需要安全调整的内容。"
+        value = "保留真实表达，避免为了贴合岗位而引入失真。"
     else:
-        what = f"围绕 {key} 模块调整了措辞与排序，保留原始事实不变。"
-    why = "优先贴合岗位高频关键词与职责重点。" if matched or gaps else "优先保证真实、可验证和可读性。"
-    value = (
-        f"让招聘方更快看到与岗位直接相关的证据：{', '.join(matched or gaps)}。"
-        if matched or gaps
-        else "让信息层级更清楚，便于 ATS 和招聘方快速读取。"
-    )
+        what = f"已根据 {key} 模块的实际前后差异更新展示内容。"
+        why = "当前说明基于该模块的真实 before/after 差异生成。"
+        value = "让招聘方更快看到这个模块发生了什么具体变化。"
     return SegmentExplanation(what=what, why=why, value=value)
 
 
@@ -796,6 +811,17 @@ def _build_change_items(
         index=1,
     )
 
+    _append_change_item(
+        items,
+        segment_key="education",
+        section_label="教育经历",
+        item_label="教育模块",
+        before_text=_build_education_text(source_resume),
+        after_text=_build_education_text(projected_resume),
+        report=report,
+        index=1,
+    )
+
     for index, (before_item, after_item) in enumerate(
         zip(source_resume.work_experience_items, projected_resume.work_experience_items, strict=False),
         start=1,
@@ -857,7 +883,166 @@ def _build_change_items(
                 index=1,
             )
 
+    _append_change_item(
+        items,
+        segment_key="additional",
+        section_label="补充信息",
+        item_label="补充模块",
+        before_text=_build_additional_text(source_resume),
+        after_text=_build_additional_text(projected_resume),
+        report=report,
+        index=1,
+    )
+
     return [item for item in items if item.change_type != "unchanged"]
+
+
+CHANGE_TYPE_LABELS = {
+    "rewrite": "改写",
+    "reorder": "顺序调整",
+    "trim": "精简",
+    "highlight": "强化",
+    "unchanged": "保留",
+}
+
+
+def _group_change_items_by_segment(
+    change_items: list[ContentChangeItem],
+) -> dict[str, list[ContentChangeItem]]:
+    grouped: dict[str, list[ContentChangeItem]] = {}
+    for item in change_items:
+        grouped.setdefault(item.segment_key, []).append(item)
+    return grouped
+
+
+def _build_final_segment_explanation(
+    *,
+    section_label: str,
+    original_text: str,
+    suggested_text: str,
+    change_items: list[ContentChangeItem],
+    error_message: str | None = None,
+) -> SegmentExplanation:
+    normalized_original = _normalize_text(original_text)
+    normalized_suggested = _normalize_text(suggested_text)
+
+    if error_message:
+        return SegmentExplanation(
+            what=f"{section_label} 生成失败，当前未产出可信结果。",
+            why=error_message,
+            value="保留失败信号，避免把异常结果伪装成已完成内容。",
+        )
+
+    if not normalized_original and not normalized_suggested:
+        return SegmentExplanation(
+            what="该模块无原始内容。",
+            why="原始简历中没有可展示的对应内容，本次不构造占位改写。",
+            value="帮助用户直接识别当前简历缺少哪些模块，而不是看到伪造的处理中状态。",
+        )
+
+    if not change_items and normalized_original == normalized_suggested:
+        return SegmentExplanation(
+            what="该模块未发生改写。",
+            why="最终结果判断该模块应保留原始表达，未引入额外改写。",
+            value="保留真实内容，避免为了贴合 JD 而牺牲准确性。",
+        )
+
+    change_labels = _dedupe_strings(
+        [
+            CHANGE_TYPE_LABELS.get(item.change_type, "改写")
+            for item in change_items
+            if item.change_type != "unchanged"
+        ]
+    )
+    item_labels = _dedupe_strings(
+        [
+            item.item_label.strip()
+            for item in change_items
+            if item.item_label.strip() and item.item_label.strip() != section_label
+        ]
+    )
+    reason_texts = _dedupe_strings([item.why.strip() for item in change_items if item.why.strip()])
+    evidence = _dedupe_strings(
+        [token for item in change_items for token in item.evidence if token.strip()]
+    )
+
+    if item_labels:
+        target_label = "、".join(item_labels[:2])
+    else:
+        target_label = section_label
+    if change_labels:
+        action_label = "、".join(change_labels[:2])
+    else:
+        action_label = "调整"
+
+    what = (
+        f"已对{target_label}做{action_label}。"
+        if normalized_original != normalized_suggested or change_items
+        else f"{section_label} 已按最终结果重新整理展示。"
+    )
+    why = (
+        "；".join(reason_texts[:2])
+        if reason_texts
+        else f"{section_label} 的说明基于该模块真实 before/after 差异生成。"
+    )
+    value = (
+        f"让招聘方更快在{section_label}中看到 {', '.join(evidence[:3])} 等相关证据。"
+        if evidence
+        else f"让{section_label}的改写范围和岗位相关性更容易被快速判断。"
+    )
+    return SegmentExplanation(what=what, why=why, value=value)
+
+
+def _build_final_segment(
+    *,
+    key: str,
+    label: str,
+    sequence: int,
+    source_resume: ResumeStructuredData,
+    optimized_resume: ResumeStructuredData,
+    change_items: list[ContentChangeItem],
+    error_message: str | None = None,
+) -> ContentSegment:
+    original_text = _build_resume_preview(key, source_resume)
+    suggested_text = _build_resume_preview(key, optimized_resume)
+    return ContentSegment(
+        key=key,
+        label=label,
+        sequence=sequence,
+        status="failed" if error_message else "success",
+        original_text=original_text,
+        suggested_text=suggested_text,
+        markdown=suggested_text,
+        explanation=_build_final_segment_explanation(
+            section_label=label,
+            original_text=original_text,
+            suggested_text=suggested_text,
+            change_items=change_items,
+            error_message=error_message,
+        ),
+        error_message=error_message,
+        generated_at=utc_now_naive(),
+    )
+
+
+def _build_completed_segments(
+    *,
+    source_resume: ResumeStructuredData,
+    optimized_resume: ResumeStructuredData,
+    change_items: list[ContentChangeItem],
+) -> list[ContentSegment]:
+    grouped_items = _group_change_items_by_segment(change_items)
+    return [
+        _build_final_segment(
+            key=key,
+            label=label,
+            sequence=index,
+            source_resume=source_resume,
+            optimized_resume=optimized_resume,
+            change_items=grouped_items.get(key, []),
+        )
+        for index, (key, label) in enumerate(TAILORED_RESUME_SEGMENT_ORDER, start=1)
+    ]
 
 
 def _render_tailored_resume_markdown(document: TailoredResumeDocument) -> str:
@@ -1547,10 +1732,69 @@ async def _generate_tailored_resume_document(
     )
 
 
+def _parse_resume_structured_data(
+    payload: dict[str, Any] | ResumeStructuredData | None,
+) -> ResumeStructuredData | None:
+    if isinstance(payload, ResumeStructuredData):
+        return payload
+    if not isinstance(payload, dict) or not payload:
+        return None
+    try:
+        return ResumeStructuredData.model_validate(payload)
+    except ValidationError:
+        return None
+
+
+def _document_has_structured_signal(document: TailoredResumeDocument) -> bool:
+    return any(
+        [
+            bool(_normalize_text(document.summary)),
+            bool(document.education),
+            bool(document.experience),
+            bool(document.projects),
+            bool(_dedupe_strings(document.skills)),
+            bool(_dedupe_strings(document.certificates)),
+            bool(_dedupe_strings(document.languages)),
+            bool(_dedupe_strings(document.awards)),
+            bool(document.customSections),
+        ]
+    )
+
+
+def _resolve_completed_segments_for_artifact(
+    *,
+    resume_structured_payload: dict[str, Any] | ResumeStructuredData | None,
+    optimized_resume_payload: dict[str, Any] | ResumeStructuredData | None,
+    document: TailoredResumeDocument,
+    change_items: list[ContentChangeItem],
+) -> list[ContentSegment] | None:
+    source_resume = _parse_resume_structured_data(resume_structured_payload)
+    if source_resume is None:
+        return None
+
+    optimized_resume = _parse_resume_structured_data(optimized_resume_payload)
+    if optimized_resume is None:
+        optimized_resume = (
+            _build_canonical_projection_from_document(
+                document,
+                source_resume=source_resume,
+            )
+            if _document_has_structured_signal(document)
+            else source_resume.model_copy(deep=True)
+        )
+
+    return _build_completed_segments(
+        source_resume=source_resume,
+        optimized_resume=optimized_resume,
+        change_items=change_items,
+    )
+
+
 def _build_tailored_resume_artifact(
     *,
     session_record: ResumeOptimizationSession,
     report: MatchReport,
+    resume_structured_payload: dict[str, Any] | ResumeStructuredData | None = None,
 ) -> TailoredResumeArtifactResponse:
     try:
         document = TailoredResumeDocument.model_validate(session_record.tailored_resume_json or {})
@@ -1579,6 +1823,15 @@ def _build_tailored_resume_artifact(
         segments=segments,
         has_markdown=has_markdown,
     )
+    if display_status in {"success", "empty_result"}:
+        completed_segments = _resolve_completed_segments_for_artifact(
+            resume_structured_payload=resume_structured_payload,
+            optimized_resume_payload=session_record.optimized_resume_json,
+            document=document,
+            change_items=change_items,
+        )
+        if completed_segments is not None:
+            segments = completed_segments
     error_message = _extract_tailored_resume_error_message(
         session_record=session_record,
         task_state=task_state,
@@ -1640,6 +1893,7 @@ async def _build_workflow_response(
         tailored_resume=_build_tailored_resume_artifact(
             session_record=session_record,
             report=report,
+            resume_structured_payload=resume_payload.structured_json,
         ),
     )
 
@@ -1963,7 +2217,7 @@ async def process_tailored_resume_workflow(
             skills_segment = _build_segment(
                 key="skills",
                 label="技能聚焦",
-                sequence=2,
+                sequence=3,
                 original_resume=source_resume,
                 suggested_resume=skills_resume,
                 report=report,
@@ -1992,12 +2246,22 @@ async def process_tailored_resume_workflow(
             session.add(session_record)
             await session.commit()
 
+            education_segment = _build_segment(
+                key="education",
+                label="教育经历",
+                sequence=2,
+                original_resume=source_resume,
+                suggested_resume=source_resume,
+                report=report,
+            )
+            _store_segment(session_record, segment=education_segment)
+
             additional_segment = _build_segment(
                 key="additional",
-                label="教育与补充信息",
-                sequence=5,
+                label="补充信息",
+                sequence=6,
                 original_resume=source_resume,
-                suggested_resume=skills_resume,
+                suggested_resume=source_resume,
                 report=report,
             )
             _store_segment(session_record, segment=additional_segment)
@@ -2006,7 +2270,7 @@ async def process_tailored_resume_workflow(
                 status="processing",
                 phase="optimizing_core_sections",
                 message="正在优化摘要、工作经历和项目经历。",
-                current_step=2,
+                current_step=3,
                 total_steps=len(TAILORED_RESUME_SEGMENT_ORDER),
             )
             session.add(session_record)
@@ -2020,13 +2284,17 @@ async def process_tailored_resume_workflow(
                 settings=settings,
             )
 
-            for sequence, (key, label) in enumerate(TAILORED_RESUME_SEGMENT_ORDER[:1] + TAILORED_RESUME_SEGMENT_ORDER[2:4], start=1):
+            for key, label, sequence in (
+                ("summary", "职业摘要", 1),
+                ("experience", "工作经历", 4),
+                ("projects", "项目经历", 5),
+            ):
                 suggested_resume = projected_resume
                 if key == "summary":
                     segment = _build_segment(
                         key=key,
                         label=label,
-                        sequence=1,
+                        sequence=sequence,
                         original_resume=source_resume,
                         suggested_resume=suggested_resume,
                         report=report,
@@ -2035,7 +2303,7 @@ async def process_tailored_resume_workflow(
                     segment = _build_segment(
                         key=key,
                         label=label,
-                        sequence=3,
+                        sequence=sequence,
                         original_resume=source_resume,
                         suggested_resume=suggested_resume,
                         report=report,
@@ -2044,7 +2312,7 @@ async def process_tailored_resume_workflow(
                     segment = _build_segment(
                         key=key,
                         label=label,
-                        sequence=4,
+                        sequence=sequence,
                         original_resume=source_resume,
                         suggested_resume=suggested_resume,
                         report=report,
@@ -2085,6 +2353,11 @@ async def process_tailored_resume_workflow(
                 projected_resume=canonical_projection,
                 report=report,
             )
+            final_segments = _build_completed_segments(
+                source_resume=source_resume,
+                optimized_resume=canonical_projection,
+                change_items=change_items,
+            )
             document.audit.changedSections = _derive_changed_sections_from_change_items(
                 change_items
             )
@@ -2099,6 +2372,7 @@ async def process_tailored_resume_workflow(
             session_record.optimized_resume_md = document.markdown
             session_record.tailored_resume_json = document.model_dump(mode="json")
             session_record.tailored_resume_md = document.markdown
+            session_record.draft_sections_json = _serialize_segments(final_segments)
             session_record.audit_report_json = {
                 "document_audit": document.audit.model_dump(mode="json"),
                 "fact_check_report": fact_check_report,

@@ -689,6 +689,67 @@ async def test_save_resume_structured_data_normalizes_noncanonical_markdown(
     assert "### 新疆大学（211 / 双一流）" in payload["parse_artifacts_json"]["canonical_resume_md"]
 
 
+@pytest.mark.asyncio
+async def test_save_resume_structured_data_accepts_pdf_style_bold_headings(
+    client,
+    db_session,
+    pdf_bytes: bytes,
+) -> None:
+    _, token = await create_test_user(db_session, email="resume-save-pdf-style@example.com")
+
+    upload_response = await client.post(
+        "/resumes/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("resume.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload_response.status_code == 201
+    resume_id = upload_response.json()["data"]["id"]
+
+    response = await client.put(
+        f"/resumes/{resume_id}/structured",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "markdown": "\n".join(
+                [
+                    "**郑文泽** 手机：17590522997 | 邮箱：2017160177@qq.com | 北京",
+                    "",
+                    "## **教育背景**",
+                    "",
+                    "## **新疆大学（211 / 双一流）**",
+                    "",
+                    "本科 / 软件工程",
+                    "2023.09 – 2027.06 GPA 3.73，专业排名 50/800",
+                    "",
+                    "- **竞赛获奖：** 百度之星省赛金奖；RoboCup 新疆一等奖",
+                    "",
+                    "## **项目经历**",
+                    "",
+                    "## **职点迷津**",
+                    "",
+                    "https://gitee.com/zwz050418/career-pilot.git",
+                    "智能求职工作台；React + Next.js + FastAPI",
+                    "- 负责简历解析、岗位匹配、优化建议生成等核心链路开发。",
+                ]
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["parse_status"] == "success"
+    assert payload["structured_json"]["basic_info"]["name"] == "郑文泽"
+    assert payload["structured_json"]["basic_info"]["phone"] == "17590522997"
+    assert payload["structured_json"]["basic_info"]["email"] == "2017160177@qq.com"
+    assert payload["structured_json"]["education_items"][0]["school"] == "新疆大学（211 / 双一流）"
+    assert payload["structured_json"]["project_items"][0]["name"] == "职点迷津"
+    assert payload["parse_artifacts_json"]["canonical_resume_md"].startswith("# 郑文泽")
+    assert "手机：17590522997" in payload["parse_artifacts_json"]["canonical_resume_md"]
+    assert "## 教育背景" in payload["parse_artifacts_json"]["canonical_resume_md"]
+    assert "### 新疆大学（211 / 双一流）" in payload["parse_artifacts_json"]["canonical_resume_md"]
+    assert "## 项目经历" in payload["parse_artifacts_json"]["canonical_resume_md"]
+    assert "### 职点迷津" in payload["parse_artifacts_json"]["canonical_resume_md"]
+
+
 def test_anthropic_response_text_reports_stop_reason_for_thinking_only() -> None:
     class ThinkingBlock:
         type = "thinking"
