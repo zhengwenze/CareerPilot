@@ -15,6 +15,10 @@
 - [git-sync-workflow.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/git-sync-workflow.md): 双仓库同步发布约定
 - [mcp-setup.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/mcp-setup.md): 外部工具与 MCP 说明
 
+## Interview Prep
+
+- [career-pilot-intern-interview-handbook.md](/Users/zhengwenze/Desktop/codex/career-pilot/docs/career-pilot-intern-interview-handbook.md): CareerPilot 实习面试作战手册，按业务链路 + 技术栈准备项目拷打题与答案
+
 ## Shared Layers
 
 - `packages/contracts/`: 共享契约与领域边界
